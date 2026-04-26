@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(curl -L -o \"public/fonts/fira-code-v7.woff2\" \"https://cdn.jsdelivr.net/gh/lxgw/FiraCode/fonts/FiraCode-Regular.woff2\")",
+      "Bash(npx vite *)"
+    ]
+  }
+}
