@@ -29,9 +29,13 @@ const emit = defineEmits(['list'])
 const reportRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
-const reportTypeLabel = computed(() =>
-  props.reportType === 'person-intelligence-report' ? '人物情报报告' : '风险评估报告',
-)
+const reportTypeLabel = computed(() => {
+  if (props.reportType === 'person-intelligence-report') return '人物情报报告'
+  if (props.reportType === 'risk-assessment-reports') return '风险评估报告'
+  if (props.reportType === 'write-hb-k') return 'K报'
+  if (props.reportType === 'write-hb-hb') return 'HB报'
+  return props.job?.skill || '报告'
+})
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
 
 function scrollToBottom() {

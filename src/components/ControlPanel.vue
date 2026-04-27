@@ -40,6 +40,16 @@ const reportTypes = [
     label: '风险评估报告',
     desc: '访问活动、节假日、城市风险场景研判',
   },
+  {
+    value: 'write-hb-k',
+    label: 'K报编写',
+    desc: '三段式现场调研报告：基本情况、涉我风险、对策建议',
+  },
+  {
+    value: 'write-hb-hb',
+    label: 'HB报编写',
+    desc: '六段式深度调研报告：事件、背景、立场、风险、趋势、建议',
+  },
 ]
 
 const scenarios = [
@@ -79,9 +89,7 @@ const healthColor = computed(() => {
         [{{ healthStatus }}] {{ health?.details?.[0] || 'OpenClaw health endpoint' }}
       </div>
       <div v-if="health?.checks" class="grid grid-cols-2 gap-1 mt-2 font-mono text-[9px] text-neon-cyan/45">
-        <span>Tavily: {{ health.checks.tavilyApiKey ? '正常' : '异常' }}</span>
-        <span>OpenClaw: {{ health.checks.openclawBinary ? '正常' : '异常' }}</span>
-        <span>PowerShell: {{ health.checks.powershell ? '正常' : '异常' }}</span>
+        <span>OpenClaw: {{ health.checks.openclawHttpApi || health.checks.openclawBinary ? '正常' : '异常' }}</span>
         <span>本地探测: {{ health.checks.localProbe ? '正常' : '异常' }}</span>
       </div>
     </div>
@@ -93,7 +101,7 @@ const healthColor = computed(() => {
       <textarea
         :value="title"
         @input="emit('update:title', $event.target.value)"
-        placeholder="例如：马克龙访华人物情报报告"
+        placeholder="例如：2026年五一假期杭州热门景区人流风险研判"
         rows="3"
         class="sci-textarea"
       ></textarea>
@@ -141,7 +149,7 @@ const healthColor = computed(() => {
         </select>
       </div>
 
-      <div v-else class="space-y-3">
+      <div v-else-if="reportType === 'risk-assessment-reports'" class="space-y-3">
         <select class="sci-input" :value="scenario" @change="emit('update:scenario', $event.target.value)">
           <option v-for="item in scenarios" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
@@ -157,6 +165,12 @@ const healthColor = computed(() => {
           @input="emit('update:visitTime', $event.target.value)"
           placeholder="时间窗口，例如：2026年5月"
         />
+      </div>
+
+      <div v-else class="space-y-3">
+        <div class="font-mono text-[10px] leading-relaxed text-neon-cyan/55">
+          K报/HB报将使用 write-hb skill，按国家、地方、政策、社会、传播五个维度自动拆解调研任务。
+        </div>
       </div>
 
       <textarea

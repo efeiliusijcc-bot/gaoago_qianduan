@@ -65,6 +65,19 @@ export function useReportJobs() {
       }
     }
 
+    if (reportType.value === 'write-hb-k' || reportType.value === 'write-hb-hb') {
+      return {
+        skill: 'write-hb',
+        payload: {
+          topic: subject,
+          report_type: reportType.value === 'write-hb-k' ? 'K报' : 'HB报',
+          known_context: context,
+          focus_areas: ['国家', '地方', '政策', '社会', '传播'],
+          language: 'zh-CN',
+        },
+      }
+    }
+
     return {
       skill: 'risk-assessment-reports',
       payload: {
@@ -188,8 +201,12 @@ export function useReportJobs() {
       job.value = { ...item, resultPath: result.resultPath || item.resultPath }
       generatedHtml.value = result.html || ''
       selectedReport.value = { ...job.value, html: generatedHtml.value }
-      title.value = item.payload?.target_name || item.payload?.target_country || item.jobId
-      reportType.value = item.skill || reportType.value
+      title.value = item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId
+      if (item.skill === 'write-hb') {
+        reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
+      } else {
+        reportType.value = item.skill || reportType.value
+      }
       phase.value = 'done'
       pushLog(`已打开历史报告：${item.jobId}`)
     } catch (error) {
