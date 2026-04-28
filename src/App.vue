@@ -40,12 +40,6 @@ const {
 } = useReportJobs()
 
 function skillLabel(item) {
-  if (item.skill === 'write-hb') {
-    return item.payload?.report_type === 'hb_report' ? 'HB报' : 'K报'
-  }
-  if (item.skill === 'risk-assessment-reports' && item.payload?.scenario === 'h_report') {
-    return item.payload?.report_type === 'hb_report' ? 'HB报' : 'K报'
-  }
   if (item.skill === 'person-intelligence-report') return '人物情报'
   if (item.skill === 'risk-assessment-reports') return '风险评估'
   return item.skill || '报告'

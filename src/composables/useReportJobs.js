@@ -51,11 +51,7 @@ export function useReportJobs() {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
   const isHistoryMode = computed(() => Boolean(openedHistoryJobId.value) && phase.value === 'done')
-
-  const filteredJobs = computed(() => {
-    return [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
-  })
-
+  const filteredJobs = computed(() => [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)))
   const succeededCount = computed(() => filteredJobs.value.filter((i) => i.status === 'succeeded').length)
   const runningCount = computed(() => filteredJobs.value.filter((i) => i.status === 'running' || i.status === 'queued').length)
 
@@ -77,8 +73,8 @@ export function useReportJobs() {
 
     if (item.skill === 'write-hb') {
       reportType.value = 'risk-assessment-reports'
-      scenario.value = 'h_report'
       riskReportType.value = item.payload?.report_type === 'hb_report' ? 'hb_report' : 'k_report'
+      scenario.value = item.payload?.scenario || 'foreign_leader_visit'
       return
     }
 
@@ -125,10 +121,7 @@ export function useReportJobs() {
     writeDrafts(drafts)
     jobList.value = jobList.value.map((item) =>
       item.jobId === openedHistoryJobId.value
-        ? {
-            ...item,
-            displayTitle: drafts[openedHistoryJobId.value].title,
-          }
+        ? { ...item, displayTitle: drafts[openedHistoryJobId.value].title }
         : item,
     )
     savedNotice.value = '已保存当前历史报告信息'
@@ -159,7 +152,7 @@ export function useReportJobs() {
       skill: 'risk-assessment-reports',
       payload: {
         scenario: scenario.value,
-        ...(scenario.value === 'h_report' ? { report_type: riskReportType.value } : {}),
+        report_type: riskReportType.value,
         target_country: subject,
         target_city: targetCity.value.trim(),
         visit_time: visitTime.value.trim(),
@@ -209,10 +202,7 @@ export function useReportJobs() {
         const result = await fetchReportResult(jobId)
         generatedHtml.value = result.html || ''
         job.value = { ...next, resultPath: result.resultPath || next.resultPath }
-        selectedReport.value = {
-          ...job.value,
-          html: generatedHtml.value,
-        }
+        selectedReport.value = { ...job.value, html: generatedHtml.value }
         phase.value = 'done'
         openedHistoryJobId.value = null
         pushLog('已读取后端返回的 HTML 报告')

@@ -32,25 +32,12 @@ const emit = defineEmits(['list', 'new-report'])
 const reportRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
-
 const reportTypeLabel = computed(() => {
   if (props.reportType === 'person-intelligence-report') return '人物情报报告'
   if (props.reportType === 'risk-assessment-reports') return '风险评估报告'
   return props.job?.skill || '报告'
 })
-
-const reportModeLabel = computed(() => {
-  const payload = props.job?.payload || {}
-  const scenario = payload.scenario || props.scenario
-  const riskReportType = payload.report_type || props.riskReportType
-
-  if (props.reportType === 'risk-assessment-reports' && scenario === 'h_report') {
-    return riskReportType === 'hb_report' ? 'HB报' : 'K报'
-  }
-
-  return reportTypeLabel.value
-})
-
+const reportModeLabel = computed(() => reportTypeLabel.value)
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
 
 function scrollToBottom() {
@@ -155,14 +142,7 @@ async function exportWord() {
       config: [
         {
           reference: 'default-numbering',
-          levels: [
-            {
-              level: 0,
-              format: 'decimal',
-              text: '%1.',
-              alignment: AlignmentType.LEFT,
-            },
-          ],
+          levels: [{ level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.LEFT }],
         },
       ],
     },
@@ -170,14 +150,7 @@ async function exportWord() {
       {
         children: [
           new Paragraph({
-            children: [
-              new TextRun({
-                text: props.title || '报告',
-                bold: true,
-                size: 40,
-                font: 'SimHei',
-              }),
-            ],
+            children: [new TextRun({ text: props.title || '报告', bold: true, size: 40, font: 'SimHei' })],
             alignment: AlignmentType.CENTER,
             spacing: { after: 320 },
           }),

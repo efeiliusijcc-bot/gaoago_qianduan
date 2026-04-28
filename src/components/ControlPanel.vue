@@ -44,12 +44,11 @@ const reportTypes = [
   {
     value: 'risk-assessment-reports',
     label: '风险评估报告',
-    desc: '出访、来访、节假日和调研类风险任务。',
+    desc: '出访、来访、节假日等风险任务。',
   },
 ]
 
 const scenarios = [
-  { value: 'h_report', label: '调研报告' },
   { value: 'foreign_leader_visit', label: '外方领导人来访' },
   { value: 'leader_outbound', label: '领导人出访' },
   { value: 'domestic_holiday', label: '国内节假日' },
@@ -157,16 +156,11 @@ const healthColor = computed(() => {
       </div>
 
       <div v-else-if="!isHistoryMode && reportType === 'risk-assessment-reports'" class="space-y-3">
+        <select class="sci-input" :value="riskReportType" @change="emit('update:riskReportType', $event.target.value)">
+          <option v-for="item in riskReportTypes" :key="item.value" :value="item.value">{{ item.label }}</option>
+        </select>
         <select class="sci-input" :value="scenario" @change="emit('update:scenario', $event.target.value)">
           <option v-for="item in scenarios" :key="item.value" :value="item.value">{{ item.label }}</option>
-        </select>
-        <select
-          v-if="scenario === 'h_report'"
-          class="sci-input"
-          :value="riskReportType"
-          @change="emit('update:riskReportType', $event.target.value)"
-        >
-          <option v-for="item in riskReportTypes" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
         <input
           class="sci-input"
