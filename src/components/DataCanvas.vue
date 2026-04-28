@@ -23,9 +23,10 @@ const props = defineProps({
   jobList: Array,
   health: Object,
   errorMessage: String,
+  isHistoryMode: Boolean,
 })
 
-const emit = defineEmits(['list'])
+const emit = defineEmits(['list', 'new-report'])
 const reportRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
@@ -230,7 +231,9 @@ function exportPdf() {
   <main class="flex-1 flex flex-col overflow-hidden">
     <div class="h-12 border-b border-border-glow bg-panel-bg flex items-center justify-between px-4">
       <div class="flex items-center gap-3">
-        <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">[ 数据输出终端 ]</span>
+        <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">
+          [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
+        </span>
         <span v-if="phase !== 'idle'" class="font-mono text-[10px] text-neon-green">
           {{ reportTypeLabel }} / {{ phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
         </span>
@@ -240,6 +243,9 @@ function exportPdf() {
       </div>
 
       <div class="flex items-center gap-2">
+        <button v-if="isHistoryMode" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-1.5">
+          清屏并开启下一个编报
+        </button>
         <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-1.5">导出 Word</button>
         <button
           @click="exportPdf"

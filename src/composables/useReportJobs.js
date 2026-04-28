@@ -7,6 +7,20 @@ import {
   fetchReportResult,
 } from '../lib/api.js'
 
+const DRAFT_KEY = 'nexus-report-history-overrides'
+
+function readDrafts() {
+  try {
+    return JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function writeDrafts(value) {
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(value))
+}
+
 export function useReportJobs() {
   const currentView = ref('generator')
 
@@ -30,8 +44,12 @@ export function useReportJobs() {
   const health = ref(null)
   const errorMessage = ref('')
   const selectedReport = ref(null)
+  const openedHistoryJobId = ref(null)
+  const savedNotice = ref('')
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  const isHistoryMode = computed(() => Boolean(openedHistoryJobId.value) && phase.value === 'done')
 
   const filteredJobs = computed(() => {
     return [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
@@ -43,6 +61,66 @@ export function useReportJobs() {
   function pushLog(message) {
     const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     processLogs.value.push(`[${time}] ${message}`)
+  }
+
+  function getJobTitle(item) {
+    const drafts = readDrafts()
+    return drafts[item.jobId]?.title || item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId
+  }
+
+  function applyHistoryDraft(item) {
+    const drafts = readDrafts()
+    const draft = drafts[item.jobId] || {}
+    title.value = draft.title || item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId
+    contextText.value = draft.contextText || item.payload?.known_context || item.payload?.visit_context || ''
+
+    if (item.skill === 'write-hb') {
+      reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
+    } else {
+      reportType.value = item.skill || reportType.value
+    }
+  }
+
+  function clearScreenForNextReport() {
+    openedHistoryJobId.value = null
+    selectedReport.value = null
+    generatedHtml.value = ''
+    errorMessage.value = ''
+    processLogs.value = []
+    job.value = null
+    phase.value = 'idle'
+    loadingStep.value = '等待输入任务'
+    savedNotice.value = ''
+    title.value = ''
+    contextText.value = ''
+    countryOrRegion.value = ''
+    currentPosition.value = ''
+    scenario.value = 'foreign_leader_visit'
+    targetCity.value = ''
+    visitTime.value = ''
+    outputDepth.value = 'detailed'
+    currentView.value = 'generator'
+  }
+
+  function saveCurrentReportDraft() {
+    if (!openedHistoryJobId.value) return
+    const drafts = readDrafts()
+    drafts[openedHistoryJobId.value] = {
+      title: title.value.trim(),
+      contextText: contextText.value.trim(),
+      savedAt: new Date().toISOString(),
+    }
+    writeDrafts(drafts)
+    jobList.value = jobList.value.map((item) =>
+      item.jobId === openedHistoryJobId.value
+        ? {
+            ...item,
+            displayTitle: drafts[openedHistoryJobId.value].title,
+          }
+        : item,
+    )
+    savedNotice.value = '已保存当前历史报告标题'
+    pushLog(savedNotice.value)
   }
 
   function buildPayload() {
@@ -136,6 +214,7 @@ export function useReportJobs() {
           html: generatedHtml.value,
         }
         phase.value = 'done'
+        openedHistoryJobId.value = null
         pushLog('已读取后端返回的 HTML 报告。')
         await loadJobList(false)
         return
@@ -153,6 +232,7 @@ export function useReportJobs() {
   async function handleGenerate() {
     if (isGenerating.value || !title.value.trim()) return
 
+    openedHistoryJobId.value = null
     isGenerating.value = true
     generatedHtml.value = ''
     errorMessage.value = ''
@@ -161,6 +241,7 @@ export function useReportJobs() {
     job.value = null
     phase.value = 'loading'
     loadingStep.value = '正在提交任务到后端'
+    savedNotice.value = ''
 
     try {
       pushLog('提交报告生成任务到后端。')
@@ -181,7 +262,11 @@ export function useReportJobs() {
 
   async function loadJobList(switchView = true) {
     try {
-      jobList.value = await fetchReportJobs()
+      const drafts = readDrafts()
+      jobList.value = (await fetchReportJobs()).map((item) => ({
+        ...item,
+        displayTitle: drafts[item.jobId]?.title || undefined,
+      }))
       if (switchView) currentView.value = 'list'
     } catch (error) {
       errorMessage.value = error instanceof Error ? error.message : String(error)
@@ -192,21 +277,19 @@ export function useReportJobs() {
   async function openReportFromList(item) {
     selectedReport.value = null
     generatedHtml.value = ''
+    errorMessage.value = ''
+    savedNotice.value = ''
     phase.value = 'loading'
     loadingStep.value = '正在读取历史报告文件'
     currentView.value = 'generator'
+    openedHistoryJobId.value = item.jobId
 
     try {
       const result = await fetchReportResult(item.jobId)
       job.value = { ...item, resultPath: result.resultPath || item.resultPath }
       generatedHtml.value = result.html || ''
       selectedReport.value = { ...job.value, html: generatedHtml.value }
-      title.value = item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId
-      if (item.skill === 'write-hb') {
-        reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
-      } else {
-        reportType.value = item.skill || reportType.value
-      }
+      applyHistoryDraft(item)
       phase.value = 'done'
       pushLog(`已打开历史报告：${item.jobId}`)
     } catch (error) {
@@ -216,7 +299,7 @@ export function useReportJobs() {
   }
 
   function showGenerator() {
-    currentView.value = 'generator'
+    clearScreenForNextReport()
   }
 
   onMounted(async () => {
@@ -245,13 +328,19 @@ export function useReportJobs() {
     health,
     errorMessage,
     selectedReport,
+    openedHistoryJobId,
+    savedNotice,
+    isHistoryMode,
     filteredJobs,
     succeededCount,
     runningCount,
+    getJobTitle,
     handleGenerate,
     refreshHealth,
     loadJobList,
     openReportFromList,
     showGenerator,
+    resetForNewReport: clearScreenForNextReport,
+    saveCurrentReportDraft,
   }
 }
