@@ -7,15 +7,12 @@ const props = defineProps({
   countryOrRegion: String,
   currentPosition: String,
   scenario: String,
-  riskReportType: String,
   targetCity: String,
   visitTime: String,
   contextText: String,
   outputDepth: String,
   isGenerating: Boolean,
   health: Object,
-  isHistoryMode: Boolean,
-  savedNotice: String,
 })
 
 const emit = defineEmits([
@@ -24,28 +21,34 @@ const emit = defineEmits([
   'update:countryOrRegion',
   'update:currentPosition',
   'update:scenario',
-  'update:riskReportType',
   'update:targetCity',
   'update:visitTime',
   'update:contextText',
   'update:outputDepth',
   'generate',
-  'save-current',
-  'new-report',
   'refresh-health',
 ])
 
 const reportTypes = [
-  // 人物情报报告入口先隐藏，后续恢复时直接放回这里。
-  // {
-  //   value: 'person-intelligence-report',
-  //   label: '人物情报报告',
-  //   desc: '外宾、领导人、重点人物背景研判。',
-  // },
+  {
+    value: 'person-intelligence-report',
+    label: '人物情报报告',
+    desc: '外宾、领导人、重点人物背景研判',
+  },
   {
     value: 'risk-assessment-reports',
     label: '风险评估报告',
-    desc: '出访、来访、节假日等风险任务。',
+    desc: '访问活动、节假日、城市风险场景研判',
+  },
+  {
+    value: 'write-hb-k',
+    label: 'K报编写',
+    desc: '三段式现场调研报告：基本情况、涉我风险、对策建议',
+  },
+  {
+    value: 'write-hb-hb',
+    label: 'HB报编写',
+    desc: '六段式深度调研报告：事件、背景、立场、风险、趋势、建议',
   },
 ]
 
@@ -53,11 +56,6 @@ const scenarios = [
   { value: 'foreign_leader_visit', label: '外方领导人来访' },
   { value: 'leader_outbound', label: '领导人出访' },
   { value: 'domestic_holiday', label: '国内节假日' },
-]
-
-const riskReportTypes = [
-  { value: 'k_report', label: 'K报' },
-  { value: 'hb_report', label: 'HB报' },
 ]
 
 const outputDepths = [
@@ -80,9 +78,7 @@ const healthColor = computed(() => {
     <div class="panel-header justify-between">
       <div class="flex items-center gap-2">
         <span class="data-pulse"></span>
-        <span class="font-mono text-[10px] tracking-[0.25em] text-neon-cyan/60">
-          {{ isHistoryMode ? '历史报告' : '参数控制台' }}
-        </span>
+        <span class="font-mono text-[10px] tracking-[0.25em] text-neon-cyan/60">参数控制台</span>
       </div>
       <button class="sci-btn text-[9px] px-2 py-1" @click="emit('refresh-health')">检测</button>
     </div>
@@ -99,9 +95,8 @@ const healthColor = computed(() => {
     </div>
 
     <div class="p-4 border-b border-border-glow">
-      <div class="flex items-center justify-between gap-2 mb-3">
+      <div class="flex items-center gap-2 mb-3">
         <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">[ 报告主题 / 对象 ]</span>
-        <span v-if="isHistoryMode" class="font-mono text-[9px] text-cyber-yellow">可修改后保存</span>
       </div>
       <textarea
         :value="title"
@@ -120,9 +115,9 @@ const healthColor = computed(() => {
         <div
           v-for="type in reportTypes"
           :key="type.value"
-          @click="!isHistoryMode && emit('update:reportType', type.value)"
+          @click="emit('update:reportType', type.value)"
           class="report-type-option"
-          :class="{ active: reportType === type.value, 'opacity-60 cursor-default': isHistoryMode && reportType !== type.value }"
+          :class="{ active: reportType === type.value }"
         >
           <div class="flex items-center justify-between">
             <span class="text-neon-cyan font-semibold">{{ type.label }}</span>
@@ -134,11 +129,9 @@ const healthColor = computed(() => {
     </div>
 
     <div class="p-4 border-b border-border-glow flex-1 overflow-auto">
-      <div class="font-mono text-[10px] tracking-widest text-neon-cyan/60 mb-3">
-        [ {{ isHistoryMode ? '历史备注' : '业务参数' }} ]
-      </div>
+      <div class="font-mono text-[10px] tracking-widest text-neon-cyan/60 mb-3">[ 业务参数 ]</div>
 
-      <div v-if="!isHistoryMode && reportType === 'person-intelligence-report'" class="space-y-3">
+      <div v-if="reportType === 'person-intelligence-report'" class="space-y-3">
         <input
           class="sci-input"
           :value="countryOrRegion"
@@ -156,10 +149,7 @@ const healthColor = computed(() => {
         </select>
       </div>
 
-      <div v-else-if="!isHistoryMode && reportType === 'risk-assessment-reports'" class="space-y-3">
-        <select class="sci-input" :value="riskReportType" @change="emit('update:riskReportType', $event.target.value)">
-          <option v-for="item in riskReportTypes" :key="item.value" :value="item.value">{{ item.label }}</option>
-        </select>
+      <div v-else-if="reportType === 'risk-assessment-reports'" class="space-y-3">
         <select class="sci-input" :value="scenario" @change="emit('update:scenario', $event.target.value)">
           <option v-for="item in scenarios" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
@@ -177,8 +167,10 @@ const healthColor = computed(() => {
         />
       </div>
 
-      <div v-else class="font-mono text-[10px] leading-relaxed text-neon-cyan/55">
-        当前正在查看历史报告。修改主题后点击保存，只会更新本页面的历史展示标题，不会重新生成报告正文。
+      <div v-else class="space-y-3">
+        <div class="font-mono text-[10px] leading-relaxed text-neon-cyan/55">
+          K报/HB报将使用 write-hb skill，按国家、地方、政策、社会、传播五个维度自动拆解调研任务。
+        </div>
       </div>
 
       <textarea
@@ -190,29 +182,17 @@ const healthColor = computed(() => {
       ></textarea>
     </div>
 
-    <div class="p-4 space-y-2">
-      <template v-if="isHistoryMode">
-        <button @click="emit('save-current')" class="sci-btn sci-btn-primary w-full py-3">
-          // 保存当前报告信息 //
-        </button>
-        <button @click="emit('new-report')" class="sci-btn w-full py-3">
-          // 清屏，开启下一个编报 //
-        </button>
-        <div v-if="savedNotice" class="font-mono text-[9px] text-center text-neon-green/75">
-          {{ savedNotice }}
-        </div>
-      </template>
-
-      <button v-else @click="emit('generate')" :disabled="!canGenerate" class="sci-btn sci-btn-primary w-full py-3">
+    <div class="p-4">
+      <button @click="emit('generate')" :disabled="!canGenerate" class="sci-btn sci-btn-primary w-full py-3">
         <span v-if="isGenerating" class="flex items-center justify-center gap-2">
           <span class="data-pulse"></span>
           <span>// 后端生成中 //</span>
           <span class="data-pulse"></span>
         </span>
-        <span v-else>// 启动编报生成 //</span>
+        <span v-else>// 启动报告生成 //</span>
       </button>
 
-      <div class="font-mono text-[8px] text-center text-neon-cyan/25 tracking-widest">
+      <div class="mt-2 font-mono text-[8px] text-center text-neon-cyan/25 tracking-widest">
         NEXUS REPORT CLIENT
       </div>
     </div>

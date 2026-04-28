@@ -11,7 +11,6 @@ const {
   countryOrRegion,
   currentPosition,
   scenario,
-  riskReportType,
   targetCity,
   visitTime,
   contextText,
@@ -22,28 +21,18 @@ const {
   processLogs,
   loadingStep,
   job,
+  jobList,
   health,
   errorMessage,
   filteredJobs,
   succeededCount,
   runningCount,
-  isHistoryMode,
-  savedNotice,
-  getJobTitle,
   handleGenerate,
   refreshHealth,
   loadJobList,
   openReportFromList,
   showGenerator,
-  resetForNewReport,
-  saveCurrentReportDraft,
 } = useReportJobs()
-
-function skillLabel(item) {
-  if (item.skill === 'person-intelligence-report') return '人物情报'
-  if (item.skill === 'risk-assessment-reports') return '风险评估'
-  return item.skill || '报告'
-}
 </script>
 
 <template>
@@ -60,18 +49,13 @@ function skillLabel(item) {
         v-model:countryOrRegion="countryOrRegion"
         v-model:currentPosition="currentPosition"
         v-model:scenario="scenario"
-        v-model:riskReportType="riskReportType"
         v-model:targetCity="targetCity"
         v-model:visitTime="visitTime"
         v-model:contextText="contextText"
         v-model:outputDepth="outputDepth"
         :isGenerating="isGenerating"
         :health="health"
-        :isHistoryMode="isHistoryMode"
-        :savedNotice="savedNotice"
         @generate="handleGenerate"
-        @save-current="saveCurrentReportDraft"
-        @new-report="resetForNewReport"
         @refresh-health="refreshHealth"
       />
 
@@ -81,16 +65,12 @@ function skillLabel(item) {
         :processLogs="processLogs"
         :generatedHtml="generatedHtml"
         :reportType="reportType"
-        :scenario="scenario"
-        :riskReportType="riskReportType"
         :title="title"
         :job="job"
         :jobList="filteredJobs"
         :health="health"
         :errorMessage="errorMessage"
-        :isHistoryMode="isHistoryMode"
         @list="loadJobList"
-        @new-report="resetForNewReport"
       />
     </div>
 
@@ -101,7 +81,7 @@ function skillLabel(item) {
           <div class="font-mono text-[10px] text-neon-cyan/40 mt-1">真实后端任务列表 / 点击查看已生成报告</div>
         </div>
         <div class="flex gap-2">
-          <button class="sci-btn text-[10px] px-3 py-2" @click="showGenerator">新建编报</button>
+          <button class="sci-btn text-[10px] px-3 py-2" @click="showGenerator">返回生成</button>
           <button class="sci-btn text-[10px] px-3 py-2" @click="loadJobList(false)">刷新列表</button>
         </div>
       </div>
@@ -121,20 +101,17 @@ function skillLabel(item) {
         </div>
         <div class="panel p-4">
           <div class="font-mono text-[10px] text-neon-cyan/50 tracking-widest mb-2">后端状态</div>
-          <div class="font-mono text-3xl" :class="health?.ok ? 'text-neon-green' : 'text-cyber-yellow'">
-            {{ health?.status || 'unknown' }}
-          </div>
+          <div class="font-mono text-3xl" :class="health?.ok ? 'text-neon-green' : 'text-cyber-yellow'">{{ health?.status || 'unknown' }}</div>
         </div>
       </div>
 
       <div class="panel overflow-hidden">
         <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-border-glow bg-neon-cyan/5">
           <div class="col-span-2 font-mono text-[10px] text-neon-cyan/60 tracking-widest">任务编号</div>
-          <div class="col-span-3 font-mono text-[10px] text-neon-cyan/60 tracking-widest">主题</div>
-          <div class="col-span-1 font-mono text-[10px] text-neon-cyan/60 tracking-widest">类型</div>
+          <div class="col-span-2 font-mono text-[10px] text-neon-cyan/60 tracking-widest">类型</div>
           <div class="col-span-2 font-mono text-[10px] text-neon-cyan/60 tracking-widest">状态</div>
-          <div class="col-span-2 font-mono text-[10px] text-neon-cyan/60 tracking-widest">更新时间</div>
-          <div class="col-span-1 font-mono text-[10px] text-neon-cyan/60 tracking-widest">文件</div>
+          <div class="col-span-3 font-mono text-[10px] text-neon-cyan/60 tracking-widest">生成时间</div>
+          <div class="col-span-2 font-mono text-[10px] text-neon-cyan/60 tracking-widest">文件</div>
           <div class="col-span-1 font-mono text-[10px] text-neon-cyan/60 tracking-widest">操作</div>
         </div>
 
@@ -145,13 +122,10 @@ function skillLabel(item) {
             class="grid grid-cols-12 gap-4 px-4 py-4 border-b border-neon-cyan/10 hover:bg-neon-cyan/5 transition-colors"
           >
             <div class="col-span-2 font-mono text-xs text-neon-cyan">{{ item.jobId.slice(0, 8) }}</div>
-            <div class="col-span-3 font-mono text-xs text-neon-cyan/75 truncate">{{ getJobTitle(item) }}</div>
-            <div class="col-span-1 font-mono text-xs text-neon-cyan/75">{{ skillLabel(item) }}</div>
-            <div class="col-span-2 font-mono text-xs" :class="item.status === 'succeeded' ? 'text-neon-green' : 'text-cyber-yellow'">
-              {{ item.status }}
-            </div>
-            <div class="col-span-2 font-mono text-xs text-neon-cyan/55">{{ item.updatedAt || item.createdAt }}</div>
-            <div class="col-span-1 font-mono text-xs text-neon-cyan/55 truncate">{{ item.resultPath ? '已生成' : '未生成' }}</div>
+            <div class="col-span-2 font-mono text-xs text-neon-cyan/75">{{ item.skill }}</div>
+            <div class="col-span-2 font-mono text-xs" :class="item.status === 'succeeded' ? 'text-neon-green' : 'text-cyber-yellow'">{{ item.status }}</div>
+            <div class="col-span-3 font-mono text-xs text-neon-cyan/55">{{ item.updatedAt || item.createdAt }}</div>
+            <div class="col-span-2 font-mono text-xs text-neon-cyan/55 truncate">{{ item.resultPath || '未生成文件' }}</div>
             <div class="col-span-1">
               <button
                 class="font-mono text-[10px] text-neon-cyan hover:text-neon-green disabled:opacity-30"

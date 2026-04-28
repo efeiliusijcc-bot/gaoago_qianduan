@@ -4,12 +4,12 @@ import DOMPurify from 'dompurify'
 
 const purifyConfig = {
   ALLOWED_TAGS: [
-    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'hr', 'div', 'span',
-    'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-    'strong', 'em', 'b', 'i', 'u', 'a', 'blockquote', 'pre', 'code',
-    'img', 'figure', 'figcaption', 'sub', 'sup',
+    'h1','h2','h3','h4','h5','h6','p','br','hr','div','span',
+    'ul','ol','li','table','thead','tbody','tr','th','td',
+    'strong','em','b','i','u','a','blockquote','pre','code',
+    'img','figure','figcaption','sub','sup',
   ],
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'target', 'rel'],
+  ALLOWED_ATTR: ['href','src','alt','title','class','id','target','rel'],
 }
 
 const props = defineProps({
@@ -18,26 +18,24 @@ const props = defineProps({
   processLogs: Array,
   generatedHtml: String,
   reportType: String,
-  scenario: String,
-  riskReportType: String,
   title: String,
   job: Object,
   jobList: Array,
   health: Object,
   errorMessage: String,
-  isHistoryMode: Boolean,
 })
 
-const emit = defineEmits(['list', 'new-report'])
+const emit = defineEmits(['list'])
 const reportRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
 const reportTypeLabel = computed(() => {
   if (props.reportType === 'person-intelligence-report') return '人物情报报告'
   if (props.reportType === 'risk-assessment-reports') return '风险评估报告'
+  if (props.reportType === 'write-hb-k') return 'K报'
+  if (props.reportType === 'write-hb-hb') return 'HB报'
   return props.job?.skill || '报告'
 })
-const reportModeLabel = computed(() => reportTypeLabel.value)
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
 
 function scrollToBottom() {
@@ -142,7 +140,14 @@ async function exportWord() {
       config: [
         {
           reference: 'default-numbering',
-          levels: [{ level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.LEFT }],
+          levels: [
+            {
+              level: 0,
+              format: 'decimal',
+              text: '%1.',
+              alignment: AlignmentType.LEFT,
+            },
+          ],
         },
       ],
     },
@@ -150,14 +155,21 @@ async function exportWord() {
       {
         children: [
           new Paragraph({
-            children: [new TextRun({ text: props.title || '报告', bold: true, size: 40, font: 'SimHei' })],
+            children: [
+              new TextRun({
+                text: props.title || '报告',
+                bold: true,
+                size: 40,
+                font: 'SimHei',
+              }),
+            ],
             alignment: AlignmentType.CENTER,
             spacing: { after: 320 },
           }),
           new Paragraph({
             children: [
               new TextRun({
-                text: `任务编号：${props.job?.jobId || '-'}    报告类型：${reportModeLabel.value}`,
+                text: `任务编号：${props.job?.jobId || '-'}    报告类型：${reportTypeLabel.value}`,
                 size: 20,
                 font: 'SimSun',
                 color: '666666',
@@ -181,7 +193,7 @@ function exportPdf() {
   const safeHtml = DOMPurify.sanitize(props.generatedHtml || '', purifyConfig)
   const safeTitle = DOMPurify.sanitize(props.title || '报告', { ALLOWED_TAGS: [] })
   const safeJobId = (props.job?.jobId || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const safeLabel = reportModeLabel.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const safeLabel = reportTypeLabel.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
@@ -218,11 +230,9 @@ function exportPdf() {
   <main class="flex-1 flex flex-col overflow-hidden">
     <div class="h-12 border-b border-border-glow bg-panel-bg flex items-center justify-between px-4">
       <div class="flex items-center gap-3">
-        <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">
-          [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
-        </span>
+        <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">[ 数据输出终端 ]</span>
         <span v-if="phase !== 'idle'" class="font-mono text-[10px] text-neon-green">
-          {{ reportModeLabel }} / {{ phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
+          {{ reportTypeLabel }} / {{ phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
         </span>
         <span v-if="job?.jobId" class="font-mono text-[10px] text-neon-cyan/40">
           JOB {{ job.jobId.slice(0, 8) }}
@@ -230,9 +240,6 @@ function exportPdf() {
       </div>
 
       <div class="flex items-center gap-2">
-        <button v-if="isHistoryMode" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-1.5">
-          清屏并开启下一个编报
-        </button>
         <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-1.5">导出 Word</button>
         <button
           @click="exportPdf"
@@ -288,7 +295,7 @@ function exportPdf() {
           <div class="grid grid-cols-2 gap-4 text-xs font-mono">
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
               <span class="text-neon-cyan/50">报告类型</span>
-              <span class="text-neon-cyan">{{ reportModeLabel }}</span>
+              <span class="text-neon-cyan">{{ reportTypeLabel }}</span>
             </div>
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
               <span class="text-neon-cyan/50">任务状态</span>
