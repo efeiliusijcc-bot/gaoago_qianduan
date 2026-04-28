@@ -29,6 +29,7 @@ export function useReportJobs() {
   const countryOrRegion = ref('')
   const currentPosition = ref('')
   const scenario = ref('foreign_leader_visit')
+  const riskReportType = ref('k_report')
   const targetCity = ref('')
   const visitTime = ref('')
   const contextText = ref('')
@@ -75,10 +76,20 @@ export function useReportJobs() {
     contextText.value = draft.contextText || item.payload?.known_context || item.payload?.visit_context || ''
 
     if (item.skill === 'write-hb') {
-      reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
-    } else {
-      reportType.value = item.skill || reportType.value
+      reportType.value = 'risk-assessment-reports'
+      scenario.value = 'h_report'
+      riskReportType.value = item.payload?.report_type === 'hb_report' ? 'hb_report' : 'k_report'
+      return
     }
+
+    if (item.skill === 'risk-assessment-reports') {
+      reportType.value = 'risk-assessment-reports'
+      scenario.value = item.payload?.scenario || 'foreign_leader_visit'
+      riskReportType.value = item.payload?.report_type === 'hb_report' ? 'hb_report' : 'k_report'
+      return
+    }
+
+    reportType.value = item.skill || reportType.value
   }
 
   function clearScreenForNextReport() {
@@ -96,6 +107,7 @@ export function useReportJobs() {
     countryOrRegion.value = ''
     currentPosition.value = ''
     scenario.value = 'foreign_leader_visit'
+    riskReportType.value = 'k_report'
     targetCity.value = ''
     visitTime.value = ''
     outputDepth.value = 'detailed'
@@ -119,7 +131,7 @@ export function useReportJobs() {
           }
         : item,
     )
-    savedNotice.value = '已保存当前历史报告标题'
+    savedNotice.value = '已保存当前历史报告信息'
     pushLog(savedNotice.value)
   }
 
@@ -143,23 +155,11 @@ export function useReportJobs() {
       }
     }
 
-    if (reportType.value === 'write-hb-k' || reportType.value === 'write-hb-hb') {
-      return {
-        skill: 'write-hb',
-        payload: {
-          topic: subject,
-          report_type: reportType.value === 'write-hb-k' ? 'K报' : 'HB报',
-          known_context: context,
-          focus_areas: ['国家', '地方', '政策', '社会', '传播'],
-          language: 'zh-CN',
-        },
-      }
-    }
-
     return {
       skill: 'risk-assessment-reports',
       payload: {
         scenario: scenario.value,
+        ...(scenario.value === 'h_report' ? { report_type: riskReportType.value } : {}),
         target_country: subject,
         target_city: targetCity.value.trim(),
         visit_time: visitTime.value.trim(),
@@ -173,7 +173,7 @@ export function useReportJobs() {
   async function refreshHealth() {
     try {
       health.value = await fetchOpenClawHealth()
-      pushLog(`健康检测：${health.value.status}`)
+      pushLog(`健康检查：${health.value.status}`)
     } catch (error) {
       health.value = {
         ok: false,
@@ -181,7 +181,7 @@ export function useReportJobs() {
         checks: {},
         details: [error instanceof Error ? error.message : String(error)],
       }
-      pushLog(`健康检测失败：${health.value.details[0]}`)
+      pushLog(`健康检查失败：${health.value.details[0]}`)
     }
   }
 
@@ -215,7 +215,7 @@ export function useReportJobs() {
         }
         phase.value = 'done'
         openedHistoryJobId.value = null
-        pushLog('已读取后端返回的 HTML 报告。')
+        pushLog('已读取后端返回的 HTML 报告')
         await loadJobList(false)
         return
       }
@@ -244,7 +244,7 @@ export function useReportJobs() {
     savedNotice.value = ''
 
     try {
-      pushLog('提交报告生成任务到后端。')
+      pushLog('提交报告生成任务到后端')
       await refreshHealth()
       const created = await createReportJob(buildPayload())
       job.value = { jobId: created.jobId, status: created.status }
@@ -314,6 +314,7 @@ export function useReportJobs() {
     countryOrRegion,
     currentPosition,
     scenario,
+    riskReportType,
     targetCity,
     visitTime,
     contextText,

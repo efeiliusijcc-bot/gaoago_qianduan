@@ -4,12 +4,12 @@ import DOMPurify from 'dompurify'
 
 const purifyConfig = {
   ALLOWED_TAGS: [
-    'h1','h2','h3','h4','h5','h6','p','br','hr','div','span',
-    'ul','ol','li','table','thead','tbody','tr','th','td',
-    'strong','em','b','i','u','a','blockquote','pre','code',
-    'img','figure','figcaption','sub','sup',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'hr', 'div', 'span',
+    'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'strong', 'em', 'b', 'i', 'u', 'a', 'blockquote', 'pre', 'code',
+    'img', 'figure', 'figcaption', 'sub', 'sup',
   ],
-  ALLOWED_ATTR: ['href','src','alt','title','class','id','target','rel'],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id', 'target', 'rel'],
 }
 
 const props = defineProps({
@@ -18,6 +18,8 @@ const props = defineProps({
   processLogs: Array,
   generatedHtml: String,
   reportType: String,
+  scenario: String,
+  riskReportType: String,
   title: String,
   job: Object,
   jobList: Array,
@@ -30,13 +32,25 @@ const emit = defineEmits(['list', 'new-report'])
 const reportRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
+
 const reportTypeLabel = computed(() => {
   if (props.reportType === 'person-intelligence-report') return '人物情报报告'
   if (props.reportType === 'risk-assessment-reports') return '风险评估报告'
-  if (props.reportType === 'write-hb-k') return 'K报'
-  if (props.reportType === 'write-hb-hb') return 'HB报'
   return props.job?.skill || '报告'
 })
+
+const reportModeLabel = computed(() => {
+  const payload = props.job?.payload || {}
+  const scenario = payload.scenario || props.scenario
+  const riskReportType = payload.report_type || props.riskReportType
+
+  if (props.reportType === 'risk-assessment-reports' && scenario === 'h_report') {
+    return riskReportType === 'hb_report' ? 'HB报' : 'K报'
+  }
+
+  return reportTypeLabel.value
+})
+
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
 
 function scrollToBottom() {
@@ -170,7 +184,7 @@ async function exportWord() {
           new Paragraph({
             children: [
               new TextRun({
-                text: `任务编号：${props.job?.jobId || '-'}    报告类型：${reportTypeLabel.value}`,
+                text: `任务编号：${props.job?.jobId || '-'}    报告类型：${reportModeLabel.value}`,
                 size: 20,
                 font: 'SimSun',
                 color: '666666',
@@ -194,7 +208,7 @@ function exportPdf() {
   const safeHtml = DOMPurify.sanitize(props.generatedHtml || '', purifyConfig)
   const safeTitle = DOMPurify.sanitize(props.title || '报告', { ALLOWED_TAGS: [] })
   const safeJobId = (props.job?.jobId || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const safeLabel = reportTypeLabel.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const safeLabel = reportModeLabel.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
@@ -235,7 +249,7 @@ function exportPdf() {
           [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
         </span>
         <span v-if="phase !== 'idle'" class="font-mono text-[10px] text-neon-green">
-          {{ reportTypeLabel }} / {{ phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
+          {{ reportModeLabel }} / {{ phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
         </span>
         <span v-if="job?.jobId" class="font-mono text-[10px] text-neon-cyan/40">
           JOB {{ job.jobId.slice(0, 8) }}
@@ -301,7 +315,7 @@ function exportPdf() {
           <div class="grid grid-cols-2 gap-4 text-xs font-mono">
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
               <span class="text-neon-cyan/50">报告类型</span>
-              <span class="text-neon-cyan">{{ reportTypeLabel }}</span>
+              <span class="text-neon-cyan">{{ reportModeLabel }}</span>
             </div>
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
               <span class="text-neon-cyan/50">任务状态</span>

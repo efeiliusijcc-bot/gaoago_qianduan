@@ -7,6 +7,7 @@ const props = defineProps({
   countryOrRegion: String,
   currentPosition: String,
   scenario: String,
+  riskReportType: String,
   targetCity: String,
   visitTime: String,
   contextText: String,
@@ -23,6 +24,7 @@ const emit = defineEmits([
   'update:countryOrRegion',
   'update:currentPosition',
   'update:scenario',
+  'update:riskReportType',
   'update:targetCity',
   'update:visitTime',
   'update:contextText',
@@ -37,29 +39,25 @@ const reportTypes = [
   {
     value: 'person-intelligence-report',
     label: '人物情报报告',
-    desc: '外宾、领导人、重点人物背景研判',
+    desc: '外宾、领导人、重点人物背景研判。',
   },
   {
     value: 'risk-assessment-reports',
     label: '风险评估报告',
-    desc: '访问活动、节假日、城市风险场景研判',
-  },
-  {
-    value: 'write-hb-k',
-    label: 'K报编写',
-    desc: '三段式现场调研报告：基本情况、涉我风险、对策建议',
-  },
-  {
-    value: 'write-hb-hb',
-    label: 'HB报编写',
-    desc: '六段式深度调研报告：事件、背景、立场、风险、趋势、建议',
+    desc: '出访、来访、节假日和调研类风险任务。',
   },
 ]
 
 const scenarios = [
+  { value: 'h_report', label: '调研报告' },
   { value: 'foreign_leader_visit', label: '外方领导人来访' },
   { value: 'leader_outbound', label: '领导人出访' },
   { value: 'domestic_holiday', label: '国内节假日' },
+]
+
+const riskReportTypes = [
+  { value: 'k_report', label: 'K报' },
+  { value: 'hb_report', label: 'HB报' },
 ]
 
 const outputDepths = [
@@ -162,6 +160,14 @@ const healthColor = computed(() => {
         <select class="sci-input" :value="scenario" @change="emit('update:scenario', $event.target.value)">
           <option v-for="item in scenarios" :key="item.value" :value="item.value">{{ item.label }}</option>
         </select>
+        <select
+          v-if="scenario === 'h_report'"
+          class="sci-input"
+          :value="riskReportType"
+          @change="emit('update:riskReportType', $event.target.value)"
+        >
+          <option v-for="item in riskReportTypes" :key="item.value" :value="item.value">{{ item.label }}</option>
+        </select>
         <input
           class="sci-input"
           :value="targetCity"
@@ -174,12 +180,6 @@ const healthColor = computed(() => {
           @input="emit('update:visitTime', $event.target.value)"
           placeholder="时间窗口，例如：2026年5月"
         />
-      </div>
-
-      <div v-else-if="!isHistoryMode" class="space-y-3">
-        <div class="font-mono text-[10px] leading-relaxed text-neon-cyan/55">
-          K报/HB报将使用 write-hb skill，按国家、地方、政策、社会、传播五个维度自动拆解调研任务。
-        </div>
       </div>
 
       <div v-else class="font-mono text-[10px] leading-relaxed text-neon-cyan/55">

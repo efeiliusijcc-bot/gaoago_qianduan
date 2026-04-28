@@ -11,6 +11,7 @@ const {
   countryOrRegion,
   currentPosition,
   scenario,
+  riskReportType,
   targetCity,
   visitTime,
   contextText,
@@ -39,7 +40,12 @@ const {
 } = useReportJobs()
 
 function skillLabel(item) {
-  if (item.skill === 'write-hb' && item.payload?.report_type) return item.payload.report_type
+  if (item.skill === 'write-hb') {
+    return item.payload?.report_type === 'hb_report' ? 'HB报' : 'K报'
+  }
+  if (item.skill === 'risk-assessment-reports' && item.payload?.scenario === 'h_report') {
+    return item.payload?.report_type === 'hb_report' ? 'HB报' : 'K报'
+  }
   if (item.skill === 'person-intelligence-report') return '人物情报'
   if (item.skill === 'risk-assessment-reports') return '风险评估'
   return item.skill || '报告'
@@ -60,6 +66,7 @@ function skillLabel(item) {
         v-model:countryOrRegion="countryOrRegion"
         v-model:currentPosition="currentPosition"
         v-model:scenario="scenario"
+        v-model:riskReportType="riskReportType"
         v-model:targetCity="targetCity"
         v-model:visitTime="visitTime"
         v-model:contextText="contextText"
@@ -80,6 +87,8 @@ function skillLabel(item) {
         :processLogs="processLogs"
         :generatedHtml="generatedHtml"
         :reportType="reportType"
+        :scenario="scenario"
+        :riskReportType="riskReportType"
         :title="title"
         :job="job"
         :jobList="filteredJobs"
