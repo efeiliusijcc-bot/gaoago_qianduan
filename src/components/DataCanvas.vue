@@ -278,7 +278,7 @@ function exportPdf() {
             <div class="loader-core"></div>
           </div>
           <div class="font-mono text-lg neon-text mt-8">{{ loadingStep || '正在生成报告' }}</div>
-          <div class="font-mono text-[10px] text-neon-cyan/40 mt-2">后台任务运行中，请保持 OpenClaw gateway 在线</div>
+          <div class="font-mono text-[10px] text-neon-cyan/40 mt-2">预计 1-2 分钟生成，请耐心等待；后台任务运行中，请保持 OpenClaw gateway 在线</div>
           <div class="mt-6 w-[560px] max-h-56 overflow-auto text-left font-mono text-[11px] space-y-1 bg-black/30 border border-neon-cyan/15 rounded p-4">
             <div v-for="(log, i) in processLogs" :key="i" class="text-neon-green/80">{{ log }}</div>
             <span class="typing-cursor"></span>

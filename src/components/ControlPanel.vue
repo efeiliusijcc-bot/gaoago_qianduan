@@ -35,24 +35,9 @@ const emit = defineEmits([
 
 const reportTypes = [
   {
-    value: 'person-intelligence-report',
-    label: '人物情报报告',
-    desc: '外宾、领导人、重点人物背景研判',
-  },
-  {
-    value: 'risk-assessment-reports',
-    label: '风险评估报告',
-    desc: '访问活动、节假日、城市风险场景研判',
-  },
-  {
     value: 'write-hb-k',
     label: 'K报编写',
     desc: '三段式现场调研报告：基本情况、涉我风险、对策建议',
-  },
-  {
-    value: 'write-hb-hb',
-    label: 'HB报编写',
-    desc: '六段式深度调研报告：事件、背景、立场、风险、趋势、建议',
   },
 ]
 

@@ -25,7 +25,7 @@ export function useReportJobs() {
   const currentView = ref('generator')
 
   const title = ref('')
-  const reportType = ref('person-intelligence-report')
+  const reportType = ref('write-hb-k')
   const countryOrRegion = ref('')
   const currentPosition = ref('')
   const scenario = ref('foreign_leader_visit')
@@ -92,6 +92,7 @@ export function useReportJobs() {
     loadingStep.value = '等待输入任务'
     savedNotice.value = ''
     title.value = ''
+    reportType.value = 'write-hb-k'
     contextText.value = ''
     countryOrRegion.value = ''
     currentPosition.value = ''
@@ -240,7 +241,7 @@ export function useReportJobs() {
     selectedReport.value = null
     job.value = null
     phase.value = 'loading'
-    loadingStep.value = '正在提交任务到后端'
+    loadingStep.value = '预计 1-2 分钟生成，请耐心等待'
     savedNotice.value = ''
 
     try {
