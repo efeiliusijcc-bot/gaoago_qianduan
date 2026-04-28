@@ -25,7 +25,7 @@ export function useReportJobs() {
   const currentView = ref('generator')
 
   const title = ref('')
-  const reportType = ref('person-intelligence-report')
+  const reportType = ref('risk-assessment-reports')
   const countryOrRegion = ref('')
   const currentPosition = ref('')
   const scenario = ref('foreign_leader_visit')

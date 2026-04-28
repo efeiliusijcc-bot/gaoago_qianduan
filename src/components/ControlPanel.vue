@@ -36,11 +36,12 @@ const emit = defineEmits([
 ])
 
 const reportTypes = [
-  {
-    value: 'person-intelligence-report',
-    label: '人物情报报告',
-    desc: '外宾、领导人、重点人物背景研判。',
-  },
+  // 人物情报报告入口先隐藏，后续恢复时直接放回这里。
+  // {
+  //   value: 'person-intelligence-report',
+  //   label: '人物情报报告',
+  //   desc: '外宾、领导人、重点人物背景研判。',
+  // },
   {
     value: 'risk-assessment-reports',
     label: '风险评估报告',
