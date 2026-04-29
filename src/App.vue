@@ -29,6 +29,9 @@ const {
   isHistoryMode,
   hasActiveWorkspace,
   savedNotice,
+  executionLogs,
+  unreadLogCount,
+  isLogDrawerOpen,
   getJobTitle,
   handleGenerate,
   refreshHealth,
@@ -37,6 +40,7 @@ const {
   showGenerator,
   resetForNewReport,
   saveCurrentReportDraft,
+  toggleLogDrawer,
 } = useReportJobs()
 
 function skillLabel(item) {
@@ -87,8 +91,12 @@ function skillLabel(item) {
         :health="health"
         :errorMessage="errorMessage"
         :isHistoryMode="isHistoryMode"
+        :executionLogs="executionLogs"
+        :unreadLogCount="unreadLogCount"
+        :isLogDrawerOpen="isLogDrawerOpen"
         @list="loadJobList"
         @new-report="resetForNewReport"
+        @toggle-log-drawer="toggleLogDrawer"
       />
     </div>
 

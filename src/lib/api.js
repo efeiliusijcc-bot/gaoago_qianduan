@@ -42,3 +42,7 @@ export function fetchReportResult(jobId) {
 export function getDownloadUrl(jobId, format = 'md') {
   return `${API_BASE}/report-jobs/${jobId}/download?format=${format}`
 }
+
+export function getJobEventsUrl(jobId) {
+  return `${API_BASE}/report-jobs/${jobId}/events`
+}

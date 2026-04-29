@@ -5,6 +5,7 @@ import {
   fetchReportJob,
   fetchReportJobs,
   fetchReportResult,
+  getJobEventsUrl,
 } from '../lib/api.js'
 
 const DRAFT_KEY = 'nexus-report-history-overrides'
@@ -47,7 +48,13 @@ export function useReportJobs() {
   const openedHistoryJobId = ref(null)
   const savedNotice = ref('')
   const activePollJobId = ref(null)
+  const executionLogs = ref([])
+  const unreadLogCount = ref(0)
+  const isLogDrawerOpen = ref(false)
   let listRefreshTimer = null
+  let jobEventSource = null
+  let subscribedJobId = null
+  let seenExecutionEvents = new Set()
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -66,6 +73,131 @@ export function useReportJobs() {
   function pushLog(message) {
     const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     processLogs.value.push(`[${time}] ${message}`)
+  }
+
+  function closeJobEvents() {
+    if (jobEventSource) {
+      jobEventSource.close()
+      jobEventSource = null
+    }
+    subscribedJobId = null
+  }
+
+  function resetExecutionLogs() {
+    closeJobEvents()
+    executionLogs.value = []
+    unreadLogCount.value = 0
+    seenExecutionEvents = new Set()
+  }
+
+  function appendExecutionLog(entry) {
+    const key = `${entry.type}:${entry.eventId || ''}:${entry.status || ''}:${entry.summary || ''}`
+    if (seenExecutionEvents.has(key)) return
+    seenExecutionEvents.add(key)
+    executionLogs.value.push({
+      id: `${Date.now()}-${executionLogs.value.length}`,
+      time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      ...entry,
+    })
+    if (!isLogDrawerOpen.value) unreadLogCount.value += 1
+  }
+
+  function normalizeEventLog(event) {
+    const raw = event?.raw && typeof event.raw === 'object' ? event.raw : {}
+    const label = raw.label || event.name || event.stage || event.type
+    const status = raw.status || (event.type === 'tool_start' ? 'started' : event.type === 'tool_end' ? 'completed' : event.type)
+    const summary = raw.summary || event.message || event.content || ''
+
+    if (event.type === 'stage') {
+      return {
+        type: 'stage',
+        label: '阶段进度',
+        status: event.stage || 'running',
+        summary: event.message || event.stage || 'OpenClaw 阶段更新',
+        eventId: event.stage,
+      }
+    }
+
+    if (event.type === 'tool_start' || event.type === 'tool_end' || event.type === 'tool_error') {
+      return {
+        type: event.type,
+        label,
+        status,
+        summary: summary || `${label} ${status}`,
+        command: raw.command,
+        eventId: event.id,
+      }
+    }
+
+    if (event.type === 'error') {
+      return { type: 'error', label: '任务错误', status: 'failed', summary: event.message || '任务失败' }
+    }
+
+    if (event.type === 'done') {
+      return { type: 'done', label: '任务完成', status: 'completed', summary: '后端任务已结束。', eventId: event.jobId }
+    }
+
+    return null
+  }
+
+  function handleJobEvent(event) {
+    const log = normalizeEventLog(event)
+    if (log) appendExecutionLog(log)
+
+    if (event.type === 'stage' && event.message) {
+      loadingStep.value = event.message
+      pushLog(event.message)
+    }
+
+    if (event.type === 'error') {
+      errorMessage.value = event.message || '任务失败'
+      phase.value = 'error'
+      loadingStep.value = '任务失败'
+      pushLog(`错误：${errorMessage.value}`)
+      closeJobEvents()
+    }
+
+    if (event.type === 'done') {
+      closeJobEvents()
+    }
+  }
+
+  function subscribeJobEvents(jobId) {
+    if (!window.EventSource || !jobId) return
+    if (subscribedJobId === jobId && jobEventSource) return
+
+    closeJobEvents()
+    subscribedJobId = jobId
+    const source = new EventSource(getJobEventsUrl(jobId))
+    jobEventSource = source
+
+    source.onmessage = (message) => {
+      try {
+        handleJobEvent(JSON.parse(message.data))
+      } catch {
+        appendExecutionLog({
+          type: 'error',
+          label: '日志解析',
+          status: 'failed',
+          summary: '收到无法解析的执行日志事件。',
+        })
+      }
+    }
+
+    source.onerror = () => {
+      appendExecutionLog({
+        type: 'stage',
+        label: '执行日志',
+        status: 'fallback',
+        summary: '实时日志连接中断，继续使用任务状态轮询。',
+      })
+      closeJobEvents()
+    }
+  }
+
+  function toggleLogDrawer() {
+    isLogDrawerOpen.value = !isLogDrawerOpen.value
+    if (isLogDrawerOpen.value) unreadLogCount.value = 0
   }
 
   function getJobTitle(item) {
@@ -98,6 +230,7 @@ export function useReportJobs() {
   }
 
   function clearScreenForNextReport() {
+    resetExecutionLogs()
     openedHistoryJobId.value = null
     selectedReport.value = null
     generatedHtml.value = ''
@@ -256,6 +389,7 @@ export function useReportJobs() {
   async function handleGenerate() {
     if (isGenerating.value || !title.value.trim()) return
 
+    resetExecutionLogs()
     openedHistoryJobId.value = null
     isGenerating.value = true
     generatedHtml.value = ''
@@ -273,6 +407,7 @@ export function useReportJobs() {
       const created = await createReportJob(buildPayload())
       job.value = { jobId: created.jobId, status: created.status }
       pushLog(`任务已创建：${created.jobId}`)
+      subscribeJobEvents(created.jobId)
       await pollUntilDone(created.jobId)
     } catch (error) {
       errorMessage.value = error instanceof Error ? error.message : String(error)
@@ -299,6 +434,7 @@ export function useReportJobs() {
   }
 
   async function openReportFromList(item) {
+    closeJobEvents()
     selectedReport.value = null
     generatedHtml.value = ''
     errorMessage.value = ''
@@ -331,6 +467,7 @@ export function useReportJobs() {
     currentView.value = 'generator'
     if (activePollJobId.value === item.jobId) return
 
+    resetExecutionLogs()
     openedHistoryJobId.value = null
     selectedReport.value = null
     generatedHtml.value = ''
@@ -339,6 +476,7 @@ export function useReportJobs() {
     processLogs.value = []
     job.value = item
     applyJobFormData(item)
+    subscribeJobEvents(item.jobId)
 
     if (item.status === 'failed' || item.status === 'waiting_approval' || item.status === 'cancelled') {
       phase.value = 'error'
@@ -384,6 +522,7 @@ export function useReportJobs() {
   })
 
   onUnmounted(() => {
+    closeJobEvents()
     if (listRefreshTimer) {
       window.clearInterval(listRefreshTimer)
       listRefreshTimer = null
@@ -418,6 +557,9 @@ export function useReportJobs() {
     filteredJobs,
     succeededCount,
     runningCount,
+    executionLogs,
+    unreadLogCount,
+    isLogDrawerOpen,
     getJobTitle,
     handleGenerate,
     refreshHealth,
@@ -427,5 +569,6 @@ export function useReportJobs() {
     showGenerator,
     resetForNewReport: resetAndShowGenerator,
     saveCurrentReportDraft,
+    toggleLogDrawer,
   }
 }

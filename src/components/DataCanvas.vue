@@ -24,9 +24,18 @@ const props = defineProps({
   health: Object,
   errorMessage: String,
   isHistoryMode: Boolean,
+  executionLogs: {
+    type: Array,
+    default: () => [],
+  },
+  unreadLogCount: {
+    type: Number,
+    default: 0,
+  },
+  isLogDrawerOpen: Boolean,
 })
 
-const emit = defineEmits(['list', 'new-report'])
+const emit = defineEmits(['list', 'new-report', 'toggle-log-drawer'])
 const reportRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
@@ -38,6 +47,22 @@ const reportTypeLabel = computed(() => {
   return props.job?.skill || '报告'
 })
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
+
+function logTypeLabel(type) {
+  if (type === 'tool_start') return '工具开始'
+  if (type === 'tool_end') return '工具完成'
+  if (type === 'tool_error') return '工具错误'
+  if (type === 'done') return '任务完成'
+  if (type === 'error') return '任务错误'
+  return '阶段'
+}
+
+function logStatusClass(status) {
+  if (status === 'failed' || status === 'error') return 'text-red-300 border-red-400/35 bg-red-950/30'
+  if (status === 'completed' || status === 'succeeded') return 'text-neon-green border-neon-green/30 bg-neon-green/5'
+  if (status === 'fallback') return 'text-cyber-yellow border-cyber-yellow/30 bg-cyber-yellow/5'
+  return 'text-neon-cyan border-neon-cyan/25 bg-neon-cyan/5'
+}
 
 function scrollToBottom() {
   nextTick(() => {
@@ -247,7 +272,7 @@ function exportPdf() {
 </script>
 
 <template>
-  <main class="flex-1 flex flex-col overflow-hidden">
+  <main class="flex-1 flex flex-col overflow-hidden relative">
     <div class="h-12 border-b border-border-glow bg-panel-bg flex items-center justify-between px-4">
       <div class="flex items-center gap-3">
         <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">
@@ -262,6 +287,15 @@ function exportPdf() {
       </div>
 
       <div class="flex items-center gap-2">
+        <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-3 py-1.5 relative">
+          执行日志
+          <span
+            v-if="unreadLogCount"
+            class="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-cyber-yellow text-black text-[10px] leading-5 text-center"
+          >
+            {{ unreadLogCount > 99 ? '99+' : unreadLogCount }}
+          </span>
+        </button>
         <button v-if="isHistoryMode" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-1.5">
           清屏并开启下一个编报
         </button>
@@ -277,6 +311,45 @@ function exportPdf() {
         <button @click="emit('list')" class="sci-btn text-[10px] px-3 py-1.5">报告列表</button>
       </div>
     </div>
+
+    <aside
+      v-if="isLogDrawerOpen"
+      class="absolute right-0 top-12 bottom-0 z-20 w-[420px] max-w-[calc(100%-1rem)] border-l border-neon-cyan/25 bg-deep-void/95 backdrop-blur overflow-hidden flex flex-col shadow-[0_0_40px_rgba(0,229,255,0.12)]"
+    >
+      <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
+        <div>
+          <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
+          <div class="font-mono text-[10px] text-neon-cyan/40">OpenClaw 工具调用摘要</div>
+        </div>
+        <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
+      </div>
+
+      <div class="flex-1 overflow-auto p-4 space-y-3">
+        <div v-if="!executionLogs.length" class="h-full flex items-center justify-center text-center">
+          <div>
+            <div class="font-mono text-3xl text-neon-cyan/15 mb-3">LOGS</div>
+            <div class="font-mono text-xs text-neon-cyan/45">暂无执行日志</div>
+          </div>
+        </div>
+
+        <div
+          v-for="log in executionLogs"
+          :key="log.id"
+          class="border rounded p-3 bg-black/25"
+          :class="logStatusClass(log.status)"
+        >
+          <div class="flex items-center justify-between gap-3 mb-2">
+            <div class="font-mono text-[10px] tracking-widest text-current/80">{{ logTypeLabel(log.type) }}</div>
+            <div class="font-mono text-[10px] text-current/55">{{ log.time }}</div>
+          </div>
+          <div class="font-mono text-xs text-current font-bold mb-1">{{ log.label }}</div>
+          <div class="text-xs leading-relaxed text-slate-200/85">{{ log.summary }}</div>
+          <div v-if="log.command" class="mt-2 font-mono text-[10px] text-neon-cyan/40 truncate">
+            {{ log.command }}
+          </div>
+        </div>
+      </div>
+    </aside>
 
     <div ref="reportRef" class="flex-1 overflow-auto p-6">
       <div v-if="phase === 'idle'" class="h-full flex items-center justify-center">
