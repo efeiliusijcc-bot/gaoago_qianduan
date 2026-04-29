@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   createReportJob,
   fetchOpenClawHealth,
@@ -46,10 +46,15 @@ export function useReportJobs() {
   const selectedReport = ref(null)
   const openedHistoryJobId = ref(null)
   const savedNotice = ref('')
+  const activePollJobId = ref(null)
+  let listRefreshTimer = null
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
   const isHistoryMode = computed(() => Boolean(openedHistoryJobId.value) && phase.value === 'done')
+  const hasActiveWorkspace = computed(() => {
+    return phase.value !== 'idle' || Boolean(job.value) || Boolean(title.value.trim()) || Boolean(generatedHtml.value)
+  })
 
   const filteredJobs = computed(() => {
     return [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
@@ -73,6 +78,17 @@ export function useReportJobs() {
     const draft = drafts[item.jobId] || {}
     title.value = draft.title || item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId
     contextText.value = draft.contextText || item.payload?.known_context || item.payload?.visit_context || ''
+
+    if (item.skill === 'write-hb') {
+      reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
+    } else {
+      reportType.value = item.skill || reportType.value
+    }
+  }
+
+  function applyJobFormData(item) {
+    title.value = getJobTitle(item)
+    contextText.value = item.payload?.known_context || item.payload?.visit_context || ''
 
     if (item.skill === 'write-hb') {
       reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
@@ -187,6 +203,9 @@ export function useReportJobs() {
   }
 
   async function pollUntilDone(jobId) {
+    if (activePollJobId.value === jobId) return
+    activePollJobId.value = jobId
+
     const stepMessages = [
       'OpenClaw 已接收任务',
       '正在检索公开信息',
@@ -198,35 +217,39 @@ export function useReportJobs() {
     let interval = 2000
     const maxInterval = 10000
 
-    while (true) {
-      const next = await fetchReportJob(jobId)
-      job.value = next
-      loadingStep.value = stepMessages[tick % stepMessages.length]
-      pushLog(`任务状态：${next.status}${next.stage ? ` / ${next.stage}` : ''}`)
-      tick += 1
+    try {
+      while (activePollJobId.value === jobId) {
+        const next = await fetchReportJob(jobId)
+        job.value = next
+        loadingStep.value = stepMessages[tick % stepMessages.length]
+        pushLog(`任务状态：${next.status}${next.stage ? ` / ${next.stage}` : ''}`)
+        tick += 1
 
-      if (next.status === 'succeeded') {
-        loadingStep.value = '正在读取报告文件内容'
-        const result = await fetchReportResult(jobId)
-        generatedHtml.value = result.html || ''
-        job.value = { ...next, resultPath: result.resultPath || next.resultPath }
-        selectedReport.value = {
-          ...job.value,
-          html: generatedHtml.value,
+        if (next.status === 'succeeded') {
+          loadingStep.value = '正在读取报告文件内容'
+          const result = await fetchReportResult(jobId)
+          generatedHtml.value = result.html || ''
+          job.value = { ...next, resultPath: result.resultPath || next.resultPath }
+          selectedReport.value = {
+            ...job.value,
+            html: generatedHtml.value,
+          }
+          phase.value = 'done'
+          openedHistoryJobId.value = null
+          pushLog('已读取后端返回的 HTML 报告。')
+          await loadJobList(false)
+          return
         }
-        phase.value = 'done'
-        openedHistoryJobId.value = null
-        pushLog('已读取后端返回的 HTML 报告。')
-        await loadJobList(false)
-        return
-      }
 
-      if (next.status === 'failed' || next.status === 'waiting_approval' || next.status === 'cancelled') {
-        throw new Error(next.errorMessage || `任务未成功完成：${next.status}`)
-      }
+        if (next.status === 'failed' || next.status === 'waiting_approval' || next.status === 'cancelled') {
+          throw new Error(next.errorMessage || `任务未成功完成：${next.status}`)
+        }
 
-      await sleep(interval)
-      interval = Math.min(interval * 2, maxInterval)
+        await sleep(interval)
+        interval = Math.min(interval * 2, maxInterval)
+      }
+    } finally {
+      if (activePollJobId.value === jobId) activePollJobId.value = null
     }
   }
 
@@ -299,13 +322,72 @@ export function useReportJobs() {
     }
   }
 
+  async function monitorJobFromList(item) {
+    if (item.status === 'succeeded') {
+      await openReportFromList(item)
+      return
+    }
+
+    currentView.value = 'generator'
+    if (activePollJobId.value === item.jobId) return
+
+    openedHistoryJobId.value = null
+    selectedReport.value = null
+    generatedHtml.value = ''
+    errorMessage.value = ''
+    savedNotice.value = ''
+    processLogs.value = []
+    job.value = item
+    applyJobFormData(item)
+
+    if (item.status === 'failed' || item.status === 'waiting_approval' || item.status === 'cancelled') {
+      phase.value = 'error'
+      loadingStep.value = '任务未成功完成'
+      errorMessage.value = item.errorMessage || `任务状态：${item.status}`
+      pushLog(errorMessage.value)
+      return
+    }
+
+    phase.value = 'loading'
+    loadingStep.value = '正在跟踪后端任务状态'
+    isGenerating.value = true
+    pushLog(`继续查看任务：${item.jobId}`)
+
+    try {
+      await pollUntilDone(item.jobId)
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : String(error)
+      phase.value = 'error'
+      loadingStep.value = '任务失败'
+      pushLog(`错误：${errorMessage.value}`)
+    } finally {
+      isGenerating.value = false
+    }
+  }
+
   function showGenerator() {
+    currentView.value = 'generator'
+  }
+
+  function resetAndShowGenerator() {
     clearScreenForNextReport()
   }
 
   onMounted(async () => {
     await refreshHealth()
     await loadJobList(false)
+    listRefreshTimer = window.setInterval(() => {
+      if (currentView.value === 'list' && runningCount.value > 0) {
+        loadJobList(false)
+      }
+    }, 5000)
+  })
+
+  onUnmounted(() => {
+    if (listRefreshTimer) {
+      window.clearInterval(listRefreshTimer)
+      listRefreshTimer = null
+    }
   })
 
   return {
@@ -332,6 +414,7 @@ export function useReportJobs() {
     openedHistoryJobId,
     savedNotice,
     isHistoryMode,
+    hasActiveWorkspace,
     filteredJobs,
     succeededCount,
     runningCount,
@@ -340,8 +423,9 @@ export function useReportJobs() {
     refreshHealth,
     loadJobList,
     openReportFromList,
+    monitorJobFromList,
     showGenerator,
-    resetForNewReport: clearScreenForNextReport,
+    resetForNewReport: resetAndShowGenerator,
     saveCurrentReportDraft,
   }
 }

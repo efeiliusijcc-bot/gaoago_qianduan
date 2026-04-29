@@ -27,12 +27,13 @@ const {
   succeededCount,
   runningCount,
   isHistoryMode,
+  hasActiveWorkspace,
   savedNotice,
   getJobTitle,
   handleGenerate,
   refreshHealth,
   loadJobList,
-  openReportFromList,
+  monitorJobFromList,
   showGenerator,
   resetForNewReport,
   saveCurrentReportDraft,
@@ -98,7 +99,8 @@ function skillLabel(item) {
           <div class="font-mono text-[10px] text-neon-cyan/40 mt-1">真实后端任务列表 / 点击查看已生成报告</div>
         </div>
         <div class="flex gap-2">
-          <button class="sci-btn text-[10px] px-3 py-2" @click="showGenerator">新建编报</button>
+          <button class="sci-btn text-[10px] px-3 py-2" :disabled="!hasActiveWorkspace" @click="showGenerator">返回当前编报</button>
+          <button class="sci-btn text-[10px] px-3 py-2" @click="resetForNewReport">新建编报</button>
           <button class="sci-btn text-[10px] px-3 py-2" @click="loadJobList(false)">刷新列表</button>
         </div>
       </div>
@@ -144,18 +146,20 @@ function skillLabel(item) {
             <div class="col-span-2 font-mono text-xs text-neon-cyan">{{ item.jobId.slice(0, 8) }}</div>
             <div class="col-span-3 font-mono text-xs text-neon-cyan/75 truncate">{{ getJobTitle(item) }}</div>
             <div class="col-span-1 font-mono text-xs text-neon-cyan/75">{{ skillLabel(item) }}</div>
-            <div class="col-span-2 font-mono text-xs" :class="item.status === 'succeeded' ? 'text-neon-green' : 'text-cyber-yellow'">
-              {{ item.status }}
+            <div
+              class="col-span-2 font-mono text-xs"
+              :class="item.status === 'succeeded' ? 'text-neon-green' : item.status === 'failed' ? 'text-red-300' : 'text-cyber-yellow'"
+            >
+              {{ item.status }}<span v-if="item.stage && item.stage !== item.status" class="text-neon-cyan/35"> / {{ item.stage }}</span>
             </div>
             <div class="col-span-2 font-mono text-xs text-neon-cyan/55">{{ item.updatedAt || item.createdAt }}</div>
             <div class="col-span-1 font-mono text-xs text-neon-cyan/55 truncate">{{ item.resultPath ? '已生成' : '未生成' }}</div>
             <div class="col-span-1">
               <button
                 class="font-mono text-[10px] text-neon-cyan hover:text-neon-green disabled:opacity-30"
-                :disabled="item.status !== 'succeeded'"
-                @click="openReportFromList(item)"
+                @click="monitorJobFromList(item)"
               >
-                查看
+                {{ item.status === 'succeeded' ? '查看报告' : item.status === 'running' || item.status === 'queued' ? '查看状态' : '查看错误' }}
               </button>
             </div>
           </div>
