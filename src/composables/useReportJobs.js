@@ -264,7 +264,7 @@ export function useReportJobs() {
     selectedReport.value = null
     job.value = null
     phase.value = 'loading'
-    loadingStep.value = '预计 1-2 分钟生成，请耐心等待'
+    loadingStep.value = '预计 3-5 分钟生成，请耐心等待'
     savedNotice.value = ''
 
     try {
