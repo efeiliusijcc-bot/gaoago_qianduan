@@ -184,7 +184,18 @@ export function useReportJobs() {
       }
     }
 
-    source.onerror = () => {
+    source.onerror = async () => {
+      try {
+        const latest = await fetchReportJob(jobId)
+        job.value = latest
+        if (latest.status === 'succeeded' || latest.status === 'failed' || latest.status === 'cancelled') {
+          closeJobEvents()
+          return
+        }
+      } catch {
+        // Keep the original fallback behavior when the status check itself is unavailable.
+      }
+
       appendExecutionLog({
         type: 'stage',
         label: '执行日志',
