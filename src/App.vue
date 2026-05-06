@@ -3,6 +3,7 @@ import NexusHeader from './components/NexusHeader.vue'
 import ControlPanel from './components/ControlPanel.vue'
 import DataCanvas from './components/DataCanvas.vue'
 import { useReportJobs } from './composables/useReportJobs.js'
+import { computed, ref } from 'vue'
 
 const {
   currentView,
@@ -24,8 +25,6 @@ const {
   health,
   errorMessage,
   filteredJobs,
-  succeededCount,
-  runningCount,
   isHistoryMode,
   hasActiveWorkspace,
   savedNotice,
@@ -42,6 +41,69 @@ const {
   saveCurrentReportDraft,
   toggleLogDrawer,
 } = useReportJobs()
+
+const listSearch = ref('')
+const listTypeFilter = ref('all')
+
+const reportTypeOptions = [
+  { value: 'all', label: '全部' },
+  { value: 'write-hb-k', label: 'K报' },
+  { value: 'write-hb-hb', label: 'HB报' },
+  { value: 'person-intelligence-report', label: '人物报' },
+  { value: 'risk-assessment-reports', label: '风险报' },
+]
+
+const hasGeneratingWorkspace = computed(() => {
+  return phase.value === 'loading' || isGenerating.value || job.value?.status === 'running' || job.value?.status === 'queued'
+})
+
+function normalizeText(value) {
+  return String(value ?? '').toLowerCase()
+}
+
+function collectPayloadText(value) {
+  if (!value) return ''
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return value.map(collectPayloadText).join(' ')
+  if (typeof value === 'object') return Object.values(value).map(collectPayloadText).join(' ')
+  return ''
+}
+
+function jobReportTypeKey(item) {
+  if (item.skill === 'write-hb') {
+    const payloadType = normalizeText(item.payload?.report_type)
+    if (payloadType.includes('hb')) return 'write-hb-hb'
+    return 'write-hb-k'
+  }
+  if (item.skill === 'person-intelligence-report') return 'person-intelligence-report'
+  if (item.skill === 'risk-assessment-reports') return 'risk-assessment-reports'
+  return item.skill || 'unknown'
+}
+
+function jobSearchText(item) {
+  return normalizeText([
+    item.jobId,
+    item.status,
+    item.stage,
+    item.skill,
+    item.resultPath,
+    item.errorMessage,
+    getJobTitle(item),
+    collectPayloadText(item.payload),
+  ].join(' '))
+}
+
+const visibleJobs = computed(() => {
+  const keyword = normalizeText(listSearch.value.trim())
+  return filteredJobs.value.filter((item) => {
+    const matchesType = listTypeFilter.value === 'all' || jobReportTypeKey(item) === listTypeFilter.value
+    const matchesSearch = !keyword || jobSearchText(item).includes(keyword)
+    return matchesType && matchesSearch
+  })
+})
+
+const visibleSucceededCount = computed(() => visibleJobs.value.filter((i) => i.status === 'succeeded').length)
+const visibleRunningCount = computed(() => visibleJobs.value.filter((i) => i.status === 'running' || i.status === 'queued').length)
 
 function skillLabel(item) {
   if (item.skill === 'write-hb' && item.payload?.report_type) return item.payload.report_type
@@ -100,30 +162,55 @@ function skillLabel(item) {
           <div class="font-mono text-[10px] text-neon-cyan/40 mt-1">真实后端任务列表 / 点击查看已生成报告</div>
         </div>
         <div class="flex gap-2">
-          <button class="sci-btn text-[10px] px-3 py-2" :disabled="!hasActiveWorkspace" @click="showGenerator">返回当前编报</button>
+          <button
+            v-if="hasActiveWorkspace"
+            class="sci-btn text-[10px] px-3 py-2"
+            :class="hasGeneratingWorkspace ? 'border-neon-green text-neon-green shadow-[0_0_18px_rgba(0,255,159,0.18)]' : ''"
+            @click="showGenerator"
+          >
+            {{ hasGeneratingWorkspace ? '返回生成编报' : '返回当前编报' }}
+          </button>
           <button class="sci-btn text-[10px] px-3 py-2" @click="resetForNewReport">新建编报</button>
           <button class="sci-btn text-[10px] px-3 py-2" @click="loadJobList(false)">刷新列表</button>
         </div>
       </div>
 
-      <div class="grid grid-cols-4 gap-4 mb-6">
+      <div class="panel p-4 mb-6">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div class="relative flex-1">
+            <input
+              v-model="listSearch"
+              class="w-full bg-deep-void/80 border border-neon-cyan/25 rounded-sm px-4 py-3 pr-10 font-mono text-sm text-neon-cyan placeholder:text-neon-cyan/25 focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_18px_rgba(0,245,255,0.16)]"
+              placeholder="搜索标题 / 任务编号 / 上下文关键词"
+            />
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px] text-neon-cyan/35">SEARCH</span>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="option in reportTypeOptions"
+              :key="option.value"
+              class="sci-btn text-[10px] px-3 py-2"
+              :class="listTypeFilter === option.value ? 'border-neon-green bg-neon-green/10 text-neon-green' : ''"
+              @click="listTypeFilter = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 mb-6">
         <div class="panel p-4">
           <div class="font-mono text-[10px] text-neon-cyan/50 tracking-widest mb-2">任务总数</div>
-          <div class="font-mono text-3xl neon-text">{{ filteredJobs.length }}</div>
+          <div class="font-mono text-3xl neon-text">{{ visibleJobs.length }}</div>
         </div>
         <div class="panel p-4">
           <div class="font-mono text-[10px] text-neon-cyan/50 tracking-widest mb-2">已完成</div>
-          <div class="font-mono text-3xl text-neon-green">{{ succeededCount }}</div>
+          <div class="font-mono text-3xl text-neon-green">{{ visibleSucceededCount }}</div>
         </div>
         <div class="panel p-4">
           <div class="font-mono text-[10px] text-neon-cyan/50 tracking-widest mb-2">运行中</div>
-          <div class="font-mono text-3xl text-cyber-yellow">{{ runningCount }}</div>
-        </div>
-        <div class="panel p-4">
-          <div class="font-mono text-[10px] text-neon-cyan/50 tracking-widest mb-2">后端状态</div>
-          <div class="font-mono text-3xl" :class="health?.ok ? 'text-neon-green' : 'text-cyber-yellow'">
-            {{ health?.status || 'unknown' }}
-          </div>
+          <div class="font-mono text-3xl text-cyber-yellow">{{ visibleRunningCount }}</div>
         </div>
       </div>
 
@@ -138,9 +225,9 @@ function skillLabel(item) {
           <div class="col-span-1 font-mono text-[10px] text-neon-cyan/60 tracking-widest">操作</div>
         </div>
 
-        <div v-if="filteredJobs.length">
+        <div v-if="visibleJobs.length">
           <div
-            v-for="item in filteredJobs"
+            v-for="item in visibleJobs"
             :key="item.jobId"
             class="grid grid-cols-12 gap-4 px-4 py-4 border-b border-neon-cyan/10 hover:bg-neon-cyan/5 transition-colors"
           >
@@ -167,8 +254,10 @@ function skillLabel(item) {
         </div>
 
         <div v-else class="py-16 text-center">
-          <div class="font-mono text-4xl text-neon-cyan/15 mb-4">NO DATA</div>
-          <div class="font-mono text-sm text-neon-cyan/35">暂无报告任务</div>
+          <div class="font-mono text-4xl text-neon-cyan/15 mb-4">{{ filteredJobs.length ? 'NO MATCH' : 'NO DATA' }}</div>
+          <div class="font-mono text-sm text-neon-cyan/35">
+            {{ filteredJobs.length ? '未找到匹配编报' : '暂无报告任务' }}
+          </div>
         </div>
       </div>
     </main>

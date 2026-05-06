@@ -244,7 +244,7 @@ async function exportWord() {
 
   const docx = await import('docx')
   const { saveAs } = await import('file-saver')
-  const { Document, Paragraph, TextRun, AlignmentType, Packer } = docx
+  const { Document, AlignmentType, Packer } = docx
 
   const doc = new Document({
     numbering: {
@@ -264,32 +264,7 @@ async function exportWord() {
     },
     sections: [
       {
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: props.title || '报告',
-                bold: true,
-                size: 40,
-                font: 'SimHei',
-              }),
-            ],
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 320 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `任务编号：${props.job?.jobId || '-'}    报告类型：${reportTypeLabel.value}`,
-                size: 20,
-                font: 'SimSun',
-                color: '666666',
-              }),
-            ],
-            spacing: { after: 240 },
-          }),
-          ...collectDocxBlocks(props.generatedHtml, docx),
-        ],
+        children: collectDocxBlocks(props.generatedHtml, docx),
       },
     ],
   })
@@ -303,9 +278,6 @@ function exportPdf() {
 
   const safeHtml = DOMPurify.sanitize(props.generatedHtml || '', purifyConfig)
   const safeTitle = DOMPurify.sanitize(props.title || '报告', { ALLOWED_TAGS: [] })
-  const safeJobId = (props.job?.jobId || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const safeLabel = reportTypeLabel.value.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
 
@@ -322,13 +294,10 @@ function exportPdf() {
     table { border-collapse: collapse; width: 100%; margin: 12px 0; }
     th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; }
     blockquote { border-left: 4px solid #999; padding-left: 12px; color: #555; }
-    .meta { color: #666; font-size: 12px; margin: 12px 0 24px; text-align: center; }
     @media print { body { padding: 24px; } }
   </style>
 </head>
 <body>
-  <h1>${safeTitle}</h1>
-  <div class="meta">任务编号：${safeJobId}　报告类型：${safeLabel}</div>
   ${safeHtml}
 </body>
 </html>`)
@@ -492,11 +461,7 @@ function exportPdf() {
               选择一个编报类型后，可填写对应的背景、方向、时间、地区对象和上下文参数。
             </div>
 
-            <div class="mt-5 flex items-center gap-3">
-              <button class="sci-btn text-[10px] px-3 py-2" type="button">附件</button>
-              <button class="sci-btn text-[10px] px-3 py-2" type="button">联网搜索</button>
-              <button class="sci-btn text-[10px] px-3 py-2" type="button">深度思考</button>
-              <button class="ml-auto w-11 h-11 rounded-full border border-neon-cyan/35 text-neon-cyan hover:text-neon-green hover:border-neon-green transition-colors font-mono text-[10px]" type="button">MIC</button>
+            <div class="mt-5 flex items-center justify-end">
               <button
                 class="w-12 h-12 rounded-full bg-neon-cyan text-deep-void font-mono text-xl shadow-[0_0_24px_rgba(0,243,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed"
                 type="button"
@@ -576,7 +541,6 @@ function exportPdf() {
 
       <div v-else class="max-w-5xl mx-auto">
         <div class="border border-neon-cyan/30 rounded p-6 mb-6 bg-black/30">
-          <h1 class="text-xl font-bold text-neon-cyan text-center mb-4">{{ title || '报告' }}</h1>
           <div class="grid grid-cols-2 gap-4 text-xs font-mono">
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
               <span class="text-neon-cyan/50">报告类型</span>
