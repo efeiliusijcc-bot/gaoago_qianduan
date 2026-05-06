@@ -19,11 +19,13 @@ const props = defineProps({
   generatedHtml: String,
   reportType: String,
   title: String,
+  contextText: String,
   job: Object,
   jobList: Array,
   health: Object,
   errorMessage: String,
   isHistoryMode: Boolean,
+  isGenerating: Boolean,
   executionLogs: {
     type: Array,
     default: () => [],
@@ -35,11 +37,12 @@ const props = defineProps({
   isLogDrawerOpen: Boolean,
 })
 
-const emit = defineEmits(['list', 'new-report', 'toggle-log-drawer'])
+const emit = defineEmits(['list', 'new-report', 'toggle-log-drawer', 'update:title', 'update:contextText', 'generate'])
 const reportRef = ref(null)
 const logListRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
+const canGenerate = computed(() => Boolean(props.title?.trim()) && !props.isGenerating)
 const reportTypeLabel = computed(() => {
   if (props.reportType === 'person-intelligence-report') return '人物情报报告'
   if (props.reportType === 'risk-assessment-reports') return '风险评估报告'
@@ -48,6 +51,33 @@ const reportTypeLabel = computed(() => {
   return props.job?.skill || '报告'
 })
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
+const quickActions = [
+  {
+    label: '热点研判',
+    prompt: '请围绕以下热点事件开展K报研判，重点关注基本情况、涉我风险、传播态势和对策建议：',
+  },
+  {
+    label: '事件分析',
+    prompt: '请对以下事件进行深度编报，梳理事件经过、关键主体、风险变化和处置建议：',
+  },
+  {
+    label: '区域风险评估',
+    prompt: '请围绕以下地区或场景开展区域风险评估，重点研判人流、安全、舆情和管控建议：',
+  },
+  {
+    label: '自动生成摘要',
+    prompt: '请根据以下材料自动生成K报摘要，并补充风险点、判断依据和建议措施：',
+  },
+]
+
+function applyQuickAction(action) {
+  const current = props.contextText?.trim()
+  emit('update:contextText', current ? `${action.prompt}\n\n${current}` : action.prompt)
+}
+
+function submitReport() {
+  if (canGenerate.value) emit('generate')
+}
 
 function logTypeLabel(type) {
   if (type === 'tool_start') return '工具开始'
@@ -365,14 +395,78 @@ function exportPdf() {
     </aside>
 
     <div ref="reportRef" class="flex-1 overflow-auto p-6">
-      <div v-if="phase === 'idle'" class="h-full flex items-center justify-center">
-        <div class="text-center">
-          <div class="font-mono text-6xl text-neon-cyan/20 mb-4">NEXUS</div>
-          <div class="font-mono text-sm text-neon-cyan/40">等待输入任务</div>
-          <div class="font-mono text-[10px] text-neon-cyan/20 mt-2">
-            生成完成后会直接读取后端文件内容并展示为 HTML。
+      <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-8">
+        <section class="w-full max-w-5xl text-center">
+          <div class="mx-auto mb-6 w-24 h-24 rounded-full border border-neon-cyan/35 flex items-center justify-center shadow-[0_0_35px_rgba(0,243,255,0.18)] bg-neon-cyan/5">
+            <span class="font-mono text-3xl neon-text">AI</span>
           </div>
-        </div>
+          <h1 class="font-mono text-3xl neon-text tracking-widest mb-3">开始新的深度编报任务</h1>
+          <p class="font-mono text-sm text-neon-cyan/55 mb-5">
+            向 AI 描述您需要的报告主题、背景或关注方向，系统将提供全面、专业的深度研判与调研。
+          </p>
+
+          <div class="flex flex-wrap items-center justify-center gap-3 mb-7">
+            <button
+              v-for="action in quickActions"
+              :key="action.label"
+              class="sci-btn text-[10px] px-4 py-2"
+              type="button"
+              @click="applyQuickAction(action)"
+            >
+              {{ action.label }}
+            </button>
+          </div>
+
+          <div class="mx-auto text-left rounded-lg border border-neon-cyan/60 bg-[rgba(5,16,26,0.92)] p-5 shadow-[0_0_34px_rgba(0,243,255,0.18)]">
+            <textarea
+              :value="contextText"
+              @input="emit('update:contextText', $event.target.value)"
+              placeholder="请输入编报主题、背景、重点关注方向..."
+              rows="5"
+              class="sci-textarea text-sm bg-black/25"
+            ></textarea>
+
+            <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/55 mt-4 mb-2">报告主题</label>
+            <input
+              class="sci-input"
+              :value="title"
+              @input="emit('update:title', $event.target.value)"
+              placeholder="例如：欧洲对华新能源制裁事件"
+            />
+
+            <div class="mt-4">
+              <div class="font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-2">报告类型</div>
+              <div class="report-type-option active rounded">
+                <div class="flex items-center justify-between">
+                  <span class="text-neon-cyan font-semibold">K报编写</span>
+                  <span class="text-neon-green text-[10px]">已选择</span>
+                </div>
+                <div class="text-[10px] text-neon-cyan/50 mt-1">三段式现场调研报告：基本情况、涉我风险、对策建议</div>
+              </div>
+            </div>
+
+            <div class="mt-3 rounded border border-neon-cyan/15 bg-black/25 px-3 py-3 font-mono text-[10px] leading-relaxed text-neon-cyan/60">
+              业务参数提示：K报将使用 <span class="text-neon-cyan">write-hb skill</span>，按国家、地方、政策、社会、传播五个维度自动拆解调研任务。
+            </div>
+
+            <div class="mt-5 flex items-center gap-3">
+              <button class="sci-btn text-[10px] px-3 py-2" type="button">附件</button>
+              <button class="sci-btn text-[10px] px-3 py-2" type="button">联网搜索</button>
+              <button class="sci-btn text-[10px] px-3 py-2" type="button">深度思考</button>
+              <button class="ml-auto w-11 h-11 rounded-full border border-neon-cyan/35 text-neon-cyan hover:text-neon-green hover:border-neon-green transition-colors font-mono text-[10px]" type="button">MIC</button>
+              <button
+                class="w-12 h-12 rounded-full bg-neon-cyan text-deep-void font-mono text-xl shadow-[0_0_24px_rgba(0,243,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed"
+                type="button"
+                :disabled="!canGenerate"
+                @click="submitReport"
+              >
+                ↗
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-5 font-mono text-[10px] text-neon-cyan/35">AI 生成内容仅供参考，请结合专业判断使用</div>
+        </section>
       </div>
 
       <div v-else-if="phase === 'loading'" class="h-full flex items-center justify-center">

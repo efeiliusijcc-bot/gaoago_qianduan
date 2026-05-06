@@ -79,11 +79,11 @@ onUnmounted(() => {
   <header class="h-[60px] border-b border-border-glow bg-panel-bg backdrop-blur-lg flex items-center justify-between px-6">
     <div class="flex items-center gap-4">
       <div class="flex flex-col">
-        <span class="neon-text neon-flicker font-mono font-bold tracking-widest text-sm">
-          A.I. N.E.X.U.S
+        <span class="neon-text neon-flicker font-mono font-bold tracking-widest text-base">
+          AI深度编报
         </span>
-        <span class="font-mono text-[9px] text-neon-cyan/50 tracking-[0.3em]">
-          // 新闻材料编报系统 · v4.2.1
+        <span class="font-mono text-[9px] text-neon-cyan/50 tracking-[0.24em]">
+          // 智能研判工作台 · v4.2.1
         </span>
       </div>
 
