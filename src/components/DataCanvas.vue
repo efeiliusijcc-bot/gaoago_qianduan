@@ -20,6 +20,14 @@ const props = defineProps({
   reportType: String,
   title: String,
   contextText: String,
+  parameterValues: {
+    type: Object,
+    default: () => ({}),
+  },
+  activeParameters: {
+    type: Array,
+    default: () => [],
+  },
   job: Object,
   jobList: Array,
   health: Object,
@@ -37,9 +45,20 @@ const props = defineProps({
   isLogDrawerOpen: Boolean,
 })
 
-const emit = defineEmits(['list', 'new-report', 'toggle-log-drawer', 'update:title', 'update:reportType', 'update:contextText', 'generate'])
+const emit = defineEmits([
+  'list',
+  'new-report',
+  'toggle-log-drawer',
+  'update:title',
+  'update:reportType',
+  'update:contextText',
+  'update:parameterValues',
+  'update:activeParameters',
+  'generate',
+])
 const reportRef = ref(null)
 const logListRef = ref(null)
+const contextTextRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
 const isLiveLogVisible = computed(() => props.phase === 'loading')
@@ -89,9 +108,58 @@ const reportTypeOptions = [
   },
 ]
 const selectedReportType = computed(() => reportTypeOptions.find((item) => item.value === props.reportType))
+const activeSelectedParameters = computed(() => {
+  const params = selectedReportType.value?.params || []
+  return props.activeParameters.filter((param) => params.includes(param))
+})
+
+const singleLineParameters = new Set(['时间范围', '地区 / 对象', '国家 / 地区', '当前职务', '材料范围'])
 
 function selectReportType(value) {
   emit('update:reportType', props.reportType === value ? '' : value)
+}
+
+function isParameterActive(param) {
+  return props.activeParameters.includes(param)
+}
+
+function parameterInputType(param) {
+  return singleLineParameters.has(param) ? 'input' : 'textarea'
+}
+
+function parameterPlaceholder(param) {
+  const hints = {
+    '背景信息': '补充事件背景、已知事实、历史脉络或前置材料。',
+    '关注方向': '说明重点研判角度、必须覆盖的问题或核心判断方向。',
+    '时间范围': '例如：2026年5月、近三个月、2025年至今。',
+    '地区 / 对象': '例如：欧盟、东南亚、某城市、某机构或重点企业。',
+    '已知上下文': '粘贴已有材料、口径、线索、数据或需要引用的上下文。',
+    '材料范围': '说明需要汇编的材料类型、来源范围或时间跨度。',
+    '风险场景': '描述需要评估的场景、触发条件或潜在事件。',
+    '研判方向': '说明风险识别、趋势判断、影响评估或处置建议方向。',
+    '人物背景': '补充人物履历、派系关系、公开立场或关键经历。',
+    '国家 / 地区': '填写人物所属国家、地区或主要活动范围。',
+    '当前职务': '填写人物当前职位、组织身份或实际角色。',
+    '来访场景': '说明访问背景、议题、接待对象或敏感点。',
+  }
+  return hints[param] || `填写${param}相关信息。`
+}
+
+function toggleParameter(param) {
+  const next = isParameterActive(param)
+    ? props.activeParameters.filter((item) => item !== param)
+    : [...props.activeParameters, param]
+  emit('update:activeParameters', next)
+  nextTick(() => {
+    if (contextTextRef.value && !isParameterActive(param)) contextTextRef.value.focus()
+  })
+}
+
+function updateParameterValue(param, value) {
+  emit('update:parameterValues', {
+    ...props.parameterValues,
+    [param]: value,
+  })
 }
 
 function submitReport() {
@@ -393,7 +461,7 @@ function exportPdf() {
 
     <div ref="reportRef" class="flex-1 overflow-auto p-6">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-8">
-        <section class="w-full max-w-5xl text-center">
+        <section class="w-full max-w-6xl text-center">
           <h1 class="font-mono text-3xl neon-text tracking-widest mb-3">开始新的编报任务</h1>
           <p class="font-mono text-sm text-neon-cyan/55 mb-8">
             请先选择编报类型，再输入标题，并补充关键参数信息，以便 AI 为您生成更精准的编报内容。
@@ -419,7 +487,7 @@ function exportPdf() {
             </button>
           </div>
 
-          <div class="mx-auto text-left rounded-lg border border-neon-cyan/60 bg-[rgba(5,16,26,0.92)] p-5 shadow-[0_0_34px_rgba(0,243,255,0.18)]">
+          <div class="mx-auto text-left rounded-lg border border-neon-cyan/60 bg-[rgba(5,16,26,0.92)] p-6 shadow-[0_0_34px_rgba(0,243,255,0.18)]">
             <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-2">报告标题</label>
             <input
               class="sci-input"
@@ -441,17 +509,51 @@ function exportPdf() {
                 <button
                   v-for="param in selectedReportType.params"
                   :key="param"
-                  class="rounded border border-neon-cyan/35 bg-neon-cyan/5 px-3 py-3 font-mono text-xs text-neon-cyan hover:bg-neon-cyan/10"
+                  class="rounded border px-3 py-3 font-mono text-xs transition-all"
+                  :class="isParameterActive(param)
+                    ? 'border-neon-green bg-neon-green/10 text-neon-green shadow-[0_0_16px_rgba(0,255,159,0.15)]'
+                    : 'border-neon-cyan/35 bg-neon-cyan/5 text-neon-cyan hover:bg-neon-cyan/10'"
                   type="button"
+                  @click="toggleParameter(param)"
                 >
-                  {{ param }}
+                  <span class="mr-1">{{ isParameterActive(param) ? '✓' : '+' }}</span>{{ param }}
                 </button>
               </div>
 
+              <div
+                v-if="activeSelectedParameters.length"
+                class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4"
+              >
+                <label
+                  v-for="param in activeSelectedParameters"
+                  :key="param"
+                  class="rounded border border-neon-cyan/20 bg-black/20 p-3"
+                >
+                  <span class="block font-mono text-[10px] tracking-widest text-neon-cyan/60 mb-2">{{ param }}</span>
+                  <input
+                    v-if="parameterInputType(param) === 'input'"
+                    class="sci-input text-sm bg-black/25"
+                    :value="parameterValues[param] || ''"
+                    :placeholder="parameterPlaceholder(param)"
+                    @input="updateParameterValue(param, $event.target.value)"
+                  />
+                  <textarea
+                    v-else
+                    class="sci-textarea text-sm bg-black/25"
+                    rows="3"
+                    :value="parameterValues[param] || ''"
+                    :placeholder="parameterPlaceholder(param)"
+                    @input="updateParameterValue(param, $event.target.value)"
+                  ></textarea>
+                </label>
+              </div>
+
+              <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-2">综合补充说明</label>
               <textarea
+                ref="contextTextRef"
                 :value="contextText"
                 @input="emit('update:contextText', $event.target.value)"
-                placeholder="请输入背景信息、关注方向、时间范围、地区对象、已知上下文..."
+                placeholder="可继续补充自由文本、特殊要求、口径限制或已有材料..."
                 rows="5"
                 class="sci-textarea text-sm bg-black/25"
               ></textarea>

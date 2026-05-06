@@ -15,6 +15,8 @@ const {
   targetCity,
   visitTime,
   contextText,
+  parameterValues,
+  activeParameters,
   outputDepth,
   isGenerating,
   generatedHtml,
@@ -95,6 +97,8 @@ function skillLabel(item) {
         v-model:title="title"
         v-model:reportType="reportType"
         v-model:contextText="contextText"
+        v-model:parameterValues="parameterValues"
+        v-model:activeParameters="activeParameters"
         :phase="phase"
         :loadingStep="loadingStep"
         :processLogs="processLogs"

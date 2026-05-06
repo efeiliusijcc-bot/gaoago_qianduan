@@ -22,6 +22,13 @@ function writeDrafts(value) {
   localStorage.setItem(DRAFT_KEY, JSON.stringify(value))
 }
 
+const REPORT_PARAMETERS = {
+  'write-hb-k': ['背景信息', '关注方向', '时间范围', '地区 / 对象', '已知上下文'],
+  'write-hb-hb': ['背景信息', '关注方向', '材料范围', '地区 / 对象', '已知上下文'],
+  'risk-assessment-reports': ['风险场景', '研判方向', '时间范围', '地区 / 对象', '已知上下文'],
+  'person-intelligence-report': ['人物背景', '国家 / 地区', '当前职务', '来访场景', '已知上下文'],
+}
+
 export function useReportJobs() {
   const currentView = ref('generator')
 
@@ -33,6 +40,8 @@ export function useReportJobs() {
   const targetCity = ref('')
   const visitTime = ref('')
   const contextText = ref('')
+  const parameterValues = ref({})
+  const activeParameters = ref([])
   const outputDepth = ref('detailed')
 
   const isGenerating = ref(false)
@@ -229,6 +238,8 @@ export function useReportJobs() {
     const draft = drafts[item.jobId] || {}
     title.value = draft.title || item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId
     contextText.value = draft.contextText || item.payload?.known_context || item.payload?.visit_context || ''
+    parameterValues.value = {}
+    activeParameters.value = []
 
     if (item.skill === 'write-hb') {
       reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
@@ -240,6 +251,8 @@ export function useReportJobs() {
   function applyJobFormData(item) {
     title.value = getJobTitle(item)
     contextText.value = item.payload?.known_context || item.payload?.visit_context || ''
+    parameterValues.value = {}
+    activeParameters.value = []
 
     if (item.skill === 'write-hb') {
       reportType.value = item.payload?.report_type === 'HB报' ? 'write-hb-hb' : 'write-hb-k'
@@ -262,6 +275,8 @@ export function useReportJobs() {
     title.value = ''
     reportType.value = ''
     contextText.value = ''
+    parameterValues.value = {}
+    activeParameters.value = []
     countryOrRegion.value = ''
     currentPosition.value = ''
     scenario.value = 'foreign_leader_visit'
@@ -292,9 +307,23 @@ export function useReportJobs() {
     pushLog(savedNotice.value)
   }
 
+  function buildContext() {
+    const allowedParams = new Set(REPORT_PARAMETERS[reportType.value] || [])
+    const sections = activeParameters.value
+      .filter((param) => allowedParams.has(param))
+      .map((param) => {
+        const value = String(parameterValues.value[param] || '').trim()
+        return value ? `【${param}】\n${value}` : ''
+      })
+      .filter(Boolean)
+    const freeText = contextText.value.trim()
+    if (freeText) sections.push(`【综合补充说明】\n${freeText}`)
+    return sections.join('\n\n')
+  }
+
   function buildPayload() {
     const subject = title.value.trim()
-    const context = contextText.value.trim() || subject
+    const context = buildContext() || subject
 
     if (reportType.value === 'person-intelligence-report') {
       return {
@@ -615,6 +644,8 @@ export function useReportJobs() {
     targetCity,
     visitTime,
     contextText,
+    parameterValues,
+    activeParameters,
     outputDepth,
     isGenerating,
     generatedHtml,
