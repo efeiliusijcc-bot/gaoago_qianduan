@@ -26,7 +26,7 @@ export function useReportJobs() {
   const currentView = ref('generator')
 
   const title = ref('')
-  const reportType = ref('write-hb-k')
+  const reportType = ref('')
   const countryOrRegion = ref('')
   const currentPosition = ref('')
   const scenario = ref('foreign_leader_visit')
@@ -252,7 +252,7 @@ export function useReportJobs() {
     loadingStep.value = '等待输入任务'
     savedNotice.value = ''
     title.value = ''
-    reportType.value = 'write-hb-k'
+    reportType.value = ''
     contextText.value = ''
     countryOrRegion.value = ''
     currentPosition.value = ''
@@ -309,7 +309,7 @@ export function useReportJobs() {
         skill: 'write-hb',
         payload: {
           topic: subject,
-          report_type: reportType.value === 'write-hb-k' ? 'K报' : 'HB报',
+          report_type: reportType.value === 'write-hb-hb' ? 'HB报' : 'K报',
           known_context: context,
           focus_areas: ['国家', '地方', '政策', '社会', '传播'],
           language: 'zh-CN',
@@ -398,7 +398,7 @@ export function useReportJobs() {
   }
 
   async function handleGenerate() {
-    if (isGenerating.value || !title.value.trim()) return
+    if (isGenerating.value || !title.value.trim() || !reportType.value) return
 
     resetExecutionLogs()
     openedHistoryJobId.value = null

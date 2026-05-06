@@ -37,42 +37,58 @@ const props = defineProps({
   isLogDrawerOpen: Boolean,
 })
 
-const emit = defineEmits(['list', 'new-report', 'toggle-log-drawer', 'update:title', 'update:contextText', 'generate'])
+const emit = defineEmits(['list', 'new-report', 'toggle-log-drawer', 'update:title', 'update:reportType', 'update:contextText', 'generate'])
 const reportRef = ref(null)
 const logListRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
-const canGenerate = computed(() => Boolean(props.title?.trim()) && !props.isGenerating)
+const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating)
 const reportTypeLabel = computed(() => {
-  if (props.reportType === 'person-intelligence-report') return '人物情报报告'
-  if (props.reportType === 'risk-assessment-reports') return '风险评估报告'
+  if (props.reportType === 'person-intelligence-report') return '人物报'
+  if (props.reportType === 'risk-assessment-reports') return '风险报'
   if (props.reportType === 'write-hb-k') return 'K报'
   if (props.reportType === 'write-hb-hb') return 'HB报'
   return props.job?.skill || '报告'
 })
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
-const quickActions = [
+const reportTypeOptions = [
   {
-    label: '热点研判',
-    prompt: '请围绕以下热点事件开展K报研判，重点关注基本情况、涉我风险、传播态势和对策建议：',
+    value: 'write-hb-k',
+    label: 'K报编写',
+    icon: '▤',
+    desc: '三段式现场调研报告：基本情况、涉我风险、对策建议',
+    params: ['背景信息', '关注方向', '时间范围', '地区 / 对象', '已知上下文'],
+    placeholder: '请输入需要编报的标题，例如：2026年东南亚区域安全态势研判',
   },
   {
-    label: '事件分析',
-    prompt: '请对以下事件进行深度编报，梳理事件经过、关键主体、风险变化和处置建议：',
+    value: 'write-hb-hb',
+    label: 'HB报编写',
+    icon: '◇',
+    desc: '综合汇编类报告：背景脉络、关键动态、风险判断、后续建议',
+    params: ['背景信息', '关注方向', '材料范围', '地区 / 对象', '已知上下文'],
+    placeholder: '请输入HB报主题，例如：重点行业政策动态汇编',
   },
   {
-    label: '区域风险评估',
-    prompt: '请围绕以下地区或场景开展区域风险评估，重点研判人流、安全、舆情和管控建议：',
+    value: 'risk-assessment-reports',
+    label: '风险报',
+    icon: '◎',
+    desc: '风险评估报告：场景设定、风险识别、趋势研判、处置建议',
+    params: ['风险场景', '研判方向', '时间范围', '地区 / 对象', '已知上下文'],
+    placeholder: '请输入风险报标题，例如：企业员工关怀月活动风险评估',
   },
   {
-    label: '自动生成摘要',
-    prompt: '请根据以下材料自动生成K报摘要，并补充风险点、判断依据和建议措施：',
+    value: 'person-intelligence-report',
+    label: '人物报',
+    icon: '▣',
+    desc: '人物情报报告：基本情况、政治立场、风险点、接待建议',
+    params: ['人物背景', '国家 / 地区', '当前职务', '来访场景', '已知上下文'],
+    placeholder: '请输入人物报标题，例如：某国政要人物情报报告',
   },
 ]
+const selectedReportType = computed(() => reportTypeOptions.find((item) => item.value === props.reportType))
 
-function applyQuickAction(action) {
-  const current = props.contextText?.trim()
-  emit('update:contextText', current ? `${action.prompt}\n\n${current}` : action.prompt)
+function selectReportType(value) {
+  emit('update:reportType', props.reportType === value ? '' : value)
 }
 
 function submitReport() {
@@ -397,56 +413,71 @@ function exportPdf() {
     <div ref="reportRef" class="flex-1 overflow-auto p-6">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-8">
         <section class="w-full max-w-5xl text-center">
-          <div class="mx-auto mb-6 w-24 h-24 rounded-full border border-neon-cyan/35 flex items-center justify-center shadow-[0_0_35px_rgba(0,243,255,0.18)] bg-neon-cyan/5">
-            <span class="font-mono text-3xl neon-text">AI</span>
-          </div>
-          <h1 class="font-mono text-3xl neon-text tracking-widest mb-3">开始新的深度编报任务</h1>
-          <p class="font-mono text-sm text-neon-cyan/55 mb-5">
-            向 AI 描述您需要的报告主题、背景或关注方向，系统将提供全面、专业的深度研判与调研。
+          <h1 class="font-mono text-3xl neon-text tracking-widest mb-3">开始新的编报任务</h1>
+          <p class="font-mono text-sm text-neon-cyan/55 mb-8">
+            请先选择编报类型，再输入标题，并补充关键参数信息，以便 AI 为您生成更精准的编报内容。
           </p>
 
-          <div class="flex flex-wrap items-center justify-center gap-3 mb-7">
+          <div class="grid grid-cols-4 gap-7 mb-7">
             <button
-              v-for="action in quickActions"
-              :key="action.label"
-              class="sci-btn text-[10px] px-4 py-2"
+              v-for="type in reportTypeOptions"
+              :key="type.value"
+              class="relative min-h-[132px] rounded-lg border bg-black/25 px-5 py-6 transition-all hover:border-neon-cyan/55 hover:bg-neon-cyan/10"
+              :class="reportType === type.value ? 'border-neon-cyan bg-neon-cyan/12 shadow-[0_0_28px_rgba(0,243,255,0.32)]' : 'border-neon-cyan/25'"
               type="button"
-              @click="applyQuickAction(action)"
+              @click="selectReportType(type.value)"
             >
-              {{ action.label }}
+              <span
+                v-if="reportType === type.value"
+                class="absolute right-0 top-0 h-8 w-8 rounded-bl-lg bg-neon-cyan text-deep-void font-mono text-sm flex items-center justify-center"
+              >
+                ✓
+              </span>
+              <div class="font-mono text-4xl mb-4" :class="reportType === type.value ? 'text-neon-cyan' : 'text-slate-300'">{{ type.icon }}</div>
+              <div class="font-mono text-lg" :class="reportType === type.value ? 'text-neon-cyan' : 'text-slate-200'">{{ type.label }}</div>
             </button>
           </div>
 
           <div class="mx-auto text-left rounded-lg border border-neon-cyan/60 bg-[rgba(5,16,26,0.92)] p-5 shadow-[0_0_34px_rgba(0,243,255,0.18)]">
-            <textarea
-              :value="contextText"
-              @input="emit('update:contextText', $event.target.value)"
-              placeholder="请输入编报主题、背景、重点关注方向..."
-              rows="5"
-              class="sci-textarea text-sm bg-black/25"
-            ></textarea>
-
-            <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/55 mt-4 mb-2">报告主题</label>
+            <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-2">报告标题</label>
             <input
               class="sci-input"
               :value="title"
               @input="emit('update:title', $event.target.value)"
-              placeholder="例如：欧洲对华新能源制裁事件"
+              :placeholder="selectedReportType?.placeholder || '请先选择编报类型，再输入需要编报的标题'"
             />
 
-            <div class="mt-4">
-              <div class="font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-2">报告类型</div>
-              <div class="report-type-option active rounded">
-                <div class="flex items-center justify-between">
-                  <span class="text-neon-cyan font-semibold">K报编写</span>
-                  <span class="text-neon-green text-[10px]">已选择</span>
+            <div v-if="selectedReportType" class="mt-5">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <div class="font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-1">需要补充的参数</div>
+                  <div class="font-mono text-xs text-neon-cyan/65">{{ selectedReportType.desc }}</div>
                 </div>
-                <div class="text-[10px] text-neon-cyan/50 mt-1">三段式现场调研报告：基本情况、涉我风险、对策建议</div>
+                <span class="font-mono text-[10px] text-neon-green">已选择</span>
               </div>
+
+              <div class="grid grid-cols-5 gap-3 mb-4">
+                <button
+                  v-for="param in selectedReportType.params"
+                  :key="param"
+                  class="rounded border border-neon-cyan/35 bg-neon-cyan/5 px-3 py-3 font-mono text-xs text-neon-cyan hover:bg-neon-cyan/10"
+                  type="button"
+                >
+                  {{ param }}
+                </button>
+              </div>
+
+              <textarea
+                :value="contextText"
+                @input="emit('update:contextText', $event.target.value)"
+                placeholder="请输入背景信息、关注方向、时间范围、地区对象、已知上下文..."
+                rows="5"
+                class="sci-textarea text-sm bg-black/25"
+              ></textarea>
             </div>
 
-            <div class="mt-3 rounded border border-neon-cyan/15 bg-black/25 px-3 py-3 font-mono text-[10px] leading-relaxed text-neon-cyan/60">
-              业务参数提示：K报将使用 <span class="text-neon-cyan">write-hb skill</span>，按国家、地方、政策、社会、传播五个维度自动拆解调研任务。
+            <div v-else class="mt-5 rounded border border-neon-cyan/15 bg-black/20 px-4 py-5 text-center font-mono text-xs text-neon-cyan/45">
+              选择一个编报类型后，可填写对应的背景、方向、时间、地区对象和上下文参数。
             </div>
 
             <div class="mt-5 flex items-center gap-3">
@@ -458,6 +489,7 @@ function exportPdf() {
                 class="w-12 h-12 rounded-full bg-neon-cyan text-deep-void font-mono text-xl shadow-[0_0_24px_rgba(0,243,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed"
                 type="button"
                 :disabled="!canGenerate"
+                :title="!reportType ? '请先选择编报类型' : !title?.trim() ? '请输入报告标题' : '提交编报任务'"
                 @click="submitReport"
               >
                 ↗

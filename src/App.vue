@@ -70,6 +70,7 @@ function skillLabel(item) {
 
       <DataCanvas
         v-model:title="title"
+        v-model:reportType="reportType"
         v-model:contextText="contextText"
         :phase="phase"
         :loadingStep="loadingStep"
