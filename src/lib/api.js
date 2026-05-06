@@ -27,8 +27,13 @@ export function createReportJob(body) {
   })
 }
 
-export function fetchReportJobs() {
-  return request('/report-jobs')
+export function fetchReportJobs(params = {}) {
+  const query = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value))
+  })
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return request(`/report-jobs${suffix}`)
 }
 
 export function fetchReportJob(jobId) {

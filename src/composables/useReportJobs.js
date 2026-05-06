@@ -42,6 +42,13 @@ export function useReportJobs() {
   const loadingStep = ref('等待输入任务')
   const job = ref(null)
   const jobList = ref([])
+  const listSearch = ref('')
+  const listTypeFilter = ref('all')
+  const listPage = ref(1)
+  const listPageSize = ref(20)
+  const listTotal = ref(0)
+  const listTotalPages = ref(1)
+  const listStatusCounts = ref({ succeeded: 0, running: 0 })
   const health = ref(null)
   const errorMessage = ref('')
   const selectedReport = ref(null)
@@ -52,6 +59,7 @@ export function useReportJobs() {
   const unreadLogCount = ref(0)
   const isLogDrawerOpen = ref(false)
   let listRefreshTimer = null
+  let listSearchTimer = null
   let jobEventSource = null
   let subscribedJobId = null
   let seenExecutionEvents = new Set()
@@ -67,8 +75,8 @@ export function useReportJobs() {
     return [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
   })
 
-  const succeededCount = computed(() => filteredJobs.value.filter((i) => i.status === 'succeeded').length)
-  const runningCount = computed(() => filteredJobs.value.filter((i) => i.status === 'running' || i.status === 'queued').length)
+  const succeededCount = computed(() => listStatusCounts.value.succeeded)
+  const runningCount = computed(() => listStatusCounts.value.running)
 
   function pushLog(message) {
     const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -430,18 +438,71 @@ export function useReportJobs() {
     }
   }
 
-  async function loadJobList(switchView = true) {
+  async function loadJobList(switchView = true, overrides = {}) {
     try {
+      if (overrides.page !== undefined) listPage.value = overrides.page
+      if (overrides.pageSize !== undefined) listPageSize.value = overrides.pageSize
+      if (overrides.type !== undefined) listTypeFilter.value = overrides.type
+      if (overrides.q !== undefined) listSearch.value = overrides.q
+
       const drafts = readDrafts()
-      jobList.value = (await fetchReportJobs()).map((item) => ({
+      const response = await fetchReportJobs({
+        page: listPage.value,
+        pageSize: listPageSize.value,
+        type: listTypeFilter.value,
+        q: listSearch.value.trim(),
+      })
+      const items = Array.isArray(response) ? response : response.items || []
+      jobList.value = items.map((item) => ({
         ...item,
         displayTitle: drafts[item.jobId]?.title || undefined,
       }))
+      if (Array.isArray(response)) {
+        listTotal.value = jobList.value.length
+        listTotalPages.value = 1
+        listStatusCounts.value = {
+          succeeded: jobList.value.filter((item) => item.status === 'succeeded').length,
+          running: jobList.value.filter((item) => item.status === 'running' || item.status === 'queued').length,
+        }
+      } else {
+        listTotal.value = response.total || 0
+        listPage.value = response.page || listPage.value
+        listPageSize.value = response.pageSize || listPageSize.value
+        listTotalPages.value = response.totalPages || 1
+        listStatusCounts.value = response.statusCounts || { succeeded: 0, running: 0 }
+      }
       if (switchView) currentView.value = 'list'
     } catch (error) {
       errorMessage.value = error instanceof Error ? error.message : String(error)
       pushLog(`历史任务加载失败：${errorMessage.value}`)
     }
+  }
+
+  function updateListSearch(value) {
+    listSearch.value = value
+    listPage.value = 1
+    if (listSearchTimer) window.clearTimeout(listSearchTimer)
+    listSearchTimer = window.setTimeout(() => {
+      listSearchTimer = null
+      void loadJobList(false)
+    }, 300)
+  }
+
+  function updateListTypeFilter(value) {
+    listTypeFilter.value = value
+    listPage.value = 1
+    return loadJobList(false)
+  }
+
+  function updateListPage(page) {
+    listPage.value = Math.max(1, Math.min(Number(page) || 1, listTotalPages.value || 1))
+    return loadJobList(false)
+  }
+
+  function updateListPageSize(pageSize) {
+    listPageSize.value = Number(pageSize) || 20
+    listPage.value = 1
+    return loadJobList(false)
   }
 
   async function openReportFromList(item) {
@@ -534,6 +595,10 @@ export function useReportJobs() {
 
   onUnmounted(() => {
     closeJobEvents()
+    if (listSearchTimer) {
+      window.clearTimeout(listSearchTimer)
+      listSearchTimer = null
+    }
     if (listRefreshTimer) {
       window.clearInterval(listRefreshTimer)
       listRefreshTimer = null
@@ -558,6 +623,12 @@ export function useReportJobs() {
     loadingStep,
     job,
     jobList,
+    listSearch,
+    listTypeFilter,
+    listPage,
+    listPageSize,
+    listTotal,
+    listTotalPages,
     health,
     errorMessage,
     selectedReport,
@@ -575,6 +646,10 @@ export function useReportJobs() {
     handleGenerate,
     refreshHealth,
     loadJobList,
+    updateListSearch,
+    updateListTypeFilter,
+    updateListPage,
+    updateListPageSize,
     openReportFromList,
     monitorJobFromList,
     showGenerator,
