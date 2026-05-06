@@ -42,6 +42,9 @@ const reportRef = ref(null)
 const logListRef = ref(null)
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
+const isLiveLogVisible = computed(() => props.phase === 'loading')
+const canOpenLogDrawer = computed(() => !isLiveLogVisible.value)
+const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value)
 const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating)
 const reportTypeLabel = computed(() => {
   if (props.reportType === 'person-intelligence-report') return '人物报'
@@ -93,6 +96,10 @@ function selectReportType(value) {
 
 function submitReport() {
   if (canGenerate.value) emit('generate')
+}
+
+function toggleLogDrawer() {
+  if (canOpenLogDrawer.value) emit('toggle-log-drawer')
 }
 
 function logTypeLabel(type) {
@@ -346,7 +353,12 @@ function exportPdf() {
       </div>
 
       <div class="flex items-center gap-2">
-        <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-3 py-1.5 relative">
+        <button
+          @click="toggleLogDrawer"
+          :disabled="!canOpenLogDrawer"
+          class="sci-btn text-[10px] px-3 py-1.5 relative"
+          :title="isLiveLogVisible ? '运行中日志已在中间实时展示' : '打开执行日志'"
+        >
           执行日志
           <span
             v-if="unreadLogCount"
@@ -371,44 +383,44 @@ function exportPdf() {
       </div>
     </div>
 
-    <aside
-      v-if="isLogDrawerOpen"
-      class="absolute right-0 top-12 bottom-0 z-20 w-[420px] max-w-[calc(100%-1rem)] border-l border-neon-cyan/25 bg-deep-void/95 backdrop-blur overflow-hidden flex flex-col shadow-[0_0_40px_rgba(0,229,255,0.12)]"
-    >
-      <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
-        <div>
-          <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
-          <div class="font-mono text-[10px] text-neon-cyan/40">OpenClaw 工具调用摘要</div>
-        </div>
-        <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
-      </div>
-
-      <div ref="logListRef" class="flex-1 overflow-auto p-4 space-y-3">
-        <div v-if="!executionLogs.length" class="h-full flex items-center justify-center text-center">
+      <aside
+        v-if="showLogDrawer"
+        class="log-drawer-panel absolute right-0 top-12 bottom-0 z-20 w-[420px] max-w-[calc(100%-1rem)] border-l border-neon-cyan/25 bg-deep-void/95 backdrop-blur overflow-hidden flex flex-col shadow-[0_0_40px_rgba(0,229,255,0.12)]"
+      >
+        <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
           <div>
-            <div class="font-mono text-3xl text-neon-cyan/15 mb-3">LOGS</div>
-            <div class="font-mono text-xs text-neon-cyan/45">暂无执行日志</div>
+            <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
+            <div class="font-mono text-[10px] text-neon-cyan/40">OpenClaw 工具调用摘要</div>
           </div>
+          <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
         </div>
 
-        <div
-          v-for="log in executionLogs"
-          :key="log.id"
-          class="border rounded p-3 bg-black/25"
-          :class="logStatusClass(log.status)"
-        >
-          <div class="flex items-center justify-between gap-3 mb-2">
-            <div class="font-mono text-[10px] tracking-widest text-current/80">{{ logTypeLabel(log.type) }}</div>
-            <div class="font-mono text-[10px] text-current/55">{{ log.time }}</div>
+        <div ref="logListRef" class="flex-1 overflow-auto p-4 space-y-3">
+          <div v-if="!executionLogs.length" class="h-full flex items-center justify-center text-center">
+            <div>
+              <div class="font-mono text-3xl text-neon-cyan/15 mb-3">LOGS</div>
+              <div class="font-mono text-xs text-neon-cyan/45">暂无执行日志</div>
+            </div>
           </div>
-          <div class="font-mono text-xs text-current font-bold mb-1">{{ log.label }}</div>
-          <div class="text-xs leading-relaxed text-slate-200/85">{{ log.summary }}</div>
-          <div v-if="log.command" class="mt-2 font-mono text-[10px] text-neon-cyan/40 truncate">
-            {{ log.command }}
+
+          <div
+            v-for="log in executionLogs"
+            :key="log.id"
+            class="border rounded p-3 bg-black/25"
+            :class="logStatusClass(log.status)"
+          >
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <div class="font-mono text-[10px] tracking-widest text-current/80">{{ logTypeLabel(log.type) }}</div>
+              <div class="font-mono text-[10px] text-current/55">{{ log.time }}</div>
+            </div>
+            <div class="font-mono text-xs text-current font-bold mb-1">{{ log.label }}</div>
+            <div class="text-xs leading-relaxed text-slate-200/85">{{ log.summary }}</div>
+            <div v-if="log.command" class="mt-2 font-mono text-[10px] text-neon-cyan/40 truncate">
+              {{ log.command }}
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
 
     <div ref="reportRef" class="flex-1 overflow-auto p-6">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-8">
@@ -502,7 +514,7 @@ function exportPdf() {
       </div>
 
       <div v-else-if="phase === 'loading'" class="h-full flex items-center justify-center">
-        <div class="loading-panel">
+        <div class="loading-panel w-[760px] max-w-[calc(100%-2rem)]">
           <div class="nexus-loader">
             <div class="loader-ring ring-a"></div>
             <div class="loader-ring ring-b"></div>
@@ -510,10 +522,46 @@ function exportPdf() {
           </div>
           <div class="font-mono text-lg neon-text mt-8">{{ loadingStep || '正在生成报告' }}</div>
           <div class="font-mono text-[10px] text-neon-cyan/40 mt-2">预计 3-5 分钟生成，请耐心等待；后台任务运行中，请保持 OpenClaw gateway 在线</div>
-          <div class="mt-6 w-[560px] max-h-56 overflow-auto text-left font-mono text-[11px] space-y-1 bg-black/30 border border-neon-cyan/15 rounded p-4">
-            <div v-for="(log, i) in processLogs" :key="i" class="text-neon-green/80">{{ log }}</div>
-            <span class="typing-cursor"></span>
-          </div>
+
+            <div class="live-log-panel mt-6 text-left border border-neon-cyan/25 bg-black/35 rounded overflow-hidden shadow-[0_0_28px_rgba(0,243,255,0.12)]">
+              <div class="h-10 px-4 border-b border-neon-cyan/15 flex items-center justify-between">
+                <div>
+                  <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
+                  <div class="font-mono text-[10px] text-neon-cyan/40">运行中实时同步 OpenClaw 工具调用</div>
+                </div>
+                <div class="flex items-center gap-2 font-mono text-[10px] text-neon-green">
+                  <span class="data-pulse" style="background: #00ff88;"></span>
+                  LIVE
+                </div>
+              </div>
+
+              <div ref="logListRef" class="max-h-72 overflow-auto p-4 space-y-3">
+                <div v-if="executionLogs.length">
+                  <div
+                    v-for="log in executionLogs"
+                    :key="log.id"
+                    class="border rounded p-3 bg-black/25 mb-3"
+                    :class="logStatusClass(log.status)"
+                  >
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                      <div class="font-mono text-[10px] tracking-widest text-current/80">{{ logTypeLabel(log.type) }}</div>
+                      <div class="font-mono text-[10px] text-current/55">{{ log.time }}</div>
+                    </div>
+                    <div class="font-mono text-xs text-current font-bold mb-1">{{ log.label }}</div>
+                    <div class="text-xs leading-relaxed text-slate-200/85">{{ log.summary }}</div>
+                    <div v-if="log.command" class="mt-2 font-mono text-[10px] text-neon-cyan/40 truncate">
+                      {{ log.command }}
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else class="font-mono text-[11px] space-y-1">
+                  <div v-for="(log, i) in processLogs" :key="i" class="text-neon-green/80">{{ log }}</div>
+                  <div v-if="!processLogs.length" class="text-neon-cyan/45">等待 OpenClaw 返回执行日志...</div>
+                  <span class="typing-cursor"></span>
+                </div>
+              </div>
+            </div>
         </div>
       </div>
 

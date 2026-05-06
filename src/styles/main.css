@@ -258,6 +258,39 @@ body {
   51%, 100% { opacity: 0; }
 }
 
+/* ========== 执行日志动效 ========== */
+.log-drawer-panel {
+  animation: logDrawerIn 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.live-log-panel {
+  animation: liveLogIn 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes logDrawerIn {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes liveLogIn {
+  from {
+    transform: translateY(18px) scale(0.985);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 /* ========== 闪烁效果 ========== */
 .neon-flicker {
   animation: flicker 3s ease-in-out infinite;
