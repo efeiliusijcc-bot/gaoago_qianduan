@@ -80,6 +80,7 @@ export function useReportJobs() {
   let jobEventSource = null
   let subscribedJobId = null
   let activeExecutionLogJobId = null
+  const activeWorkspaceSnapshot = ref(null)
   const executionLogsByJobId = new Map()
   const seenExecutionEventsByJobId = new Map()
 
@@ -87,8 +88,10 @@ export function useReportJobs() {
 
   const isHistoryMode = computed(() => Boolean(openedHistoryJobId.value) && phase.value === 'done')
   const hasActiveWorkspace = computed(() => {
-    return phase.value !== 'idle' || Boolean(job.value) || Boolean(title.value.trim()) || Boolean(generatedHtml.value)
+    return Boolean(activeWorkspaceSnapshot.value) || phase.value !== 'idle' || Boolean(job.value) || Boolean(title.value.trim()) || Boolean(generatedHtml.value)
   })
+  const activeWorkspaceJobId = computed(() => activeWorkspaceSnapshot.value?.job?.jobId || job.value?.jobId || '')
+  const activeWorkspaceStatus = computed(() => activeWorkspaceSnapshot.value?.job?.status || job.value?.status || '')
 
   const filteredJobs = computed(() => {
     return [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
@@ -100,6 +103,116 @@ export function useReportJobs() {
   function pushLog(message) {
     const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     processLogs.value.push(`[${time}] ${message}`)
+    patchActiveWorkspaceSnapshot()
+  }
+
+  function pushWorkspaceSnapshotLog(message) {
+    const snapshot = activeWorkspaceSnapshot.value
+    if (!snapshot) return
+    const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    activeWorkspaceSnapshot.value = {
+      ...snapshot,
+      processLogs: [...(snapshot.processLogs || []), `[${time}] ${message}`],
+    }
+  }
+
+  function isUnfinishedJob(item) {
+    return item?.status === 'running' || item?.status === 'queued'
+  }
+
+  function makeWorkspaceSnapshot(overrides = {}) {
+    return {
+      title: title.value,
+      reportType: reportType.value,
+      countryOrRegion: countryOrRegion.value,
+      currentPosition: currentPosition.value,
+      scenario: scenario.value,
+      targetCity: targetCity.value,
+      visitTime: visitTime.value,
+      contextText: contextText.value,
+      parameterValues: { ...parameterValues.value },
+      activeParameters: [...activeParameters.value],
+      outputDepth: outputDepth.value,
+      isGenerating: isGenerating.value,
+      generatedHtml: generatedHtml.value,
+      phase: phase.value,
+      processLogs: [...processLogs.value],
+      loadingStep: loadingStep.value,
+      job: job.value ? { ...job.value } : null,
+      errorMessage: errorMessage.value,
+      selectedReport: selectedReport.value ? { ...selectedReport.value } : null,
+      savedNotice: savedNotice.value,
+      ...overrides,
+    }
+  }
+
+  function patchActiveWorkspaceSnapshot(overrides = {}) {
+    const { __force, ...nextOverrides } = overrides
+    const current = activeWorkspaceSnapshot.value
+    const currentJobId = current?.job?.jobId
+    const visibleJobId = job.value?.jobId
+    if (!currentJobId && !visibleJobId) return
+    if (!__force && currentJobId && visibleJobId && currentJobId !== visibleJobId && openedHistoryJobId.value) return
+    const shouldRefreshFromVisibleState = Object.keys(nextOverrides).length === 0
+    activeWorkspaceSnapshot.value = {
+      ...(shouldRefreshFromVisibleState ? makeWorkspaceSnapshot() : current || makeWorkspaceSnapshot()),
+      ...nextOverrides,
+    }
+  }
+
+  function restoreWorkspaceSnapshot() {
+    const snapshot = activeWorkspaceSnapshot.value
+    if (!snapshot) {
+      currentView.value = 'generator'
+      return false
+    }
+
+    title.value = snapshot.title || ''
+    reportType.value = snapshot.reportType || ''
+    countryOrRegion.value = snapshot.countryOrRegion || ''
+    currentPosition.value = snapshot.currentPosition || ''
+    scenario.value = snapshot.scenario || 'foreign_leader_visit'
+    targetCity.value = snapshot.targetCity || ''
+    visitTime.value = snapshot.visitTime || ''
+    contextText.value = snapshot.contextText || ''
+    parameterValues.value = { ...(snapshot.parameterValues || {}) }
+    activeParameters.value = [...(snapshot.activeParameters || [])]
+    outputDepth.value = snapshot.outputDepth || 'detailed'
+    isGenerating.value = Boolean(snapshot.isGenerating)
+    generatedHtml.value = snapshot.generatedHtml || ''
+    phase.value = snapshot.phase || 'idle'
+    processLogs.value = [...(snapshot.processLogs || [])]
+    loadingStep.value = snapshot.loadingStep || ''
+    job.value = snapshot.job ? { ...snapshot.job } : null
+    errorMessage.value = snapshot.errorMessage || ''
+    selectedReport.value = snapshot.selectedReport ? { ...snapshot.selectedReport } : null
+    savedNotice.value = snapshot.savedNotice || ''
+    openedHistoryJobId.value = null
+    currentView.value = 'generator'
+    if (job.value?.jobId) {
+      setActiveExecutionLogJob(job.value.jobId)
+      if (isUnfinishedJob(job.value)) subscribeJobEvents(job.value.jobId)
+    }
+    return true
+  }
+
+  function upsertJobInList(item) {
+    if (!item?.jobId) return
+    const drafts = readDrafts()
+    const nextItem = {
+      ...item,
+      displayTitle: drafts[item.jobId]?.title || item.displayTitle,
+    }
+    const index = jobList.value.findIndex((existing) => existing.jobId === item.jobId)
+    if (index >= 0) {
+      jobList.value = [
+        nextItem,
+        ...jobList.value.slice(0, index),
+        ...jobList.value.slice(index + 1),
+      ]
+    } else {
+      jobList.value = [nextItem, ...jobList.value]
+    }
   }
 
   function closeJobEvents() {
@@ -226,20 +339,39 @@ export function useReportJobs() {
     return null
   }
 
-  function handleJobEvent(event) {
+  function handleJobEvent(event, eventJobId = activeExecutionLogJobId) {
     const log = normalizeEventLog(event)
-    if (log) appendExecutionLog(log)
+    if (log) appendExecutionLog(log, eventJobId)
+    const visibleForEvent = job.value?.jobId === eventJobId && openedHistoryJobId.value !== job.value?.jobId
 
     if (event.type === 'stage' && event.message) {
-      loadingStep.value = event.message
-      pushLog(event.message)
+      if (visibleForEvent) {
+        loadingStep.value = event.message
+        pushLog(event.message)
+      } else if (activeWorkspaceSnapshot.value?.job?.jobId === eventJobId) {
+        patchActiveWorkspaceSnapshot({ loadingStep: event.message, __force: true })
+        pushWorkspaceSnapshotLog(event.message)
+      }
     }
 
     if (event.type === 'error') {
-      errorMessage.value = event.message || '任务失败'
-      phase.value = 'error'
-      loadingStep.value = '任务失败'
-      pushLog(`错误：${errorMessage.value}`)
+      const message = event.message || '任务失败'
+      if (visibleForEvent) {
+        errorMessage.value = message
+        phase.value = 'error'
+        loadingStep.value = '任务失败'
+        pushLog(`错误：${errorMessage.value}`)
+      } else if (activeWorkspaceSnapshot.value?.job?.jobId === eventJobId) {
+        patchActiveWorkspaceSnapshot({
+          errorMessage: message,
+          phase: 'error',
+          loadingStep: '任务失败',
+          isGenerating: false,
+          job: activeWorkspaceSnapshot.value.job ? { ...activeWorkspaceSnapshot.value.job, status: 'failed' } : null,
+          __force: true,
+        })
+        pushWorkspaceSnapshotLog(`错误：${message}`)
+      }
       closeJobEvents()
     }
 
@@ -260,21 +392,22 @@ export function useReportJobs() {
 
     source.onmessage = (message) => {
       try {
-        handleJobEvent(JSON.parse(message.data))
+        handleJobEvent(JSON.parse(message.data), jobId)
       } catch {
         appendExecutionLog({
           type: 'error',
           label: '日志解析',
           status: 'failed',
           summary: '收到无法解析的执行日志事件。',
-        })
+        }, jobId)
       }
     }
 
     source.onerror = async () => {
       try {
         const latest = await fetchReportJob(jobId)
-        job.value = latest
+        if (job.value?.jobId === jobId && !openedHistoryJobId.value) job.value = latest
+        if (activeWorkspaceSnapshot.value?.job?.jobId === jobId) patchActiveWorkspaceSnapshot({ job: latest, __force: true })
         if (latest.status === 'succeeded' || latest.status === 'failed' || latest.status === 'cancelled') {
           closeJobEvents()
           return
@@ -288,7 +421,7 @@ export function useReportJobs() {
         label: '执行日志',
         status: 'fallback',
         summary: '实时日志连接中断，继续使用任务状态轮询。',
-      })
+      }, jobId)
       closeJobEvents()
     }
   }
@@ -332,6 +465,7 @@ export function useReportJobs() {
   }
 
   function clearScreenForNextReport() {
+    activeWorkspaceSnapshot.value = null
     resetExecutionLogs()
     openedHistoryJobId.value = null
     selectedReport.value = null
@@ -504,23 +638,44 @@ export function useReportJobs() {
     try {
       while (activePollJobId.value === jobId) {
         const next = await fetchReportJob(jobId)
-        job.value = next
-        loadingStep.value = stepMessages[tick % stepMessages.length]
-        pushLog(`任务状态：${next.status}${next.stage ? ` / ${next.stage}` : ''}`)
+        const visibleForPoll = job.value?.jobId === jobId && openedHistoryJobId.value !== jobId
+        const nextLoadingStep = stepMessages[tick % stepMessages.length]
+        if (visibleForPoll) {
+          job.value = next
+          loadingStep.value = nextLoadingStep
+          pushLog(`任务状态：${next.status}${next.stage ? ` / ${next.stage}` : ''}`)
+        } else if (activeWorkspaceSnapshot.value?.job?.jobId === jobId) {
+          patchActiveWorkspaceSnapshot({ job: next, loadingStep: nextLoadingStep, __force: true })
+          pushWorkspaceSnapshotLog(`任务状态：${next.status}${next.stage ? ` / ${next.stage}` : ''}`)
+        }
+        upsertJobInList(next)
         tick += 1
 
         if (next.status === 'succeeded') {
-          loadingStep.value = '正在读取报告文件内容'
+          if (visibleForPoll) loadingStep.value = '正在读取报告文件内容'
           const result = await fetchReportResult(jobId)
-          generatedHtml.value = result.html || ''
-          job.value = { ...next, resultPath: result.resultPath || next.resultPath }
-          selectedReport.value = {
-            ...job.value,
-            html: generatedHtml.value,
+          const completedJob = { ...next, resultPath: result.resultPath || next.resultPath }
+          if (visibleForPoll) {
+            generatedHtml.value = result.html || ''
+            job.value = completedJob
+            selectedReport.value = {
+              ...job.value,
+              html: generatedHtml.value,
+            }
+            phase.value = 'done'
+            openedHistoryJobId.value = null
+            pushLog('已读取后端返回的 HTML 报告。')
           }
-          phase.value = 'done'
-          openedHistoryJobId.value = null
-          pushLog('已读取后端返回的 HTML 报告。')
+          activeWorkspaceSnapshot.value = {
+            ...(activeWorkspaceSnapshot.value || makeWorkspaceSnapshot()),
+            job: completedJob,
+            generatedHtml: result.html || '',
+            selectedReport: { ...completedJob, html: result.html || '' },
+            phase: 'done',
+            loadingStep: '已完成',
+            isGenerating: false,
+          }
+          upsertJobInList(completedJob)
           await loadJobList(false)
           return
         }
@@ -626,11 +781,28 @@ export function useReportJobs() {
       await refreshHealth()
       const created = await createReportJob(buildPayload(plannedContext))
       job.value = { jobId: created.jobId, status: created.status }
+      activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: job.value })
+      upsertJobInList(job.value)
       resetReportPlan()
       pushLog(`任务已创建：${created.jobId}`)
       subscribeJobEvents(created.jobId)
       await pollUntilDone(created.jobId)
     } catch (error) {
+      const backgroundMessage = error instanceof Error ? error.message : String(error)
+      if (openedHistoryJobId.value && activeWorkspaceSnapshot.value?.job?.jobId) {
+        patchActiveWorkspaceSnapshot({
+          errorMessage: backgroundMessage,
+          phase: 'error',
+          loadingStep: '任务失败',
+          isGenerating: false,
+          job: activeWorkspaceSnapshot.value.job
+            ? { ...activeWorkspaceSnapshot.value.job, status: 'failed', errorMessage: backgroundMessage }
+            : null,
+          __force: true,
+        })
+        pushWorkspaceSnapshotLog(`错误：${backgroundMessage}`)
+        return
+      }
       errorMessage.value = error instanceof Error ? error.message : String(error)
       phase.value = 'error'
       loadingStep.value = '任务失败'
@@ -708,7 +880,11 @@ export function useReportJobs() {
   }
 
   async function openReportFromList(item) {
-    closeJobEvents()
+    const keepActiveStream =
+      activeWorkspaceSnapshot.value?.job?.jobId &&
+      activeWorkspaceSnapshot.value.job.jobId !== item.jobId &&
+      isUnfinishedJob(activeWorkspaceSnapshot.value.job)
+    if (!keepActiveStream) closeJobEvents()
     await loadExecutionLog(item.jobId)
     selectedReport.value = null
     generatedHtml.value = ''
@@ -734,13 +910,21 @@ export function useReportJobs() {
   }
 
   async function monitorJobFromList(item) {
+    if (activeWorkspaceSnapshot.value?.job?.jobId === item.jobId) {
+      restoreWorkspaceSnapshot()
+      return
+    }
+
     if (item.status === 'succeeded') {
       await openReportFromList(item)
       return
     }
 
     currentView.value = 'generator'
-    if (activePollJobId.value === item.jobId) return
+    if (activePollJobId.value === item.jobId) {
+      restoreWorkspaceSnapshot()
+      return
+    }
 
     closeJobEvents()
     await loadExecutionLog(item.jobId)
@@ -752,6 +936,8 @@ export function useReportJobs() {
     processLogs.value = []
     job.value = item
     applyJobFormData(item)
+    activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: item })
+    upsertJobInList(item)
     subscribeJobEvents(item.jobId)
 
     if (item.status === 'failed' || item.status === 'waiting_approval' || item.status === 'cancelled') {
@@ -765,6 +951,7 @@ export function useReportJobs() {
     phase.value = 'loading'
     loadingStep.value = '正在跟踪后端任务状态'
     isGenerating.value = true
+    activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: item, phase: 'loading', loadingStep: loadingStep.value, isGenerating: true })
     pushLog(`继续查看任务：${item.jobId}`)
 
     try {
@@ -776,11 +963,12 @@ export function useReportJobs() {
       pushLog(`错误：${errorMessage.value}`)
     } finally {
       isGenerating.value = false
+      if (activeWorkspaceSnapshot.value?.job?.jobId) patchActiveWorkspaceSnapshot({ isGenerating: false, __force: true })
     }
   }
 
   function showGenerator() {
-    currentView.value = 'generator'
+    if (!restoreWorkspaceSnapshot()) currentView.value = 'generator'
   }
 
   function resetAndShowGenerator() {
@@ -848,6 +1036,8 @@ export function useReportJobs() {
     savedNotice,
     isHistoryMode,
     hasActiveWorkspace,
+    activeWorkspaceJobId,
+    activeWorkspaceStatus,
     filteredJobs,
     succeededCount,
     runningCount,

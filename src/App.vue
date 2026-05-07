@@ -43,6 +43,8 @@ const {
   runningCount,
   isHistoryMode,
   hasActiveWorkspace,
+  activeWorkspaceJobId,
+  activeWorkspaceStatus,
   savedNotice,
   executionLogs,
   unreadLogCount,
@@ -76,7 +78,12 @@ const reportTypeOptions = [
 ]
 
 const hasGeneratingWorkspace = computed(() => {
-  return phase.value === 'loading' || isGenerating.value || job.value?.status === 'running' || job.value?.status === 'queued'
+  return Boolean(activeWorkspaceJobId.value) && (
+    phase.value === 'loading' ||
+    isGenerating.value ||
+    activeWorkspaceStatus.value === 'running' ||
+    activeWorkspaceStatus.value === 'queued'
+  )
 })
 
 function skillLabel(item) {
@@ -125,7 +132,7 @@ function jobActionLabel(status) {
       <ControlPanel
         :health="health"
         :jobs="filteredJobs"
-        :currentJobId="job?.jobId"
+        :currentJobId="activeWorkspaceJobId || job?.jobId"
         @open-job="monitorJobFromList"
         @refresh-health="refreshHealth"
         @refresh-list="loadJobList(false)"
