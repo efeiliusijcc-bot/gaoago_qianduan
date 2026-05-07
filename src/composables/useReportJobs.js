@@ -3,6 +3,7 @@ import {
   createReportJob,
   fetchOpenClawHealth,
   fetchReportJob,
+  fetchReportJobEventLog,
   fetchReportJobs,
   fetchReportResult,
   getJobEventsUrl,
@@ -71,7 +72,9 @@ export function useReportJobs() {
   let listSearchTimer = null
   let jobEventSource = null
   let subscribedJobId = null
-  let seenExecutionEvents = new Set()
+  let activeExecutionLogJobId = null
+  const executionLogsByJobId = new Map()
+  const seenExecutionEventsByJobId = new Map()
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -104,19 +107,78 @@ export function useReportJobs() {
     closeJobEvents()
     executionLogs.value = []
     unreadLogCount.value = 0
-    seenExecutionEvents = new Set()
+    activeExecutionLogJobId = null
   }
 
-  function appendExecutionLog(entry) {
-    const key = `${entry.type}:${entry.eventId || ''}:${entry.status || ''}:${entry.summary || ''}`
-    if (seenExecutionEvents.has(key)) return
-    seenExecutionEvents.add(key)
-    executionLogs.value.push({
+  function setActiveExecutionLogJob(jobId, items = null) {
+    activeExecutionLogJobId = jobId || null
+    unreadLogCount.value = 0
+    if (!jobId) {
+      executionLogs.value = []
+      return
+    }
+    if (Array.isArray(items)) {
+      const normalized = items.map((item, index) => ({
+        id: item.id || `${jobId}-saved-${index}`,
+        time: formatLogTime(item.time),
+        type: item.type || 'stage',
+        label: item.label || '执行日志',
+        status: item.status || 'running',
+        summary: item.summary || '',
+        command: item.command || '',
+      }))
+      executionLogsByJobId.set(jobId, normalized)
+      seenExecutionEventsByJobId.set(jobId, new Set(normalized.map((item) => executionLogKey(item))))
+    }
+    executionLogs.value = executionLogsByJobId.get(jobId) || []
+  }
+
+  function formatLogTime(value) {
+    if (!value) return ''
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return String(value)
+    return parsed.toLocaleTimeString('zh-CN', { hour12: false })
+  }
+
+  function executionLogKey(entry) {
+    return `${entry.type}:${entry.status || ''}:${entry.summary || ''}:${entry.command || ''}`
+  }
+
+  function appendExecutionLog(entry, jobId = activeExecutionLogJobId) {
+    if (!jobId) return
+    if (!executionLogsByJobId.has(jobId)) executionLogsByJobId.set(jobId, [])
+    if (!seenExecutionEventsByJobId.has(jobId)) seenExecutionEventsByJobId.set(jobId, new Set())
+    const jobLogs = executionLogsByJobId.get(jobId)
+    const seen = seenExecutionEventsByJobId.get(jobId)
+    const key = executionLogKey(entry)
+    if (seen.has(key)) return
+    seen.add(key)
+    jobLogs.push({
       id: `${Date.now()}-${executionLogs.value.length}`,
       time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
       ...entry,
     })
-    if (!isLogDrawerOpen.value) unreadLogCount.value += 1
+    if (activeExecutionLogJobId === jobId) {
+      executionLogs.value = jobLogs
+      if (!isLogDrawerOpen.value) unreadLogCount.value += 1
+    }
+  }
+
+  async function loadExecutionLog(jobId) {
+    if (!jobId) {
+      setActiveExecutionLogJob(null)
+      return
+    }
+    if (executionLogsByJobId.has(jobId)) {
+      setActiveExecutionLogJob(jobId)
+      return
+    }
+    try {
+      const result = await fetchReportJobEventLog(jobId)
+      setActiveExecutionLogJob(jobId, result?.items || [])
+    } catch {
+      setActiveExecutionLogJob(jobId, [])
+    }
   }
 
   function normalizeEventLog(event) {
@@ -184,6 +246,7 @@ export function useReportJobs() {
     if (subscribedJobId === jobId && jobEventSource) return
 
     closeJobEvents()
+    if (activeExecutionLogJobId !== jobId) setActiveExecutionLogJob(jobId)
     subscribedJobId = jobId
     const source = new EventSource(getJobEventsUrl(jobId))
     jobEventSource = source
@@ -536,6 +599,7 @@ export function useReportJobs() {
 
   async function openReportFromList(item) {
     closeJobEvents()
+    await loadExecutionLog(item.jobId)
     selectedReport.value = null
     generatedHtml.value = ''
     errorMessage.value = ''
@@ -568,7 +632,8 @@ export function useReportJobs() {
     currentView.value = 'generator'
     if (activePollJobId.value === item.jobId) return
 
-    resetExecutionLogs()
+    closeJobEvents()
+    await loadExecutionLog(item.jobId)
     openedHistoryJobId.value = null
     selectedReport.value = null
     generatedHtml.value = ''

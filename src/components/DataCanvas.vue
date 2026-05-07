@@ -65,12 +65,29 @@ const isLiveLogVisible = computed(() => props.phase === 'loading')
 const canOpenLogDrawer = computed(() => !isLiveLogVisible.value)
 const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value)
 const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating)
+const titleLength = computed(() => props.title?.length || 0)
 const reportTypeLabel = computed(() => {
   if (props.reportType === 'person-intelligence-report') return '人物报'
   if (props.reportType === 'risk-assessment-reports') return '风险报'
   if (props.reportType === 'write-hb-k') return 'K报'
   if (props.reportType === 'write-hb-hb') return 'HB报'
   return props.job?.skill || '报告'
+})
+const taskStatusType = computed(() => {
+  const status = props.job?.status
+  if (status === 'succeeded' || props.phase === 'done') return 'success'
+  if (status === 'failed' || status === 'cancelled' || status === 'waiting_approval' || props.phase === 'error') return 'failed'
+  return 'running'
+})
+const taskStatusLabel = computed(() => {
+  if (taskStatusType.value === 'success') return '成功'
+  if (taskStatusType.value === 'failed') return '失败'
+  return '生成中'
+})
+const taskStatusClass = computed(() => {
+  if (taskStatusType.value === 'success') return 'text-neon-green'
+  if (taskStatusType.value === 'failed') return 'text-red-300'
+  return 'text-cyber-yellow'
 })
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
 const reportTypeOptions = [
@@ -376,7 +393,7 @@ function exportPdf() {
 
 <template>
   <main class="flex-1 flex flex-col overflow-hidden relative">
-    <div class="h-12 border-b border-border-glow bg-panel-bg flex items-center justify-between px-4">
+    <div class="h-14 border-b border-neon-cyan/10 bg-[rgba(4,12,21,0.58)] backdrop-blur-xl flex items-center justify-between px-5">
       <div class="flex items-center gap-3">
         <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">
           [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
@@ -393,7 +410,7 @@ function exportPdf() {
         <button
           @click="toggleLogDrawer"
           :disabled="!canOpenLogDrawer"
-          class="sci-btn text-[10px] px-3 py-1.5 relative"
+          class="sci-btn text-[10px] px-3 py-2 relative"
           :title="isLiveLogVisible ? '运行中日志已在中间实时展示' : '打开执行日志'"
         >
           执行日志
@@ -404,25 +421,24 @@ function exportPdf() {
             {{ unreadLogCount > 99 ? '99+' : unreadLogCount }}
           </span>
         </button>
-        <button v-if="isHistoryMode" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-1.5">
+        <button v-if="isHistoryMode" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-2">
           清屏并开启下一个编报
         </button>
-        <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-1.5">导出 Word</button>
+        <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-2">导出 Word</button>
         <button
           @click="exportPdf"
           :disabled="!canExport"
-          class="sci-btn text-[10px] px-3 py-1.5"
-          style="border-color: rgba(252,238,10,0.5); color: #fcee0a;"
+          class="sci-btn text-[10px] px-3 py-2"
         >
           导出 PDF
         </button>
-        <button @click="emit('list')" class="sci-btn text-[10px] px-3 py-1.5">报告列表</button>
+        <button @click="emit('list')" class="sci-btn text-[10px] px-3 py-2">报告列表</button>
       </div>
     </div>
 
       <aside
         v-if="showLogDrawer"
-        class="log-drawer-panel absolute right-0 top-12 bottom-0 z-20 w-[420px] max-w-[calc(100%-1rem)] border-l border-neon-cyan/25 bg-deep-void/95 backdrop-blur overflow-hidden flex flex-col shadow-[0_0_40px_rgba(0,229,255,0.12)]"
+        class="log-drawer-panel absolute right-0 top-14 bottom-0 z-20 w-[420px] max-w-[calc(100%-1rem)] border-l border-neon-cyan/18 bg-deep-void/95 backdrop-blur overflow-hidden flex flex-col shadow-[0_0_40px_rgba(0,229,255,0.09)]"
       >
         <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
           <div>
@@ -459,60 +475,65 @@ function exportPdf() {
         </div>
       </aside>
 
-    <div ref="reportRef" class="flex-1 overflow-auto p-6">
-      <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-8">
-        <section class="w-full max-w-6xl text-center">
-          <h1 class="font-mono text-3xl neon-text tracking-widest mb-3">开始新的编报任务</h1>
-          <p class="font-mono text-sm text-neon-cyan/55 mb-8">
+    <div ref="reportRef" class="flex-1 overflow-auto px-8 py-7">
+      <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
+        <section class="w-full max-w-[1080px] text-center">
+          <h1 class="font-mono text-[34px] leading-tight neon-text tracking-wide mb-4">开始新的编报任务</h1>
+          <p class="font-mono text-sm text-slate-300/55 mb-12">
             请先选择编报类型，再输入标题，并补充关键参数信息，以便 AI 为您生成更精准的编报内容。
           </p>
 
-          <div class="grid grid-cols-4 gap-7 mb-7">
+          <div class="grid grid-cols-4 gap-5 mb-9">
             <button
               v-for="type in reportTypeOptions"
               :key="type.value"
-              class="relative min-h-[132px] rounded-lg border bg-black/25 px-5 py-6 transition-all hover:border-neon-cyan/55 hover:bg-neon-cyan/10"
-              :class="reportType === type.value ? 'border-neon-cyan bg-neon-cyan/12 shadow-[0_0_28px_rgba(0,243,255,0.32)]' : 'border-neon-cyan/25'"
+              class="relative min-h-[138px] rounded-2xl border px-5 py-6 transition-all duration-200 hover:-translate-y-1 hover:border-neon-cyan/38 hover:bg-neon-cyan/[0.055]"
+              :class="reportType === type.value ? 'border-neon-cyan/70 bg-neon-cyan/[0.085] shadow-[0_18px_44px_rgba(0,0,0,0.22),0_0_28px_rgba(0,243,255,0.13)]' : 'border-neon-cyan/13 bg-[rgba(6,18,30,0.62)]'"
               type="button"
               @click="selectReportType(type.value)"
             >
               <span
                 v-if="reportType === type.value"
-                class="absolute right-0 top-0 h-8 w-8 rounded-bl-lg bg-neon-cyan text-deep-void font-mono text-sm flex items-center justify-center"
+                class="absolute right-3 top-3 h-6 w-6 rounded-full border border-neon-cyan/40 bg-neon-cyan/90 text-deep-void font-mono text-xs flex items-center justify-center shadow-[0_0_14px_rgba(0,243,255,0.18)]"
               >
                 ✓
               </span>
-              <div class="font-mono text-4xl mb-4" :class="reportType === type.value ? 'text-neon-cyan' : 'text-slate-300'">{{ type.icon }}</div>
-              <div class="font-mono text-lg" :class="reportType === type.value ? 'text-neon-cyan' : 'text-slate-200'">{{ type.label }}</div>
+              <div class="h-full flex flex-col items-center justify-center">
+                <div class="font-mono text-[34px] mb-4" :class="reportType === type.value ? 'text-neon-cyan' : 'text-slate-400/80'">{{ type.icon }}</div>
+                <div class="font-mono text-base font-semibold" :class="reportType === type.value ? 'text-neon-cyan' : 'text-slate-200/84'">{{ type.label }}</div>
+              </div>
             </button>
           </div>
 
-          <div class="mx-auto text-left rounded-lg border border-neon-cyan/60 bg-[rgba(5,16,26,0.92)] p-6 shadow-[0_0_34px_rgba(0,243,255,0.18)]">
-            <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-2">报告标题</label>
-            <input
-              class="sci-input"
-              :value="title"
-              @input="emit('update:title', $event.target.value)"
-              :placeholder="selectedReportType?.placeholder || '请先选择编报类型，再输入需要编报的标题'"
-            />
+          <div class="mx-auto text-left rounded-[22px] border border-neon-cyan/24 bg-[rgba(5,16,26,0.84)] p-5 md:p-6 shadow-[0_26px_80px_rgba(0,0,0,0.34),0_0_34px_rgba(0,243,255,0.09)] backdrop-blur-xl">
+            <div class="rounded-[18px] border border-neon-cyan/13 bg-black/18 p-5 md:p-6">
+              <div class="flex items-center justify-between gap-4 mb-4">
+                <label class="block font-mono text-[11px] tracking-widest text-neon-cyan/62">报告标题</label>
+                <span class="font-mono text-[10px] text-neon-cyan/38">{{ titleLength }}/200</span>
+              </div>
+              <textarea
+                class="w-full min-h-[132px] resize-none bg-transparent border-none outline-none font-mono text-[17px] leading-8 text-slate-100 placeholder:text-slate-500/70"
+                :value="title"
+                maxlength="200"
+                @input="emit('update:title', $event.target.value)"
+                :placeholder="selectedReportType?.placeholder || '请输入需要编报的标题，例如：2026年东南亚区域安全态势研判'"
+              ></textarea>
+            </div>
 
             <div v-if="selectedReportType" class="mt-5">
-              <div class="flex items-center justify-between mb-3">
-                <div>
-                  <div class="font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-1">需要补充的参数</div>
-                  <div class="font-mono text-xs text-neon-cyan/65">{{ selectedReportType.desc }}</div>
-                </div>
-                <span class="font-mono text-[10px] text-neon-green">已选择</span>
+              <div class="flex items-center justify-between mb-3 px-1">
+                <div class="font-mono text-[11px] tracking-widest text-neon-cyan/55">需要补充的参数</div>
+                <span class="font-mono text-[10px] text-neon-green/80">已选择</span>
               </div>
 
-              <div class="grid grid-cols-5 gap-3 mb-4">
+              <div class="flex flex-wrap gap-2.5 mb-4">
                 <button
                   v-for="param in selectedReportType.params"
                   :key="param"
-                  class="rounded border px-3 py-3 font-mono text-xs transition-all"
+                  class="rounded-full border px-3.5 py-2 font-mono text-[11px] transition-all"
                   :class="isParameterActive(param)
-                    ? 'border-neon-green bg-neon-green/10 text-neon-green shadow-[0_0_16px_rgba(0,255,159,0.15)]'
-                    : 'border-neon-cyan/35 bg-neon-cyan/5 text-neon-cyan hover:bg-neon-cyan/10'"
+                    ? 'border-neon-green/42 bg-neon-green/[0.075] text-neon-green shadow-[0_0_14px_rgba(0,255,159,0.08)]'
+                    : 'border-neon-cyan/18 bg-neon-cyan/[0.035] text-neon-cyan/72 hover:border-neon-cyan/34 hover:bg-neon-cyan/[0.07]'"
                   type="button"
                   @click="toggleParameter(param)"
                 >
@@ -522,12 +543,12 @@ function exportPdf() {
 
               <div
                 v-if="activeSelectedParameters.length"
-                class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4"
+                class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4 rounded-2xl border border-neon-cyan/10 bg-black/10 p-3"
               >
                 <label
                   v-for="param in activeSelectedParameters"
                   :key="param"
-                  class="rounded border border-neon-cyan/20 bg-black/20 p-3"
+                  class="rounded-2xl border border-neon-cyan/10 bg-black/16 p-3"
                 >
                   <span class="block font-mono text-[10px] tracking-widest text-neon-cyan/60 mb-2">{{ param }}</span>
                   <input
@@ -548,24 +569,27 @@ function exportPdf() {
                 </label>
               </div>
 
-              <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/55 mb-2">综合补充说明</label>
-              <textarea
-                ref="contextTextRef"
-                :value="contextText"
-                @input="emit('update:contextText', $event.target.value)"
-                placeholder="可继续补充自由文本、特殊要求、口径限制或已有材料..."
-                rows="5"
-                class="sci-textarea text-sm bg-black/25"
-              ></textarea>
+              <div class="rounded-2xl border border-neon-cyan/10 bg-black/12 p-3">
+                <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">综合补充说明</label>
+                <textarea
+                  ref="contextTextRef"
+                  :value="contextText"
+                  @input="emit('update:contextText', $event.target.value)"
+                  placeholder="可继续补充自由文本、特殊要求、口径限制或已有材料..."
+                  rows="4"
+                  class="sci-textarea text-sm bg-black/15"
+                ></textarea>
+              </div>
             </div>
 
-            <div v-else class="mt-5 rounded border border-neon-cyan/15 bg-black/20 px-4 py-5 text-center font-mono text-xs text-neon-cyan/45">
+            <div v-else class="mt-5 rounded-2xl border border-neon-cyan/10 bg-black/12 px-4 py-5 text-center font-mono text-xs text-neon-cyan/42">
               选择一个编报类型后，可填写对应的背景、方向、时间、地区对象和上下文参数。
             </div>
 
-            <div class="mt-5 flex items-center justify-end">
+            <div class="mt-5 flex items-center justify-between gap-4">
+              <div class="font-mono text-[10px] text-neon-cyan/30">AI 生成内容仅供参考，请结合专业判断使用</div>
               <button
-                class="w-12 h-12 rounded-full bg-neon-cyan text-deep-void font-mono text-xl shadow-[0_0_24px_rgba(0,243,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed"
+                class="w-12 h-12 shrink-0 rounded-full bg-neon-cyan/90 text-deep-void font-mono text-xl shadow-[0_10px_26px_rgba(0,0,0,0.28),0_0_22px_rgba(0,243,255,0.16)] transition-all hover:-translate-y-0.5 hover:bg-neon-cyan disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 type="button"
                 :disabled="!canGenerate"
                 :title="!reportType ? '请先选择编报类型' : !title?.trim() ? '请输入报告标题' : '提交编报任务'"
@@ -575,8 +599,6 @@ function exportPdf() {
               </button>
             </div>
           </div>
-
-          <div class="mt-5 font-mono text-[10px] text-neon-cyan/35">AI 生成内容仅供参考，请结合专业判断使用</div>
         </section>
       </div>
 
@@ -650,7 +672,7 @@ function exportPdf() {
             </div>
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
               <span class="text-neon-cyan/50">任务状态</span>
-              <span class="text-neon-cyan">{{ job?.status || phase }}</span>
+              <span :class="taskStatusClass">{{ taskStatusLabel }}</span>
             </div>
           </div>
         </div>

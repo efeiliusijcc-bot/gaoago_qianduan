@@ -56,7 +56,7 @@ function drawWave() {
     const x = i * (barWidth + gap)
     const y = rect.height - barHeights[i]
 
-    ctx.fillStyle = 'rgba(0, 243, 255, 0.6)'
+    ctx.fillStyle = 'rgba(0, 243, 255, 0.32)'
     ctx.fillRect(x, y, barWidth, barHeights[i])
   }
 
@@ -76,30 +76,30 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <header class="h-[60px] border-b border-border-glow bg-panel-bg backdrop-blur-lg flex items-center justify-between px-6">
+  <header class="h-[60px] border-b border-neon-cyan/10 bg-[rgba(4,12,21,0.70)] backdrop-blur-xl flex items-center justify-between px-6">
     <div class="flex items-center gap-4">
       <div class="flex flex-col">
-        <span class="neon-text neon-flicker font-mono font-bold tracking-widest text-base">
+        <span class="neon-text font-mono font-bold tracking-wide text-base">
           AI深度编报
         </span>
-        <span class="font-mono text-[9px] text-neon-cyan/50 tracking-[0.24em]">
+        <span class="font-mono text-[9px] text-neon-cyan/35 tracking-[0.18em]">
           // 智能研判工作台 · v4.2.1
         </span>
       </div>
 
       <div class="flex items-center gap-1.5 ml-2">
         <span class="data-pulse" style="background: #00ff88;"></span>
-        <span class="font-mono text-[9px] text-neon-green tracking-widest">已就绪</span>
+        <span class="font-mono text-[9px] text-neon-green/80 tracking-widest">已就绪</span>
       </div>
     </div>
 
-    <div class="flex-1 mx-8 h-8 opacity-60">
+    <div class="flex-1 mx-8 h-8 opacity-35">
       <canvas ref="canvasRef" class="w-full h-full"></canvas>
     </div>
 
     <div class="flex flex-col items-end">
-      <span class="font-mono text-[8px] text-neon-cyan/40 tracking-widest mb-1">系统时间</span>
-      <span class="font-mono text-xs text-neon-cyan tracking-wider">{{ currentTime }}</span>
+      <span class="font-mono text-[8px] text-neon-cyan/30 tracking-widest mb-1">系统时间</span>
+      <span class="font-mono text-xs text-neon-cyan/78 tracking-wider">{{ currentTime }}</span>
     </div>
   </header>
 </template>

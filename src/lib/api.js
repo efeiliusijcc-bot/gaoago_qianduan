@@ -40,6 +40,10 @@ export function fetchReportJob(jobId) {
   return request(`/report-jobs/${jobId}`)
 }
 
+export function fetchReportJobEventLog(jobId) {
+  return request(`/report-jobs/${jobId}/event-log`)
+}
+
 export function fetchReportResult(jobId) {
   return request(`/report-jobs/${jobId}/result`)
 }

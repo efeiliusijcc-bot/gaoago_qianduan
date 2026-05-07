@@ -74,6 +74,33 @@ function skillLabel(item) {
   if (item.skill === 'risk-assessment-reports') return '风险评估'
   return item.skill || '报告'
 }
+
+function jobStatusType(status) {
+  if (status === 'succeeded') return 'success'
+  if (status === 'failed' || status === 'cancelled' || status === 'waiting_approval') return 'failed'
+  return 'running'
+}
+
+function jobStatusLabel(status) {
+  const type = jobStatusType(status)
+  if (type === 'success') return '成功'
+  if (type === 'failed') return '失败'
+  return '生成中'
+}
+
+function jobStatusClass(status) {
+  const type = jobStatusType(status)
+  if (type === 'success') return 'text-neon-green'
+  if (type === 'failed') return 'text-red-300'
+  return 'text-cyber-yellow'
+}
+
+function jobActionLabel(status) {
+  const type = jobStatusType(status)
+  if (type === 'success') return '查看报告'
+  if (type === 'failed') return '查看错误'
+  return '查看状态'
+}
 </script>
 
 <template>
@@ -200,11 +227,8 @@ function skillLabel(item) {
             <div class="col-span-2 font-mono text-xs text-neon-cyan">{{ item.jobId.slice(0, 8) }}</div>
             <div class="col-span-3 font-mono text-xs text-neon-cyan/75 truncate">{{ getJobTitle(item) }}</div>
             <div class="col-span-1 font-mono text-xs text-neon-cyan/75">{{ skillLabel(item) }}</div>
-            <div
-              class="col-span-2 font-mono text-xs"
-              :class="item.status === 'succeeded' ? 'text-neon-green' : item.status === 'failed' ? 'text-red-300' : 'text-cyber-yellow'"
-            >
-              {{ item.status }}<span v-if="item.stage && item.stage !== item.status" class="text-neon-cyan/35"> / {{ item.stage }}</span>
+            <div class="col-span-2 font-mono text-xs" :class="jobStatusClass(item.status)">
+              {{ jobStatusLabel(item.status) }}
             </div>
             <div class="col-span-2 font-mono text-xs text-neon-cyan/55">{{ item.updatedAt || item.createdAt }}</div>
             <div class="col-span-1 font-mono text-xs text-neon-cyan/55 truncate">{{ item.resultPath ? '已生成' : '未生成' }}</div>
@@ -213,7 +237,7 @@ function skillLabel(item) {
                 class="font-mono text-[10px] text-neon-cyan hover:text-neon-green disabled:opacity-30"
                 @click="monitorJobFromList(item)"
               >
-                {{ item.status === 'succeeded' ? '查看报告' : item.status === 'running' || item.status === 'queued' ? '查看状态' : '查看错误' }}
+                {{ jobActionLabel(item.status) }}
               </button>
             </div>
           </div>
