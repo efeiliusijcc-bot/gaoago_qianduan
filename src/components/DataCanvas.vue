@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import DOMPurify from 'dompurify'
 
 const purifyConfig = {
@@ -57,8 +57,10 @@ const emit = defineEmits([
   'generate',
 ])
 const reportRef = ref(null)
-const logListRef = ref(null)
+const drawerLogListRef = ref(null)
+const liveLogListRef = ref(null)
 const contextTextRef = ref(null)
+let liveLogScrollTimer = null
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
 const isLiveLogVisible = computed(() => props.phase === 'loading')
@@ -221,10 +223,30 @@ function scrollToTop() {
 
 function scrollLogsToBottom() {
   nextTick(() => {
-    if (logListRef.value) {
-      logListRef.value.scrollTop = logListRef.value.scrollHeight
+    const target = isLiveLogVisible.value ? liveLogListRef.value : drawerLogListRef.value
+    if (target) {
+      target.scrollTop = target.scrollHeight
     }
   })
+}
+
+function scrollLiveLogsToBottom() {
+  nextTick(() => {
+    if (liveLogListRef.value) {
+      liveLogListRef.value.scrollTop = liveLogListRef.value.scrollHeight
+    }
+  })
+}
+
+function setLiveLogAutoScroll(enabled) {
+  if (liveLogScrollTimer) {
+    clearInterval(liveLogScrollTimer)
+    liveLogScrollTimer = null
+  }
+  if (enabled) {
+    scrollLiveLogsToBottom()
+    liveLogScrollTimer = setInterval(scrollLiveLogsToBottom, 700)
+  }
 }
 
 function handleGeneratedHtmlChange() {
@@ -240,10 +262,16 @@ watch(() => [props.phase, props.isHistoryMode], () => {
   if (props.phase === 'done') scrollToTop()
 })
 watch(() => props.processLogs, scrollToBottom, { deep: true })
+watch(() => props.processLogs?.length || 0, scrollLogsToBottom)
 watch(() => props.executionLogs.length, scrollLogsToBottom)
 watch(() => props.isLogDrawerOpen, (open) => {
   if (open) scrollLogsToBottom()
 })
+watch(isLiveLogVisible, (visible) => {
+  setLiveLogAutoScroll(visible)
+}, { immediate: true })
+
+onBeforeUnmount(() => setLiveLogAutoScroll(false))
 
 function htmlToPlainText(html) {
   const div = document.createElement('div')
@@ -448,7 +476,7 @@ function exportPdf() {
           <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
         </div>
 
-        <div ref="logListRef" class="flex-1 overflow-auto p-4 space-y-3">
+        <div ref="drawerLogListRef" class="flex-1 overflow-auto p-4 space-y-3">
           <div v-if="!executionLogs.length" class="h-full flex items-center justify-center text-center">
             <div>
               <div class="font-mono text-3xl text-neon-cyan/15 mb-3">LOGS</div>
@@ -624,7 +652,7 @@ function exportPdf() {
                 </div>
               </div>
 
-              <div ref="logListRef" class="max-h-72 overflow-auto p-4 space-y-3">
+              <div ref="liveLogListRef" class="max-h-72 overflow-auto p-4 space-y-3">
                 <div v-if="executionLogs.length">
                   <div
                     v-for="log in executionLogs"
