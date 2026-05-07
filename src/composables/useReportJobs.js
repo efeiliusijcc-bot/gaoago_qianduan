@@ -1,5 +1,6 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
+  createReportPlan,
   createReportJob,
   fetchOpenClawHealth,
   fetchReportJob,
@@ -46,6 +47,12 @@ export function useReportJobs() {
   const outputDepth = ref('detailed')
 
   const isGenerating = ref(false)
+  const isPlanning = ref(false)
+  const reportPlan = ref(null)
+  const planStepIndex = ref(0)
+  const planSelections = ref({})
+  const planSupplement = ref('')
+  const planError = ref('')
   const generatedHtml = ref('')
   const phase = ref('idle')
   const processLogs = ref([])
@@ -346,6 +353,7 @@ export function useReportJobs() {
     targetCity.value = ''
     visitTime.value = ''
     outputDepth.value = 'detailed'
+    resetReportPlan()
     currentView.value = 'generator'
   }
 
@@ -370,7 +378,16 @@ export function useReportJobs() {
     pushLog(savedNotice.value)
   }
 
-  function buildContext() {
+  function resetReportPlan() {
+    isPlanning.value = false
+    reportPlan.value = null
+    planStepIndex.value = 0
+    planSelections.value = {}
+    planSupplement.value = ''
+    planError.value = ''
+  }
+
+  function buildContext(extraSections = []) {
     const allowedParams = new Set(REPORT_PARAMETERS[reportType.value] || [])
     const sections = activeParameters.value
       .filter((param) => allowedParams.has(param))
@@ -381,12 +398,35 @@ export function useReportJobs() {
       .filter(Boolean)
     const freeText = contextText.value.trim()
     if (freeText) sections.push(`【综合补充说明】\n${freeText}`)
+    for (const section of extraSections) {
+      if (section) sections.push(section)
+    }
     return sections.join('\n\n')
   }
 
-  function buildPayload() {
+  function buildPlanningContext() {
+    const plan = reportPlan.value
+    if (!plan?.steps?.length) return ''
+    const lines = []
+    for (const step of plan.steps) {
+      const selectedIds = new Set(planSelections.value[step.id] || [])
+      const selected = step.options?.filter((option) => selectedIds.has(option.id)) || []
+      if (!selected.length) continue
+      lines.push(`【${step.title}】`)
+      for (const option of selected) {
+        lines.push(`- ${option.label}${option.detail ? `：${option.detail}` : ''}`)
+      }
+    }
+    if (planSupplement.value.trim()) {
+      lines.push('【用户补充方向】')
+      lines.push(planSupplement.value.trim())
+    }
+    return lines.length ? `【编报规划与用户选择】\n${lines.join('\n')}` : ''
+  }
+
+  function buildPayload(extraContext = '') {
     const subject = title.value.trim()
-    const context = buildContext() || subject
+    const context = buildContext(extraContext ? [extraContext] : []) || subject
 
     if (reportType.value === 'person-intelligence-report') {
       return {
@@ -497,12 +537,81 @@ export function useReportJobs() {
     }
   }
 
+  function initializePlanSelections(plan) {
+    const selections = {}
+    for (const step of plan?.steps || []) {
+      selections[step.id] = (step.options || [])
+        .filter((option) => option.selected)
+        .map((option) => option.id)
+    }
+    planSelections.value = selections
+  }
+
+  function togglePlanOption(stepId, optionId) {
+    const step = reportPlan.value?.steps?.find((item) => item.id === stepId)
+    const current = new Set(planSelections.value[stepId] || [])
+    if (current.has(optionId)) {
+      current.delete(optionId)
+    } else {
+      if (step && step.allowMultiple === false) current.clear()
+      current.add(optionId)
+    }
+    planSelections.value = {
+      ...planSelections.value,
+      [stepId]: Array.from(current),
+    }
+  }
+
+  function nextPlanStep() {
+    const total = reportPlan.value?.steps?.length || 0
+    planStepIndex.value = Math.min(planStepIndex.value + 1, Math.max(total - 1, 0))
+  }
+
+  function prevPlanStep() {
+    planStepIndex.value = Math.max(planStepIndex.value - 1, 0)
+  }
+
+  function cancelReportPlan() {
+    resetReportPlan()
+  }
+
   async function handleGenerate() {
+    if (isGenerating.value || isPlanning.value || !title.value.trim() || !reportType.value) return
+
+    isPlanning.value = true
+    planError.value = ''
+    reportPlan.value = null
+    planStepIndex.value = 0
+
+    try {
+      const allowedParams = new Set(REPORT_PARAMETERS[reportType.value] || [])
+      const parameters = {}
+      for (const [key, value] of Object.entries(parameterValues.value)) {
+        if (allowedParams.has(key) && String(value || '').trim()) parameters[key] = String(value).trim()
+      }
+      const plan = await createReportPlan({
+        topic: title.value.trim(),
+        reportType: reportType.value,
+        context: buildContext(),
+        parameters,
+      })
+      reportPlan.value = plan
+      initializePlanSelections(plan)
+    } catch (error) {
+      planError.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      isPlanning.value = false
+    }
+  }
+
+  async function confirmReportPlan() {
     if (isGenerating.value || !title.value.trim() || !reportType.value) return
 
+    const plannedContext = buildPlanningContext()
     resetExecutionLogs()
     openedHistoryJobId.value = null
     isGenerating.value = true
+    isPlanning.value = false
     generatedHtml.value = ''
     errorMessage.value = ''
     processLogs.value = []
@@ -515,8 +624,9 @@ export function useReportJobs() {
     try {
       pushLog('提交报告生成任务到后端。')
       await refreshHealth()
-      const created = await createReportJob(buildPayload())
+      const created = await createReportJob(buildPayload(plannedContext))
       job.value = { jobId: created.jobId, status: created.status }
+      resetReportPlan()
       pushLog(`任务已创建：${created.jobId}`)
       subscribeJobEvents(created.jobId)
       await pollUntilDone(created.jobId)
@@ -713,6 +823,12 @@ export function useReportJobs() {
     activeParameters,
     outputDepth,
     isGenerating,
+    isPlanning,
+    reportPlan,
+    planStepIndex,
+    planSelections,
+    planSupplement,
+    planError,
     generatedHtml,
     phase,
     processLogs,
@@ -740,6 +856,11 @@ export function useReportJobs() {
     isLogDrawerOpen,
     getJobTitle,
     handleGenerate,
+    confirmReportPlan,
+    cancelReportPlan,
+    togglePlanOption,
+    nextPlanStep,
+    prevPlanStep,
     refreshHealth,
     loadJobList,
     updateListSearch,

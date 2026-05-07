@@ -19,6 +19,12 @@ const {
   activeParameters,
   outputDepth,
   isGenerating,
+  isPlanning,
+  reportPlan,
+  planStepIndex,
+  planSelections,
+  planSupplement,
+  planError,
   generatedHtml,
   phase,
   processLogs,
@@ -43,6 +49,11 @@ const {
   isLogDrawerOpen,
   getJobTitle,
   handleGenerate,
+  confirmReportPlan,
+  cancelReportPlan,
+  togglePlanOption,
+  nextPlanStep,
+  prevPlanStep,
   refreshHealth,
   loadJobList,
   updateListSearch,
@@ -137,10 +148,21 @@ function jobActionLabel(status) {
         :errorMessage="errorMessage"
         :isHistoryMode="isHistoryMode"
         :isGenerating="isGenerating"
+        :isPlanning="isPlanning"
+        :reportPlan="reportPlan"
+        :planStepIndex="planStepIndex"
+        :planSelections="planSelections"
+        v-model:planSupplement="planSupplement"
+        :planError="planError"
         :executionLogs="executionLogs"
         :unreadLogCount="unreadLogCount"
         :isLogDrawerOpen="isLogDrawerOpen"
         @generate="handleGenerate"
+        @confirm-plan="confirmReportPlan"
+        @cancel-plan="cancelReportPlan"
+        @toggle-plan-option="togglePlanOption"
+        @next-plan-step="nextPlanStep"
+        @prev-plan-step="prevPlanStep"
         @list="loadJobList"
         @new-report="resetForNewReport"
         @toggle-log-drawer="toggleLogDrawer"

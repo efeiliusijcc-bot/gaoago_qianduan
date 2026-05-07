@@ -27,6 +27,13 @@ export function createReportJob(body) {
   })
 }
 
+export function createReportPlan(body) {
+  return request('/report-plans', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export function fetchReportJobs(params = {}) {
   const query = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {

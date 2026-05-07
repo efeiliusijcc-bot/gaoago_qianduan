@@ -34,6 +34,21 @@ const props = defineProps({
   errorMessage: String,
   isHistoryMode: Boolean,
   isGenerating: Boolean,
+  isPlanning: Boolean,
+  reportPlan: Object,
+  planStepIndex: {
+    type: Number,
+    default: 0,
+  },
+  planSelections: {
+    type: Object,
+    default: () => ({}),
+  },
+  planSupplement: {
+    type: String,
+    default: '',
+  },
+  planError: String,
   executionLogs: {
     type: Array,
     default: () => [],
@@ -54,7 +69,13 @@ const emit = defineEmits([
   'update:contextText',
   'update:parameterValues',
   'update:activeParameters',
+  'update:planSupplement',
   'generate',
+  'confirm-plan',
+  'cancel-plan',
+  'toggle-plan-option',
+  'next-plan-step',
+  'prev-plan-step',
 ])
 const reportRef = ref(null)
 const drawerLogListRef = ref(null)
@@ -66,8 +87,10 @@ const canExport = computed(() => props.phase === 'done' && Boolean(props.generat
 const isLiveLogVisible = computed(() => props.phase === 'loading')
 const canOpenLogDrawer = computed(() => !isLiveLogVisible.value)
 const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value)
-const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating)
+const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating && !props.isPlanning)
 const titleLength = computed(() => props.title?.length || 0)
+const currentPlanStep = computed(() => props.reportPlan?.steps?.[props.planStepIndex] || null)
+const isLastPlanStep = computed(() => props.planStepIndex >= ((props.reportPlan?.steps?.length || 1) - 1))
 const reportTypeLabel = computed(() => {
   if (props.reportType === 'person-intelligence-report') return '人物报'
   if (props.reportType === 'risk-assessment-reports') return '风险报'
@@ -183,6 +206,10 @@ function updateParameterValue(param, value) {
 
 function submitReport() {
   if (canGenerate.value) emit('generate')
+}
+
+function isPlanOptionSelected(stepId, optionId) {
+  return (props.planSelections?.[stepId] || []).includes(optionId)
 }
 
 function toggleLogDrawer() {
@@ -503,6 +530,150 @@ function exportPdf() {
         </div>
       </aside>
 
+    <div
+      v-if="reportPlan || isPlanning || planError"
+      class="absolute inset-0 z-30 flex items-center justify-center bg-deep-void/72 backdrop-blur-sm px-6"
+    >
+      <section class="w-full max-w-4xl rounded-[24px] border border-neon-cyan/25 bg-[rgba(5,16,26,0.96)] shadow-[0_24px_90px_rgba(0,0,0,0.48),0_0_42px_rgba(0,243,255,0.12)] overflow-hidden">
+        <div class="px-6 py-5 border-b border-neon-cyan/12 flex items-start justify-between gap-4">
+          <div>
+            <div class="font-mono text-[11px] tracking-[0.28em] text-neon-cyan/50 mb-2">PLAN MODE</div>
+            <h2 class="font-mono text-xl neon-text">编报规划确认</h2>
+            <p class="mt-2 text-sm text-slate-300/60">
+              先按主题生成检索方向和子任务，勾选需要纳入正式编报的内容后再提交。
+            </p>
+          </div>
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">关闭</button>
+        </div>
+
+        <div v-if="isPlanning" class="px-6 py-14 text-center">
+          <div class="nexus-loader scale-75 mx-auto">
+            <div class="loader-ring ring-a"></div>
+            <div class="loader-ring ring-b"></div>
+            <div class="loader-core"></div>
+          </div>
+          <div class="font-mono text-neon-cyan mt-6">正在规划检索方向...</div>
+          <div class="font-mono text-[11px] text-neon-cyan/40 mt-2">预计 10-30 秒，请稍候</div>
+        </div>
+
+        <div v-else-if="planError" class="px-6 py-8">
+          <div class="rounded-2xl border border-red-400/35 bg-red-950/25 px-4 py-4 text-red-200 text-sm">
+            {{ planError }}
+          </div>
+          <div class="mt-5 flex justify-end gap-2">
+            <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">返回修改</button>
+            <button class="sci-btn text-[10px] px-3 py-2 border-neon-green text-neon-green" type="button" @click="emit('confirm-plan')">
+              跳过规划直接提交
+            </button>
+          </div>
+        </div>
+
+        <div v-else class="px-6 py-5">
+          <div class="rounded-2xl border border-neon-cyan/12 bg-black/16 px-4 py-3 mb-5">
+            <div class="font-mono text-sm text-neon-cyan mb-2">{{ reportPlan.title }}</div>
+            <div class="text-sm text-slate-300/70 leading-relaxed">{{ reportPlan.summary }}</div>
+            <div v-if="reportPlan.searchQueries?.length" class="flex flex-wrap gap-2 mt-3">
+              <span
+                v-for="query in reportPlan.searchQueries"
+                :key="query"
+                class="rounded-full border border-neon-cyan/15 bg-neon-cyan/[0.04] px-3 py-1 font-mono text-[10px] text-neon-cyan/70"
+              >
+                {{ query }}
+              </span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 mb-5">
+            <button
+              v-for="(step, index) in reportPlan.steps"
+              :key="step.id"
+              class="h-2 flex-1 rounded-full transition-all"
+              :class="index <= planStepIndex ? 'bg-neon-cyan/75 shadow-[0_0_10px_rgba(0,243,255,0.16)]' : 'bg-neon-cyan/10'"
+              type="button"
+              @click="index < planStepIndex ? emit('prev-plan-step') : null"
+            ></button>
+          </div>
+
+          <div v-if="currentPlanStep">
+            <div class="mb-4">
+              <div class="font-mono text-[11px] tracking-[0.24em] text-neon-cyan/45 mb-2">
+                STEP {{ planStepIndex + 1 }} / {{ reportPlan.steps.length }}
+              </div>
+              <h3 class="font-mono text-lg text-neon-cyan">{{ currentPlanStep.title }}</h3>
+              <p class="text-sm text-slate-300/58 mt-1">{{ currentPlanStep.description }}</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                v-for="option in currentPlanStep.options"
+                :key="option.id"
+                class="text-left rounded-2xl border p-4 transition-all hover:-translate-y-0.5"
+                :class="isPlanOptionSelected(currentPlanStep.id, option.id)
+                  ? 'border-neon-cyan/55 bg-neon-cyan/[0.08] shadow-[0_0_24px_rgba(0,243,255,0.10)]'
+                  : 'border-neon-cyan/12 bg-black/18 hover:border-neon-cyan/30 hover:bg-neon-cyan/[0.04]'"
+                type="button"
+                @click="emit('toggle-plan-option', currentPlanStep.id, option.id)"
+              >
+                <div class="flex items-center justify-between gap-3 mb-2">
+                  <span class="font-mono text-sm" :class="isPlanOptionSelected(currentPlanStep.id, option.id) ? 'text-neon-cyan' : 'text-slate-200/80'">
+                    {{ option.label }}
+                  </span>
+                  <span
+                    class="h-5 w-5 rounded-full border flex items-center justify-center font-mono text-[10px]"
+                    :class="isPlanOptionSelected(currentPlanStep.id, option.id) ? 'border-neon-cyan bg-neon-cyan text-deep-void' : 'border-neon-cyan/20 text-neon-cyan/30'"
+                  >
+                    ✓
+                  </span>
+                </div>
+                <div class="text-xs leading-relaxed text-slate-300/58">{{ option.detail }}</div>
+              </button>
+            </div>
+
+            <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
+              <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">补充方向</label>
+              <textarea
+                class="sci-textarea text-sm bg-black/15"
+                rows="3"
+                :value="planSupplement"
+                placeholder="可补充必须纳入编报的方向、限制条件或特别关注点..."
+                @input="emit('update:planSupplement', $event.target.value)"
+              ></textarea>
+            </div>
+          </div>
+
+          <div class="mt-6 flex items-center justify-between gap-3">
+            <button
+              class="sci-btn text-[10px] px-3 py-2"
+              type="button"
+              :disabled="planStepIndex <= 0"
+              @click="emit('prev-plan-step')"
+            >
+              上一步
+            </button>
+            <div class="flex items-center gap-2">
+              <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">返回修改</button>
+              <button
+                v-if="!isLastPlanStep"
+                class="sci-btn text-[10px] px-3 py-2 border-neon-cyan text-neon-cyan"
+                type="button"
+                @click="emit('next-plan-step')"
+              >
+                下一步
+              </button>
+              <button
+                v-else
+                class="sci-btn text-[10px] px-4 py-2 border-neon-green text-neon-green shadow-[0_0_18px_rgba(0,255,159,0.12)]"
+                type="button"
+                @click="emit('confirm-plan')"
+              >
+                按所选方向提交编报
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div ref="reportRef" class="flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
         <section class="w-full max-w-[1080px] text-center">
@@ -620,7 +791,7 @@ function exportPdf() {
                 class="w-12 h-12 shrink-0 rounded-full bg-neon-cyan/90 text-deep-void font-mono text-xl shadow-[0_10px_26px_rgba(0,0,0,0.28),0_0_22px_rgba(0,243,255,0.16)] transition-all hover:-translate-y-0.5 hover:bg-neon-cyan disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 type="button"
                 :disabled="!canGenerate"
-                :title="!reportType ? '请先选择编报类型' : !title?.trim() ? '请输入报告标题' : '提交编报任务'"
+                :title="isPlanning ? '正在生成编报规划' : !reportType ? '请先选择编报类型' : !title?.trim() ? '请输入报告标题' : '生成编报规划'"
                 @click="submitReport"
               >
                 ↗
