@@ -44,6 +44,10 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  planSearchSelections: {
+    type: Array,
+    default: () => [],
+  },
   planSupplement: {
     type: String,
     default: '',
@@ -74,6 +78,7 @@ const emit = defineEmits([
   'confirm-plan',
   'cancel-plan',
   'toggle-plan-option',
+  'toggle-plan-search-query',
   'next-plan-step',
   'prev-plan-step',
 ])
@@ -210,6 +215,10 @@ function submitReport() {
 
 function isPlanOptionSelected(stepId, optionId) {
   return (props.planSelections?.[stepId] || []).includes(optionId)
+}
+
+function isPlanSearchQuerySelected(query) {
+  return (props.planSearchSelections || []).includes(query)
 }
 
 function toggleLogDrawer() {
@@ -572,14 +581,22 @@ function exportPdf() {
           <div class="rounded-2xl border border-neon-cyan/12 bg-black/16 px-4 py-3 mb-5">
             <div class="font-mono text-sm text-neon-cyan mb-2">{{ reportPlan.title }}</div>
             <div class="text-sm text-slate-300/70 leading-relaxed">{{ reportPlan.summary }}</div>
-            <div v-if="reportPlan.searchQueries?.length" class="flex flex-wrap gap-2 mt-3">
-              <span
+            <div v-if="reportPlan.searchQueries?.length" class="mt-4">
+              <div class="font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">规划检索词</div>
+              <div class="flex flex-wrap gap-2">
+              <button
                 v-for="query in reportPlan.searchQueries"
                 :key="query"
-                class="rounded-full border border-neon-cyan/15 bg-neon-cyan/[0.04] px-3 py-1 font-mono text-[10px] text-neon-cyan/70"
+                class="rounded-full border px-3 py-1.5 font-mono text-[10px] transition-all"
+                :class="isPlanSearchQuerySelected(query)
+                  ? 'border-neon-cyan/55 bg-neon-cyan/[0.10] text-neon-cyan shadow-[0_0_14px_rgba(0,243,255,0.10)]'
+                  : 'border-neon-cyan/12 bg-black/18 text-slate-400 hover:border-neon-cyan/30 hover:text-neon-cyan/70'"
+                type="button"
+                @click="emit('toggle-plan-search-query', query)"
               >
                 {{ query }}
-              </span>
+              </button>
+              </div>
             </div>
           </div>
 

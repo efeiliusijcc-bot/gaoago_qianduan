@@ -51,6 +51,7 @@ export function useReportJobs() {
   const reportPlan = ref(null)
   const planStepIndex = ref(0)
   const planSelections = ref({})
+  const planSearchSelections = ref([])
   const planSupplement = ref('')
   const planError = ref('')
   const generatedHtml = ref('')
@@ -517,6 +518,7 @@ export function useReportJobs() {
     reportPlan.value = null
     planStepIndex.value = 0
     planSelections.value = {}
+    planSearchSelections.value = []
     planSupplement.value = ''
     planError.value = ''
   }
@@ -542,16 +544,25 @@ export function useReportJobs() {
     const plan = reportPlan.value
     if (!plan?.steps?.length) return ''
     const lines = []
+    const selectedQueries = planSearchSelections.value.filter((query) => plan.searchQueries?.includes(query))
+    if (selectedQueries.length) {
+      lines.push('【规划检索词】')
+      for (const query of selectedQueries) {
+        lines.push(`- ${query}`)
+      }
+    }
     for (const step of plan.steps) {
       const selectedIds = new Set(planSelections.value[step.id] || [])
       const selected = step.options?.filter((option) => selectedIds.has(option.id)) || []
       if (!selected.length) continue
+      if (lines.length) lines.push('')
       lines.push(`【${step.title}】`)
       for (const option of selected) {
         lines.push(`- ${option.label}${option.detail ? `：${option.detail}` : ''}`)
       }
     }
     if (planSupplement.value.trim()) {
+      if (lines.length) lines.push('')
       lines.push('【用户补充方向】')
       lines.push(planSupplement.value.trim())
     }
@@ -694,6 +705,7 @@ export function useReportJobs() {
 
   function initializePlanSelections(plan) {
     const selections = {}
+    planSearchSelections.value = [...(plan?.searchQueries || [])]
     for (const step of plan?.steps || []) {
       selections[step.id] = (step.options || [])
         .filter((option) => option.selected)
@@ -715,6 +727,17 @@ export function useReportJobs() {
       ...planSelections.value,
       [stepId]: Array.from(current),
     }
+  }
+
+  function togglePlanSearchQuery(query) {
+    const current = new Set(planSearchSelections.value)
+    if (current.has(query)) {
+      if (current.size <= 1) return
+      current.delete(query)
+    } else {
+      current.add(query)
+    }
+    planSearchSelections.value = (reportPlan.value?.searchQueries || []).filter((item) => current.has(item))
   }
 
   function nextPlanStep() {
@@ -1015,6 +1038,7 @@ export function useReportJobs() {
     reportPlan,
     planStepIndex,
     planSelections,
+    planSearchSelections,
     planSupplement,
     planError,
     generatedHtml,
@@ -1049,6 +1073,7 @@ export function useReportJobs() {
     confirmReportPlan,
     cancelReportPlan,
     togglePlanOption,
+    togglePlanSearchQuery,
     nextPlanStep,
     prevPlanStep,
     refreshHealth,

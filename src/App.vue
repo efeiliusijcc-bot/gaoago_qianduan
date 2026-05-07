@@ -23,6 +23,7 @@ const {
   reportPlan,
   planStepIndex,
   planSelections,
+  planSearchSelections,
   planSupplement,
   planError,
   generatedHtml,
@@ -54,6 +55,7 @@ const {
   confirmReportPlan,
   cancelReportPlan,
   togglePlanOption,
+  togglePlanSearchQuery,
   nextPlanStep,
   prevPlanStep,
   refreshHealth,
@@ -159,6 +161,7 @@ function jobActionLabel(status) {
         :reportPlan="reportPlan"
         :planStepIndex="planStepIndex"
         :planSelections="planSelections"
+        :planSearchSelections="planSearchSelections"
         v-model:planSupplement="planSupplement"
         :planError="planError"
         :executionLogs="executionLogs"
@@ -168,6 +171,7 @@ function jobActionLabel(status) {
         @confirm-plan="confirmReportPlan"
         @cancel-plan="cancelReportPlan"
         @toggle-plan-option="togglePlanOption"
+        @toggle-plan-search-query="togglePlanSearchQuery"
         @next-plan-step="nextPlanStep"
         @prev-plan-step="prevPlanStep"
         @list="loadJobList"
