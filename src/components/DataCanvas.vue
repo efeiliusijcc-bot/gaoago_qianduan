@@ -233,6 +233,7 @@ function planStepTypeLabel(type) {
     basic_info_module: '基本信息模块',
     analysis_module: '研判模块',
     output_module: '输出模块',
+    report_section: '编报章节',
   }
   return labels[type] || '编报模块'
 }
@@ -643,7 +644,7 @@ function exportPdf() {
               <div class="font-mono text-[11px] tracking-[0.24em] text-neon-cyan/45 mb-2">
                 STEP {{ planStepIndex + 1 }} / {{ reportPlan.steps.length }} · {{ planStepTypeLabel(currentPlanStep.type) }}
               </div>
-              <h3 class="font-mono text-lg text-neon-cyan">{{ currentPlanStep.title }}</h3>
+              <h3 class="font-mono text-lg text-neon-cyan">{{ currentPlanStep.sectionTitle || currentPlanStep.title }}</h3>
               <p class="text-sm text-slate-300/58 mt-1">{{ currentPlanStep.description }}</p>
             </div>
 

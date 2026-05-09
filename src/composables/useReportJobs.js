@@ -554,18 +554,31 @@ export function useReportJobs() {
       const selectedIds = new Set(planSelections.value[step.id] || [])
       const selected = step.options?.filter((option) => selectedIds.has(option.id)) || []
       if (!selected.length) continue
-      const item = {
+      const selectedOptions = selected.map((option) => ({
+        id: option.id,
+        label: option.label,
+        detail: option.detail || '',
+      }))
+      if (step.type === 'source_scope') {
+        selectedSources.push(...selectedOptions)
+        continue
+      }
+      if (step.type === 'report_section') {
+        selectedModules.push({
+          stepId: step.id,
+          stepType: step.type,
+          sectionKey: step.sectionKey || step.id,
+          sectionTitle: step.sectionTitle || step.title,
+          selectedDirections: selectedOptions,
+        })
+        continue
+      }
+      selectedModules.push({
         stepId: step.id,
         stepType: step.type || 'analysis_module',
         title: step.title,
-        options: selected.map((option) => ({
-          id: option.id,
-          label: option.label,
-          detail: option.detail || '',
-        })),
-      }
-      selectedModules.push(item)
-      if (step.type === 'source_scope') selectedSources.push(...item.options)
+        options: selectedOptions,
+      })
     }
 
     const allowedParams = new Set(REPORT_PARAMETERS[reportType.value] || [])
@@ -593,7 +606,7 @@ export function useReportJobs() {
       supplement: planSupplement.value.trim(),
       instructions: {
         researchPhase: 'Use web-research-firecrawl first for selected queries, selected source scopes, and user-provided sources. Return evidence cards, key findings, verification-needed items, and information gaps as internal material.',
-        writeHbPhase: 'Use write-hb after research to draft the final report according to the selected report type and selected modules.',
+        writeHbPhase: 'Use write-hb after research to draft the final report by sectionTitle. Expand only the selectedDirections under each selected report section.',
         citationPolicy: 'Do not put raw URLs in report body paragraphs; keep full URLs only in the final references section.',
       },
     }
