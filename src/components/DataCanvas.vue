@@ -48,6 +48,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  planSourceInput: {
+    type: String,
+    default: '',
+  },
   planSupplement: {
     type: String,
     default: '',
@@ -73,6 +77,7 @@ const emit = defineEmits([
   'update:contextText',
   'update:parameterValues',
   'update:activeParameters',
+  'update:planSourceInput',
   'update:planSupplement',
   'generate',
   'confirm-plan',
@@ -219,6 +224,17 @@ function isPlanOptionSelected(stepId, optionId) {
 
 function isPlanSearchQuerySelected(query) {
   return (props.planSearchSelections || []).includes(query)
+}
+
+function planStepTypeLabel(type) {
+  const labels = {
+    search_queries: '检索词',
+    source_scope: '信源范围',
+    basic_info_module: '基本信息模块',
+    analysis_module: '研判模块',
+    output_module: '输出模块',
+  }
+  return labels[type] || '编报模块'
 }
 
 function toggleLogDrawer() {
@@ -598,6 +614,17 @@ function exportPdf() {
               </button>
               </div>
             </div>
+
+            <div class="mt-4 rounded-2xl border border-neon-cyan/10 bg-black/12 p-3">
+              <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">指定信源 / URL / 机构</label>
+              <textarea
+                class="sci-textarea text-sm bg-black/15"
+                rows="3"
+                :value="planSourceInput"
+                placeholder="可逐行填写必须检索的网页、机构、媒体、数据库或信源说明；未填写则按规划检索词公开检索。"
+                @input="emit('update:planSourceInput', $event.target.value)"
+              ></textarea>
+            </div>
           </div>
 
           <div class="flex items-center gap-2 mb-5">
@@ -614,7 +641,7 @@ function exportPdf() {
           <div v-if="currentPlanStep">
             <div class="mb-4">
               <div class="font-mono text-[11px] tracking-[0.24em] text-neon-cyan/45 mb-2">
-                STEP {{ planStepIndex + 1 }} / {{ reportPlan.steps.length }}
+                STEP {{ planStepIndex + 1 }} / {{ reportPlan.steps.length }} · {{ planStepTypeLabel(currentPlanStep.type) }}
               </div>
               <h3 class="font-mono text-lg text-neon-cyan">{{ currentPlanStep.title }}</h3>
               <p class="text-sm text-slate-300/58 mt-1">{{ currentPlanStep.description }}</p>

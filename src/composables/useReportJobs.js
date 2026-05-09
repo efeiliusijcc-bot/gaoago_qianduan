@@ -52,6 +52,7 @@ export function useReportJobs() {
   const planStepIndex = ref(0)
   const planSelections = ref({})
   const planSearchSelections = ref([])
+  const planSourceInput = ref('')
   const planSupplement = ref('')
   const planError = ref('')
   const generatedHtml = ref('')
@@ -81,6 +82,7 @@ export function useReportJobs() {
   let jobEventSource = null
   let subscribedJobId = null
   let activeExecutionLogJobId = null
+  let historyOpenRequestId = 0
   const activeWorkspaceSnapshot = ref(null)
   const executionLogsByJobId = new Map()
   const seenExecutionEventsByJobId = new Map()
@@ -519,6 +521,7 @@ export function useReportJobs() {
     planStepIndex.value = 0
     planSelections.value = {}
     planSearchSelections.value = []
+    planSourceInput.value = ''
     planSupplement.value = ''
     planError.value = ''
   }
@@ -542,36 +545,66 @@ export function useReportJobs() {
 
   function buildPlanningContext() {
     const plan = reportPlan.value
-    if (!plan?.steps?.length) return ''
-    const lines = []
-    const selectedQueries = planSearchSelections.value.filter((query) => plan.searchQueries?.includes(query))
-    if (selectedQueries.length) {
-      lines.push('【规划检索词】')
-      for (const query of selectedQueries) {
-        lines.push(`- ${query}`)
-      }
-    }
-    for (const step of plan.steps) {
+    const selectedQueries = plan?.searchQueries?.length
+      ? planSearchSelections.value.filter((query) => plan.searchQueries?.includes(query))
+      : []
+    const selectedModules = []
+    const selectedSources = []
+    for (const step of plan?.steps || []) {
       const selectedIds = new Set(planSelections.value[step.id] || [])
       const selected = step.options?.filter((option) => selectedIds.has(option.id)) || []
       if (!selected.length) continue
-      if (lines.length) lines.push('')
-      lines.push(`【${step.title}】`)
-      for (const option of selected) {
-        lines.push(`- ${option.label}${option.detail ? `：${option.detail}` : ''}`)
+      const item = {
+        stepId: step.id,
+        stepType: step.type || 'analysis_module',
+        title: step.title,
+        options: selected.map((option) => ({
+          id: option.id,
+          label: option.label,
+          detail: option.detail || '',
+        })),
       }
+      selectedModules.push(item)
+      if (step.type === 'source_scope') selectedSources.push(...item.options)
     }
-    if (planSupplement.value.trim()) {
-      if (lines.length) lines.push('')
-      lines.push('【用户补充方向】')
-      lines.push(planSupplement.value.trim())
+
+    const allowedParams = new Set(REPORT_PARAMETERS[reportType.value] || [])
+    const selectedParameterValues = {}
+    for (const [key, value] of Object.entries(parameterValues.value)) {
+      if (allowedParams.has(key) && String(value || '').trim()) selectedParameterValues[key] = String(value).trim()
     }
-    return lines.length ? `【编报规划与用户选择】\n${lines.join('\n')}` : ''
+
+    const userProvidedSources = planSourceInput.value
+      .split(/\r?\n|；|;/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    const context = {
+      version: 1,
+      kind: 'structured_report_context',
+      topic: title.value.trim(),
+      reportType: reportType.value,
+      selectedSearchQueries: selectedQueries,
+      selectedSources,
+      userProvidedSources,
+      selectedModules,
+      parameterValues: selectedParameterValues,
+      freeTextContext: contextText.value.trim(),
+      supplement: planSupplement.value.trim(),
+      instructions: {
+        researchPhase: 'Use web-research-firecrawl first for selected queries, selected source scopes, and user-provided sources. Return evidence cards, key findings, verification-needed items, and information gaps as internal material.',
+        writeHbPhase: 'Use write-hb after research to draft the final report according to the selected report type and selected modules.',
+        citationPolicy: 'Do not put raw URLs in report body paragraphs; keep full URLs only in the final references section.',
+      },
+    }
+
+    return JSON.stringify(context, null, 2)
   }
 
   function buildPayload(extraContext = '') {
     const subject = title.value.trim()
-    const context = buildContext(extraContext ? [extraContext] : []) || subject
+    const isStructuredContext = String(extraContext || '').trim().startsWith('{')
+    const context = isStructuredContext ? String(extraContext).trim() : (buildContext(extraContext ? [extraContext] : []) || subject)
 
     if (reportType.value === 'person-intelligence-report') {
       return {
@@ -903,12 +936,14 @@ export function useReportJobs() {
   }
 
   async function openReportFromList(item) {
+    const requestId = ++historyOpenRequestId
     const keepActiveStream =
       activeWorkspaceSnapshot.value?.job?.jobId &&
       activeWorkspaceSnapshot.value.job.jobId !== item.jobId &&
       isUnfinishedJob(activeWorkspaceSnapshot.value.job)
     if (!keepActiveStream) closeJobEvents()
     await loadExecutionLog(item.jobId)
+    if (requestId !== historyOpenRequestId) return
     selectedReport.value = null
     generatedHtml.value = ''
     errorMessage.value = ''
@@ -917,9 +952,11 @@ export function useReportJobs() {
     loadingStep.value = '正在读取历史报告文件'
     currentView.value = 'generator'
     openedHistoryJobId.value = item.jobId
+    job.value = item
 
     try {
       const result = await fetchReportResult(item.jobId)
+      if (requestId !== historyOpenRequestId || openedHistoryJobId.value !== item.jobId) return
       job.value = { ...item, resultPath: result.resultPath || item.resultPath }
       generatedHtml.value = result.html || ''
       selectedReport.value = { ...job.value, html: generatedHtml.value }
@@ -927,12 +964,14 @@ export function useReportJobs() {
       phase.value = 'done'
       pushLog(`已打开历史报告：${item.jobId}`)
     } catch (error) {
+      if (requestId !== historyOpenRequestId || openedHistoryJobId.value !== item.jobId) return
       errorMessage.value = error instanceof Error ? error.message : String(error)
       phase.value = 'error'
     }
   }
 
   async function monitorJobFromList(item) {
+    historyOpenRequestId += 1
     if (activeWorkspaceSnapshot.value?.job?.jobId === item.jobId) {
       restoreWorkspaceSnapshot()
       return
@@ -1039,6 +1078,7 @@ export function useReportJobs() {
     planStepIndex,
     planSelections,
     planSearchSelections,
+    planSourceInput,
     planSupplement,
     planError,
     generatedHtml,

@@ -24,6 +24,7 @@ const {
   planStepIndex,
   planSelections,
   planSearchSelections,
+  planSourceInput,
   planSupplement,
   planError,
   generatedHtml,
@@ -34,6 +35,7 @@ const {
   health,
   errorMessage,
   filteredJobs,
+  openedHistoryJobId,
   listSearch,
   listTypeFilter,
   listPage,
@@ -88,6 +90,10 @@ const hasGeneratingWorkspace = computed(() => {
   )
 })
 
+const sidebarCurrentJobId = computed(() => {
+  return openedHistoryJobId.value || job.value?.jobId || activeWorkspaceJobId.value
+})
+
 function skillLabel(item) {
   if (item.skill === 'write-hb' && item.payload?.report_type) return item.payload.report_type
   if (item.skill === 'person-intelligence-report') return '人物情报'
@@ -134,7 +140,7 @@ function jobActionLabel(status) {
       <ControlPanel
         :health="health"
         :jobs="filteredJobs"
-        :currentJobId="activeWorkspaceJobId || job?.jobId"
+        :currentJobId="sidebarCurrentJobId"
         @open-job="monitorJobFromList"
         @refresh-health="refreshHealth"
         @refresh-list="loadJobList(false)"
@@ -162,6 +168,7 @@ function jobActionLabel(status) {
         :planStepIndex="planStepIndex"
         :planSelections="planSelections"
         :planSearchSelections="planSearchSelections"
+        v-model:planSourceInput="planSourceInput"
         v-model:planSupplement="planSupplement"
         :planError="planError"
         :executionLogs="executionLogs"
