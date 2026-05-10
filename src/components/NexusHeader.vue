@@ -76,7 +76,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <header class="h-[60px] border-b border-neon-cyan/10 bg-[rgba(4,12,21,0.70)] backdrop-blur-xl flex items-center justify-between px-6">
+  <header class="topbar h-[60px] flex items-center justify-between px-6">
     <div class="flex items-center gap-4">
       <div class="flex flex-col">
         <span class="neon-text font-mono font-bold tracking-wide text-base">
@@ -93,7 +93,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="flex-1 mx-8 h-8 opacity-35">
+    <div class="flex-1 mx-8 h-8 opacity-70">
       <canvas ref="canvasRef" class="w-full h-full"></canvas>
     </div>
 

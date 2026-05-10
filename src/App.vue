@@ -130,7 +130,7 @@ function jobActionLabel(status) {
 </script>
 
 <template>
-  <div class="min-h-screen bg-deep-void grid-bg relative">
+  <div class="app-shell min-h-screen grid-bg relative">
     <div class="crt-overlay"></div>
     <div class="crt-scanline"></div>
 
@@ -212,7 +212,7 @@ function jobActionLabel(status) {
           <div class="relative flex-1">
             <input
               :value="listSearch"
-              class="w-full bg-deep-void/80 border border-neon-cyan/25 rounded-sm px-4 py-3 pr-10 font-mono text-sm text-neon-cyan placeholder:text-neon-cyan/25 focus:border-neon-cyan focus:outline-none focus:shadow-[0_0_18px_rgba(0,245,255,0.16)]"
+              class="sci-input w-full px-4 py-3 pr-10 font-mono text-sm focus:outline-none"
               placeholder="搜索标题 / 任务编号 / 上下文关键词"
               @input="updateListSearch($event.target.value)"
             />
@@ -297,7 +297,7 @@ function jobActionLabel(status) {
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <select
-            class="bg-deep-void border border-neon-cyan/25 px-3 py-2 font-mono text-[10px] text-neon-cyan focus:outline-none focus:border-neon-cyan"
+            class="sci-input px-3 py-2 font-mono text-[10px] focus:outline-none"
             :value="listPageSize"
             @change="updateListPageSize($event.target.value)"
           >

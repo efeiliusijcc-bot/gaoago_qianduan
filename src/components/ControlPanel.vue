@@ -57,8 +57,8 @@ function statusClass(status) {
 </script>
 
 <template>
-  <aside class="w-[312px] shrink-0 border-r border-neon-cyan/10 bg-[rgba(4,12,21,0.72)] backdrop-blur-xl flex flex-col p-4 gap-4">
-    <section class="panel p-5">
+  <aside class="sidebar-shell w-[312px] shrink-0 flex flex-col p-4 gap-4">
+    <section class="panel status-card p-5">
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="font-mono text-sm neon-text tracking-widest">AI引擎状态</h2>
@@ -69,7 +69,7 @@ function statusClass(status) {
 
       <div class="flex items-center gap-4 mb-6">
         <div
-          class="w-14 h-14 rounded-2xl border flex items-center justify-center text-2xl bg-black/20"
+          class="status-orb w-14 h-14 rounded-2xl border flex items-center justify-center text-2xl"
           :class="healthOk ? 'border-neon-green/45 text-neon-green shadow-[0_0_22px_rgba(0,255,136,0.16)]' : !hasHealth ? 'border-cyber-yellow/35 text-cyber-yellow shadow-[0_0_18px_rgba(252,238,10,0.12)]' : 'border-red-300/45 text-red-300 shadow-[0_0_18px_rgba(252,90,122,0.14)]'"
         >
           ✓
@@ -81,11 +81,11 @@ function statusClass(status) {
       </div>
 
       <div class="space-y-2 border-t border-neon-cyan/10 pt-4">
-        <div class="flex items-center justify-between rounded-xl border border-neon-cyan/10 bg-black/18 px-3 py-3">
+        <div class="soft-field flex items-center justify-between px-3 py-3">
           <span class="font-mono text-xs text-slate-300/65">服务连接状态</span>
           <span class="font-mono text-xs" :class="serviceStatus === '正常' ? 'text-neon-green' : serviceStatus === '检测中' ? 'text-cyber-yellow' : 'text-red-300'">{{ serviceStatus }}</span>
         </div>
-        <div class="flex items-center justify-between rounded-xl border border-neon-cyan/10 bg-black/18 px-3 py-3">
+        <div class="soft-field flex items-center justify-between px-3 py-3">
           <span class="font-mono text-xs text-slate-300/65">本地服务引擎</span>
           <span class="font-mono text-xs" :class="localStatus === '正常' ? 'text-neon-green' : localStatus === '检测中' ? 'text-cyber-yellow' : 'text-red-300'">{{ localStatus }}</span>
         </div>
@@ -106,8 +106,8 @@ function statusClass(status) {
           <button
             v-for="item in recentJobs"
             :key="item.jobId"
-            class="w-full text-left rounded-xl border px-3.5 py-3.5 transition-all hover:bg-neon-cyan/[0.07] hover:border-neon-cyan/25 hover:translate-x-0.5"
-            :class="item.jobId === currentJobId ? 'border-neon-cyan/45 bg-neon-cyan/[0.08]' : 'border-neon-cyan/10 bg-black/16'"
+            class="history-item w-full text-left rounded-xl px-3.5 py-3.5 transition-all"
+            :class="{ active: item.jobId === currentJobId }"
             @click="emit('open-job', item)"
           >
             <div class="flex items-center gap-2 min-w-0">

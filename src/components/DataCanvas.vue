@@ -473,8 +473,8 @@ function exportPdf() {
 </script>
 
 <template>
-  <main class="flex-1 flex flex-col overflow-hidden relative">
-    <div class="h-14 border-b border-neon-cyan/10 bg-[rgba(4,12,21,0.58)] backdrop-blur-xl flex items-center justify-between px-5">
+  <main class="data-canvas flex-1 flex flex-col overflow-hidden relative">
+    <div class="workspace-subbar h-14 flex items-center justify-between px-5">
       <div class="flex items-center gap-3">
         <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">
           [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
@@ -519,7 +519,7 @@ function exportPdf() {
 
       <aside
         v-if="showLogDrawer"
-        class="log-drawer-panel absolute right-0 top-14 bottom-0 z-20 w-[420px] max-w-[calc(100%-1rem)] border-l border-neon-cyan/18 bg-deep-void/95 backdrop-blur overflow-hidden flex flex-col shadow-[0_0_40px_rgba(0,229,255,0.09)]"
+        class="log-drawer-panel absolute right-0 top-14 bottom-0 z-20 w-[420px] max-w-[calc(100%-1rem)] border-l backdrop-blur overflow-hidden flex flex-col"
       >
         <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
           <div>
@@ -558,9 +558,9 @@ function exportPdf() {
 
     <div
       v-if="reportPlan || isPlanning || planError"
-      class="absolute inset-0 z-30 flex items-center justify-center bg-deep-void/72 backdrop-blur-sm px-6"
+      class="plan-modal-backdrop absolute inset-0 z-30 flex items-center justify-center backdrop-blur-sm px-6"
     >
-      <section class="w-full max-w-4xl rounded-[24px] border border-neon-cyan/25 bg-[rgba(5,16,26,0.96)] shadow-[0_24px_90px_rgba(0,0,0,0.48),0_0_42px_rgba(0,243,255,0.12)] overflow-hidden">
+      <section class="plan-modal-panel w-full max-w-4xl rounded-[24px] border overflow-hidden">
         <div class="px-6 py-5 border-b border-neon-cyan/12 flex items-start justify-between gap-4">
           <div>
             <div class="font-mono text-[11px] tracking-[0.28em] text-neon-cyan/50 mb-2">PLAN MODE</div>
@@ -731,8 +731,8 @@ function exportPdf() {
             <button
               v-for="type in reportTypeOptions"
               :key="type.value"
-              class="relative min-h-[138px] rounded-2xl border px-5 py-6 transition-all duration-200 hover:-translate-y-1 hover:border-neon-cyan/38 hover:bg-neon-cyan/[0.055]"
-              :class="reportType === type.value ? 'border-neon-cyan/70 bg-neon-cyan/[0.085] shadow-[0_18px_44px_rgba(0,0,0,0.22),0_0_28px_rgba(0,243,255,0.13)]' : 'border-neon-cyan/13 bg-[rgba(6,18,30,0.62)]'"
+              class="report-type-card relative min-h-[138px] px-5 py-6 transition-all duration-200"
+              :class="{ active: reportType === type.value }"
               type="button"
               @click="selectReportType(type.value)"
             >
@@ -749,14 +749,14 @@ function exportPdf() {
             </button>
           </div>
 
-          <div class="mx-auto text-left rounded-[22px] border border-neon-cyan/24 bg-[rgba(5,16,26,0.84)] p-5 md:p-6 shadow-[0_26px_80px_rgba(0,0,0,0.34),0_0_34px_rgba(0,243,255,0.09)] backdrop-blur-xl">
-            <div class="rounded-[18px] border border-neon-cyan/13 bg-black/18 p-5 md:p-6">
+          <div class="input-panel mx-auto text-left p-5 md:p-6">
+            <div class="input-title-shell p-5 md:p-6">
               <div class="flex items-center justify-between gap-4 mb-4">
                 <label class="block font-mono text-[11px] tracking-widest text-neon-cyan/62">报告标题</label>
                 <span class="font-mono text-[10px] text-neon-cyan/38">{{ titleLength }}/200</span>
               </div>
               <textarea
-                class="w-full min-h-[132px] resize-none bg-transparent border-none outline-none font-mono text-[17px] leading-8 text-slate-100 placeholder:text-slate-500/70"
+                class="title-input w-full min-h-[132px] resize-none bg-transparent border-none outline-none font-mono text-[17px] leading-8 placeholder:text-slate-500/70"
                 :value="title"
                 maxlength="200"
                 @input="emit('update:title', $event.target.value)"
@@ -774,10 +774,8 @@ function exportPdf() {
                 <button
                   v-for="param in selectedReportType.params"
                   :key="param"
-                  class="rounded-full border px-3.5 py-2 font-mono text-[11px] transition-all"
-                  :class="isParameterActive(param)
-                    ? 'border-neon-green/42 bg-neon-green/[0.075] text-neon-green shadow-[0_0_14px_rgba(0,255,159,0.08)]'
-                    : 'border-neon-cyan/18 bg-neon-cyan/[0.035] text-neon-cyan/72 hover:border-neon-cyan/34 hover:bg-neon-cyan/[0.07]'"
+                  class="param-chip px-3.5 py-2 font-mono text-[11px] transition-all"
+                  :class="{ active: isParameterActive(param) }"
                   type="button"
                   @click="toggleParameter(param)"
                 >
@@ -787,24 +785,24 @@ function exportPdf() {
 
               <div
                 v-if="activeSelectedParameters.length"
-                class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4 rounded-2xl border border-neon-cyan/10 bg-black/10 p-3"
+                class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4 rounded-2xl border border-neon-cyan/10 p-3"
               >
                 <label
                   v-for="param in activeSelectedParameters"
                   :key="param"
-                  class="rounded-2xl border border-neon-cyan/10 bg-black/16 p-3"
+                  class="soft-field p-3"
                 >
                   <span class="block font-mono text-[10px] tracking-widest text-neon-cyan/60 mb-2">{{ param }}</span>
                   <input
                     v-if="parameterInputType(param) === 'input'"
-                    class="sci-input text-sm bg-black/25"
+                    class="sci-input text-sm"
                     :value="parameterValues[param] || ''"
                     :placeholder="parameterPlaceholder(param)"
                     @input="updateParameterValue(param, $event.target.value)"
                   />
                   <textarea
                     v-else
-                    class="sci-textarea text-sm bg-black/25"
+                    class="sci-textarea text-sm"
                     rows="3"
                     :value="parameterValues[param] || ''"
                     :placeholder="parameterPlaceholder(param)"
@@ -813,7 +811,7 @@ function exportPdf() {
                 </label>
               </div>
 
-              <div class="rounded-2xl border border-neon-cyan/10 bg-black/12 p-3">
+              <div class="soft-field p-3">
                 <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">综合补充说明</label>
                 <textarea
                   ref="contextTextRef"
@@ -821,19 +819,19 @@ function exportPdf() {
                   @input="emit('update:contextText', $event.target.value)"
                   placeholder="可继续补充自由文本、特殊要求、口径限制或已有材料..."
                   rows="4"
-                  class="sci-textarea text-sm bg-black/15"
+                  class="sci-textarea text-sm"
                 ></textarea>
               </div>
             </div>
 
-            <div v-else class="mt-5 rounded-2xl border border-neon-cyan/10 bg-black/12 px-4 py-5 text-center font-mono text-xs text-neon-cyan/42">
+            <div v-else class="soft-field mt-5 px-4 py-5 text-center font-mono text-xs text-neon-cyan/42">
               选择一个编报类型后，可填写对应的背景、方向、时间、地区对象和上下文参数。
             </div>
 
             <div class="mt-5 flex items-center justify-between gap-4">
               <div class="font-mono text-[10px] text-neon-cyan/30">AI 生成内容仅供参考，请结合专业判断使用</div>
               <button
-                class="w-12 h-12 shrink-0 rounded-full bg-neon-cyan/90 text-deep-void font-mono text-xl shadow-[0_10px_26px_rgba(0,0,0,0.28),0_0_22px_rgba(0,243,255,0.16)] transition-all hover:-translate-y-0.5 hover:bg-neon-cyan disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                class="generate-btn shrink-0 font-mono text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 type="button"
                 :disabled="!canGenerate"
                 :title="isPlanning ? '正在生成编报规划' : !reportType ? '请先选择编报类型' : !title?.trim() ? '请输入报告标题' : '生成编报规划'"
