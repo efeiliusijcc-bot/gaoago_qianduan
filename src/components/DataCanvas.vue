@@ -128,7 +128,7 @@ const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '
 const reportTypeOptions = [
   {
     value: 'write-hb-k',
-    label: 'K报编写',
+    label: 'K报告编写',
     icon: '▤',
     desc: '三段式现场调研报告：基本情况、涉我风险、对策建议',
     params: ['背景信息', '关注方向', '时间范围', '地区 / 对象', '已知上下文'],
@@ -136,7 +136,7 @@ const reportTypeOptions = [
   },
   {
     value: 'write-hb-hb',
-    label: 'HB报编写',
+    label: 'HE报告编写',
     icon: '◇',
     desc: '综合汇编类报告：背景脉络、关键动态、风险判断、后续建议',
     params: ['背景信息', '关注方向', '材料范围', '地区 / 对象', '已知上下文'],
@@ -144,7 +144,7 @@ const reportTypeOptions = [
   },
   {
     value: 'risk-assessment-reports',
-    label: '风险报',
+    label: '风险报告编写',
     icon: '◎',
     desc: '风险评估报告：场景设定、风险识别、趋势研判、处置建议',
     params: ['风险场景', '研判方向', '时间范围', '地区 / 对象', '已知上下文'],
@@ -152,7 +152,7 @@ const reportTypeOptions = [
   },
   {
     value: 'person-intelligence-report',
-    label: '人物报',
+    label: '人文报告编写',
     icon: '▣',
     desc: '人物情报报告：基本情况、政治立场、风险点、接待建议',
     params: ['人物背景', '国家 / 地区', '当前职务', '来访场景', '已知上下文'],
@@ -722,7 +722,7 @@ function exportPdf() {
     <div ref="reportRef" class="flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
         <section class="w-full max-w-[1080px] text-center">
-          <h1 class="font-mono text-[34px] leading-tight neon-text tracking-wide mb-4">开始新的编报任务</h1>
+          <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-slate-900">开始新的报告任务</h1>
           <p class="font-mono text-sm text-slate-300/55 mb-12">
             请先选择编报类型，再输入标题，并补充关键参数信息，以便 AI 为您生成更精准的编报内容。
           </p>
