@@ -475,7 +475,7 @@ function exportPdf() {
 <template>
   <main class="data-canvas flex-1 flex flex-col overflow-hidden relative">
     <div class="workspace-subbar h-14 flex items-center justify-between px-5">
-      <div class="flex items-center gap-3">
+      <div class="workspace-meta flex items-center gap-3">
         <span class="font-mono text-[10px] tracking-widest text-neon-cyan/60">
           [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
         </span>
@@ -487,7 +487,7 @@ function exportPdf() {
         </span>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="workspace-actions flex items-center gap-2">
         <button
           @click="toggleLogDrawer"
           :disabled="!canOpenLogDrawer"
@@ -719,19 +719,19 @@ function exportPdf() {
       </section>
     </div>
 
-    <div ref="reportRef" class="flex-1 overflow-auto px-8 py-7">
+    <div ref="reportRef" class="main-scroll flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
-        <section class="w-full max-w-[1080px] text-center">
+        <section class="main-content w-full text-center">
           <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-slate-900">开始新的报告任务</h1>
           <p class="font-mono text-sm text-slate-300/55 mb-12">
             请先选择编报类型，再输入标题，并补充关键参数信息，以便 AI 为您生成更精准的编报内容。
           </p>
 
-          <div class="grid grid-cols-4 gap-5 mb-9">
+          <div class="report-type-grid mb-9">
             <button
               v-for="type in reportTypeOptions"
               :key="type.value"
-              class="report-type-card relative min-h-[138px] px-5 py-6 transition-all duration-200"
+              class="report-type-card relative px-5 py-6 transition-all duration-200"
               :class="{ active: reportType === type.value }"
               type="button"
               @click="selectReportType(type.value)"
@@ -756,7 +756,7 @@ function exportPdf() {
                 <span class="font-mono text-[10px] text-neon-cyan/38">{{ titleLength }}/200</span>
               </div>
               <textarea
-                class="title-input w-full min-h-[132px] resize-none bg-transparent border-none outline-none font-mono text-[17px] leading-8 placeholder:text-slate-500/70"
+                class="title-input w-full resize-y bg-transparent border-none outline-none font-mono text-[17px] leading-8 placeholder:text-slate-500/70"
                 :value="title"
                 maxlength="200"
                 @input="emit('update:title', $event.target.value)"

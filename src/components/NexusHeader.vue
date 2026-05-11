@@ -76,8 +76,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <header class="topbar h-[60px] flex items-center justify-between px-6">
-    <div class="flex items-center gap-4">
+  <header class="topbar flex items-center justify-between px-6">
+    <div class="header-brand flex items-center gap-4">
       <div class="flex flex-col">
         <span class="neon-text font-mono font-bold tracking-wide text-base">
           AI深度编报
@@ -93,11 +93,11 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="flex-1 mx-8 h-8 opacity-70">
+    <div class="header-tech-line flex-1 mx-8 h-8 opacity-70">
       <canvas ref="canvasRef" class="w-full h-full"></canvas>
     </div>
 
-    <div class="flex flex-col items-end">
+    <div class="header-time flex flex-col items-end">
       <span class="font-mono text-[8px] text-neon-cyan/30 tracking-widest mb-1">系统时间</span>
       <span class="font-mono text-xs text-neon-cyan/78 tracking-wider">{{ currentTime }}</span>
     </div>

@@ -136,7 +136,7 @@ function jobActionLabel(status) {
 
     <NexusHeader />
 
-    <div v-if="currentView === 'generator'" class="flex h-[calc(100vh-60px)]">
+    <div v-if="currentView === 'generator'" class="app-body">
       <ControlPanel
         :health="health"
         :jobs="filteredJobs"
