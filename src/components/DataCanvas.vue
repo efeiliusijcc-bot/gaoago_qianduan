@@ -139,7 +139,7 @@ const reportTypeOptions = [
   },
   {
     value: 'write-hb-hb',
-    label: 'HE报告编写',
+    label: 'HB报告编写',
     icon: '◇',
     desc: '综合汇编类报告：背景脉络、关键动态、风险判断、后续建议',
     params: ['背景信息', '关注方向', '材料范围', '地区 / 对象', '已知上下文'],
