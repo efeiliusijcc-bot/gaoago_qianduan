@@ -276,6 +276,140 @@ body {
   animation: liveLogIn 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.friendly-log-card {
+  position: relative;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  padding: 14px;
+  color: var(--text-main);
+}
+
+.friendly-log-main {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.friendly-log-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--blue);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+}
+
+.friendly-log-stage {
+  margin-bottom: 4px;
+  color: rgba(37, 99, 235, 0.72);
+  font-family: 'Fira Code', 'Microsoft YaHei', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.friendly-log-title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.friendly-log-description {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+.friendly-log-time {
+  color: rgba(100, 116, 139, 0.78);
+  font-family: 'Fira Code', 'Microsoft YaHei', monospace;
+  font-size: 10px;
+}
+
+.friendly-log-status {
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  padding: 2px 7px;
+  font-family: 'Fira Code', 'Microsoft YaHei', monospace;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.friendly-log-toggle {
+  margin-top: 10px;
+  color: var(--blue);
+  font-family: 'Fira Code', 'Microsoft YaHei', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.friendly-log-toggle:hover {
+  color: var(--cyan-dark);
+}
+
+.friendly-log-raw {
+  margin-top: 10px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
+  color: #334155;
+  padding: 10px;
+  font-family: 'Fira Code', Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.log-entry-running {
+  border-color: rgba(37, 99, 235, 0.26);
+}
+
+.log-entry-running .friendly-log-dot {
+  background: var(--blue);
+}
+
+.log-entry-running .friendly-log-status {
+  color: var(--blue);
+}
+
+.log-entry-done {
+  border-color: rgba(22, 163, 74, 0.24);
+}
+
+.log-entry-done .friendly-log-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.08);
+}
+
+.log-entry-done .friendly-log-status {
+  color: var(--green);
+}
+
+.log-entry-error {
+  border-color: rgba(239, 68, 68, 0.26);
+}
+
+.log-entry-error .friendly-log-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.08);
+}
+
+.log-entry-error .friendly-log-status {
+  color: var(--red);
+}
+
 @keyframes logDrawerIn {
   from {
     transform: translateX(28px);
@@ -478,7 +612,12 @@ body {
   --red: #dc4967;
   --text-main: #0f172a;
   --text-sub: #64748b;
-  --text-muted: rgba(71, 85, 105, 0.68);
+  --text-muted: #64748b;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-faint: #94a3b8;
+  --accent-blue: #0ea5e9;
+  --accent-green: #16a34a;
   --border: rgba(148, 163, 184, 0.34);
   --border-soft: rgba(148, 163, 184, 0.22);
   --shadow-soft: 0 18px 46px rgba(15, 23, 42, 0.07);
@@ -636,7 +775,7 @@ canvas {
 
 .sci-btn:disabled {
   opacity: 0.42;
-  color: rgba(71, 85, 105, 0.55);
+  color: #94a3b8;
 }
 
 .sci-input,
@@ -650,7 +789,7 @@ canvas {
 
 .sci-input::placeholder,
 .sci-textarea::placeholder {
-  color: rgba(100, 116, 139, 0.68);
+  color: #94a3b8;
 }
 
 .sci-input:focus,
@@ -1044,7 +1183,7 @@ canvas {
 
 .app-shell .text-neon-cyan,
 .app-shell [class*="text-neon-cyan"] {
-  color: var(--cyan-dark) !important;
+  color: var(--text-secondary) !important;
 }
 
 .app-shell .text-neon-green,
@@ -1072,7 +1211,7 @@ canvas {
 }
 
 .report-html {
-  color: rgba(23, 32, 51, 0.86);
+  color: #0f172a;
 }
 
 .report-html h1,

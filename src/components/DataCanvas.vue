@@ -91,6 +91,9 @@ const reportRef = ref(null)
 const drawerLogListRef = ref(null)
 const liveLogListRef = ref(null)
 const contextTextRef = ref(null)
+const technicalLogOpenIds = ref(new Set())
+const liveLogShouldStick = ref(true)
+const drawerLogShouldStick = ref(true)
 let liveLogScrollTimer = null
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
@@ -258,6 +261,161 @@ function logStatusClass(status) {
   return 'text-neon-cyan border-neon-cyan/25 bg-neon-cyan/5'
 }
 
+function buildRawLogText(log) {
+  return [log?.label, log?.summary, log?.command]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function extractQuery(rawLog) {
+  const text = rawLog || ''
+  const quoted = text.match(/--query\s+["']([^"']+)["']/i)
+  if (quoted?.[1]) return quoted[1].trim()
+  const plain = text.match(/--query\s+([^\n\r]+)/i)
+  if (!plain?.[1]) return ''
+  return plain[1].replace(/\s+--\S+.*$/, '').trim()
+}
+
+function translateOpenClawLog(log) {
+  const rawLog = buildRawLogText(log)
+  const lower = rawLog.toLowerCase()
+  const status = log?.status === 'failed' || log?.status === 'error'
+    ? 'error'
+    : log?.status === 'completed' || log?.status === 'succeeded' || log?.type === 'done'
+      ? 'done'
+      : 'running'
+
+  const base = {
+    time: log?.time || '',
+    stage: 'RUNNING',
+    title: '正在推进编报任务',
+    description: '系统正在执行当前编报步骤。',
+    raw: rawLog,
+    status,
+  }
+
+  if (lower.includes('error') || lower.includes('failed') || lower.includes('timeout')) {
+    return {
+      ...base,
+      stage: 'ERROR',
+      title: '任务执行出现异常',
+      description: '系统执行过程中出现异常，请查看技术详情或重试。',
+      status: 'error',
+    }
+  }
+
+  if (lower.includes('succeeded')) {
+    return {
+      ...base,
+      stage: 'COMPLETED',
+      title: '编报任务已完成',
+      description: '报告已生成，可查看或导出。',
+      status: 'done',
+    }
+  }
+
+  if (lower.includes('preparing openclaw gateway')) {
+    return {
+      ...base,
+      stage: 'CONNECTING',
+      title: '正在连接 AI 编报引擎',
+      description: '系统正在与后端 Agent 建立任务通道。',
+    }
+  }
+
+  if (lower.includes('running openclaw report-agent')) {
+    return {
+      ...base,
+      stage: 'AGENT_START',
+      title: 'AI 编报助手已启动',
+      description: '任务已进入 Agent 执行流程。',
+    }
+  }
+
+  if (lower.includes('planner') || lower.includes('planning') || lower.includes('decomposition')) {
+    return {
+      ...base,
+      stage: 'PLANNING',
+      title: '正在拆解编报任务',
+      description: 'AI 正在分析主题，并拆解调研方向。',
+    }
+  }
+
+  if (lower.includes('research_cli.py brief') || lower.includes('search') || lower.includes('firecrawl') || lower.includes('tavily')) {
+    const query = extractQuery(rawLog)
+    return {
+      ...base,
+      stage: 'SEARCHING',
+      title: '正在检索相关资料',
+      description: query
+        ? `检索主题：${query}`
+        : '系统正在检索与当前主题相关的公开资料、新闻和政策信息。',
+    }
+  }
+
+  if (lower.includes('extract') || lower.includes('crawl') || lower.includes('scrape')) {
+    return {
+      ...base,
+      stage: 'EXTRACTING',
+      title: '正在提取网页正文',
+      description: '系统正在读取重点来源内容，提取可用于编报的事实材料。',
+    }
+  }
+
+  if (lower.includes('synthesizer') || lower.includes('synthesize') || lower.includes('analysis')) {
+    return {
+      ...base,
+      stage: 'ANALYZING',
+      title: '正在整合研判材料',
+      description: 'AI 正在对检索材料进行归纳、筛选和交叉分析。',
+    }
+  }
+
+  if (lower.includes('command completed')) {
+    return {
+      ...base,
+      stage: 'STEP_DONE',
+      title: '当前步骤已完成',
+      description: '一个执行步骤已完成，系统正在进入下一阶段。',
+      status: 'done',
+    }
+  }
+
+  if (lower.includes('write') || lower.includes('report_file')) {
+    return {
+      ...base,
+      stage: 'SAVING',
+      title: '正在生成报告文件',
+      description: '报告正文已生成，正在保存为文件。',
+    }
+  }
+
+  return base
+}
+
+function friendlyLogStatusClass(status) {
+  if (status === 'error') return 'log-entry-error'
+  if (status === 'done') return 'log-entry-done'
+  return 'log-entry-running'
+}
+
+function friendlyLogStatusLabel(status) {
+  if (status === 'error') return 'error'
+  if (status === 'done') return 'done'
+  return 'running'
+}
+
+function isTechnicalLogOpen(id) {
+  return technicalLogOpenIds.value.has(id)
+}
+
+function toggleTechnicalLog(id) {
+  const next = new Set(technicalLogOpenIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  technicalLogOpenIds.value = next
+}
+
 function scrollToBottom() {
   nextTick(() => {
     if (reportRef.value) {
@@ -277,7 +435,8 @@ function scrollToTop() {
 function scrollLogsToBottom() {
   nextTick(() => {
     const target = isLiveLogVisible.value ? liveLogListRef.value : drawerLogListRef.value
-    if (target) {
+    const shouldStick = isLiveLogVisible.value ? liveLogShouldStick.value : drawerLogShouldStick.value
+    if (target && shouldStick) {
       target.scrollTop = target.scrollHeight
     }
   })
@@ -285,7 +444,7 @@ function scrollLogsToBottom() {
 
 function scrollLiveLogsToBottom() {
   nextTick(() => {
-    if (liveLogListRef.value) {
+    if (liveLogListRef.value && liveLogShouldStick.value) {
       liveLogListRef.value.scrollTop = liveLogListRef.value.scrollHeight
     }
   })
@@ -300,6 +459,14 @@ function setLiveLogAutoScroll(enabled) {
     scrollLiveLogsToBottom()
     liveLogScrollTimer = setInterval(scrollLiveLogsToBottom, 700)
   }
+}
+
+function handleLogScroll(kind, event) {
+  const target = event.currentTarget
+  if (!target) return
+  const nearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 80
+  if (kind === 'live') liveLogShouldStick.value = nearBottom
+  else drawerLogShouldStick.value = nearBottom
 }
 
 function handleGeneratedHtmlChange() {
@@ -529,7 +696,7 @@ function exportPdf() {
           <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
         </div>
 
-        <div ref="drawerLogListRef" class="flex-1 overflow-auto p-4 space-y-3">
+        <div ref="drawerLogListRef" class="flex-1 overflow-auto p-4 space-y-3" @scroll="handleLogScroll('drawer', $event)">
           <div v-if="!executionLogs.length" class="h-full flex items-center justify-center text-center">
             <div>
               <div class="font-mono text-3xl text-neon-cyan/15 mb-3">LOGS</div>
@@ -540,17 +707,33 @@ function exportPdf() {
           <div
             v-for="log in executionLogs"
             :key="log.id"
-            class="border rounded p-3 bg-black/25"
-            :class="logStatusClass(log.status)"
+            class="friendly-log-card"
+            :class="friendlyLogStatusClass(translateOpenClawLog(log).status)"
           >
-            <div class="flex items-center justify-between gap-3 mb-2">
-              <div class="font-mono text-[10px] tracking-widest text-current/80">{{ logTypeLabel(log.type) }}</div>
-              <div class="font-mono text-[10px] text-current/55">{{ log.time }}</div>
-            </div>
-            <div class="font-mono text-xs text-current font-bold mb-1">{{ log.label }}</div>
-            <div class="text-xs leading-relaxed text-slate-200/85">{{ log.summary }}</div>
-            <div v-if="log.command" class="mt-2 font-mono text-[10px] text-neon-cyan/40 truncate">
-              {{ log.command }}
+            <div class="friendly-log-main">
+              <div class="friendly-log-dot"></div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
+                    <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <span class="friendly-log-time">{{ translateOpenClawLog(log).time }}</span>
+                    <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog(log).status) }}</span>
+                  </div>
+                </div>
+                <div class="friendly-log-description">{{ translateOpenClawLog(log).description }}</div>
+                <button
+                  v-if="translateOpenClawLog(log).raw"
+                  type="button"
+                  class="friendly-log-toggle"
+                  @click="toggleTechnicalLog(log.id)"
+                >
+                  {{ isTechnicalLogOpen(log.id) ? '收起技术详情' : '查看技术详情' }}
+                </button>
+                <pre v-if="isTechnicalLogOpen(log.id)" class="friendly-log-raw">{{ translateOpenClawLog(log).raw }}</pre>
+              </div>
             </div>
           </div>
         </div>
@@ -849,28 +1032,71 @@ function exportPdf() {
                 </div>
               </div>
 
-              <div ref="liveLogListRef" class="max-h-72 overflow-auto p-4 space-y-3">
+              <div ref="liveLogListRef" class="max-h-72 overflow-auto p-4 space-y-3" @scroll="handleLogScroll('live', $event)">
                 <div v-if="executionLogs.length">
                   <div
                     v-for="log in executionLogs"
                     :key="log.id"
-                    class="border rounded p-3 bg-black/25 mb-3"
-                    :class="logStatusClass(log.status)"
+                    class="friendly-log-card mb-3"
+                    :class="friendlyLogStatusClass(translateOpenClawLog(log).status)"
                   >
-                    <div class="flex items-center justify-between gap-3 mb-2">
-                      <div class="font-mono text-[10px] tracking-widest text-current/80">{{ logTypeLabel(log.type) }}</div>
-                      <div class="font-mono text-[10px] text-current/55">{{ log.time }}</div>
-                    </div>
-                    <div class="font-mono text-xs text-current font-bold mb-1">{{ log.label }}</div>
-                    <div class="text-xs leading-relaxed text-slate-200/85">{{ log.summary }}</div>
-                    <div v-if="log.command" class="mt-2 font-mono text-[10px] text-neon-cyan/40 truncate">
-                      {{ log.command }}
+                    <div class="friendly-log-main">
+                      <div class="friendly-log-dot"></div>
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-start justify-between gap-3">
+                          <div>
+                            <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
+                            <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
+                          </div>
+                          <div class="flex shrink-0 items-center gap-2">
+                            <span class="friendly-log-time">{{ translateOpenClawLog(log).time }}</span>
+                            <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog(log).status) }}</span>
+                          </div>
+                        </div>
+                        <div class="friendly-log-description">{{ translateOpenClawLog(log).description }}</div>
+                        <button
+                          v-if="translateOpenClawLog(log).raw"
+                          type="button"
+                          class="friendly-log-toggle"
+                          @click="toggleTechnicalLog(log.id)"
+                        >
+                          {{ isTechnicalLogOpen(log.id) ? '收起技术详情' : '查看技术详情' }}
+                        </button>
+                        <pre v-if="isTechnicalLogOpen(log.id)" class="friendly-log-raw">{{ translateOpenClawLog(log).raw }}</pre>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div v-else class="font-mono text-[11px] space-y-1">
-                  <div v-for="(log, i) in processLogs" :key="i" class="text-neon-green/80">{{ log }}</div>
+                <div v-else class="space-y-3">
+                  <div
+                    v-for="(log, i) in processLogs"
+                    :key="i"
+                    class="friendly-log-card"
+                    :class="friendlyLogStatusClass(translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).status)"
+                  >
+                    <div class="friendly-log-main">
+                      <div class="friendly-log-dot"></div>
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-start justify-between gap-3">
+                          <div>
+                            <div class="friendly-log-stage">{{ translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).stage }}</div>
+                            <div class="friendly-log-title">{{ translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).title }}</div>
+                          </div>
+                          <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).status) }}</span>
+                        </div>
+                        <div class="friendly-log-description">{{ translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).description }}</div>
+                        <button
+                          type="button"
+                          class="friendly-log-toggle"
+                          @click="toggleTechnicalLog(`process-${i}`)"
+                        >
+                          {{ isTechnicalLogOpen(`process-${i}`) ? '收起技术详情' : '查看技术详情' }}
+                        </button>
+                        <pre v-if="isTechnicalLogOpen(`process-${i}`)" class="friendly-log-raw">{{ log }}</pre>
+                      </div>
+                    </div>
+                  </div>
                   <div v-if="!processLogs.length" class="text-neon-cyan/45">等待 OpenClaw 返回执行日志...</div>
                   <span class="typing-cursor"></span>
                 </div>
