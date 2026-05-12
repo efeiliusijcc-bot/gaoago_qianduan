@@ -23,7 +23,7 @@ const barHeights = new Float32Array(barCount)
 const targetHeights = new Float32Array(barCount)
 
 for (let i = 0; i < barCount; i++) {
-  barHeights[i] = Math.random() * 20 + 5
+  barHeights[i] = Math.random() * 28 + 8
   targetHeights[i] = barHeights[i]
 }
 
@@ -50,14 +50,24 @@ function drawWave() {
     barHeights[i] += (targetHeights[i] - barHeights[i]) * 0.15
 
     if (Math.random() < 0.08) {
-      targetHeights[i] = Math.random() * 25 + 5
+      targetHeights[i] = Math.random() * 30 + 8
     }
 
     const x = i * (barWidth + gap)
     const y = rect.height - barHeights[i]
+    const h = barHeights[i]
 
-    ctx.fillStyle = 'rgba(0, 243, 255, 0.32)'
-    ctx.fillRect(x, y, barWidth, barHeights[i])
+    // Base layer: blue-sky bars
+    const alpha = 0.25 + (h / 38) * 0.45
+    ctx.fillStyle = `rgba(14, 165, 233, ${alpha.toFixed(2)})`
+    ctx.fillRect(x, y, barWidth, h)
+
+    // Highlight layer: brighter tip on taller bars
+    if (h > 20) {
+      const tipH = Math.min(h * 0.35, 12)
+      ctx.fillStyle = 'rgba(0, 200, 220, 0.55)'
+      ctx.fillRect(x, y, barWidth, tipH)
+    }
   }
 
   animFrameId = requestAnimationFrame(drawWave)
@@ -83,7 +93,7 @@ onUnmounted(() => {
       </span>
     </div>
 
-    <div class="header-tech-line flex-1 mx-8 h-8 opacity-70">
+    <div class="header-tech-line flex-1 mx-8 h-10">
       <canvas ref="canvasRef" class="w-full h-full"></canvas>
     </div>
 
