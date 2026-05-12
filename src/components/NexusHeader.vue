@@ -82,7 +82,7 @@ onUnmounted(() => {
         <span class="neon-text font-mono font-bold tracking-wide text-base">
           AI深度编报
         </span>
-        <span class="font-mono text-[9px] text-neon-cyan/35 tracking-[0.18em]">
+        <span class="font-mono text-[9px] text-slate-500 tracking-[0.18em]">
           // 智能研判工作台 · v4.2.1
         </span>
       </div>
@@ -98,8 +98,8 @@ onUnmounted(() => {
     </div>
 
     <div class="header-time flex flex-col items-end">
-      <span class="font-mono text-[8px] text-neon-cyan/30 tracking-widest mb-1">系统时间</span>
-      <span class="font-mono text-xs text-neon-cyan/78 tracking-wider">{{ currentTime }}</span>
+      <span class="font-mono text-[8px] text-slate-400 tracking-widest mb-1">系统时间</span>
+      <span class="font-mono text-xs text-slate-700 tracking-wider">{{ currentTime }}</span>
     </div>
   </header>
 </template>
