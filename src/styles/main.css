@@ -820,6 +820,70 @@ canvas {
   box-shadow: 0 14px 30px rgba(37, 99, 235, 0.10);
 }
 
+.recent-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recent-header {
+  flex-shrink: 0;
+}
+
+.recent-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.recent-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.recent-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.recent-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+}
+
+.recent-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 99, 235, 0.45);
+}
+
+.recent-title {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.recent-time {
+  color: #64748b;
+}
+
+.recent-load-state {
+  padding: 12px 0;
+  text-align: center;
+  color: #64748b;
+  font-size: 12px;
+  font-family: 'Fira Code', 'Microsoft YaHei', monospace;
+}
+
+.recent-load-retry {
+  color: var(--blue);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+.recent-load-retry:hover {
+  color: var(--cyan-dark);
+}
+
 .workspace-subbar {
   background: rgba(255, 255, 255, 0.76) !important;
   backdrop-filter: blur(14px);

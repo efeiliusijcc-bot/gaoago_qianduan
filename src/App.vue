@@ -32,6 +32,10 @@ const {
   processLogs,
   loadingStep,
   job,
+  recentJobs,
+  recentLoadingMore,
+  recentHasMore,
+  recentLoadError,
   health,
   errorMessage,
   filteredJobs,
@@ -61,6 +65,8 @@ const {
   nextPlanStep,
   prevPlanStep,
   refreshHealth,
+  refreshRecentReports,
+  loadMoreRecentReports,
   loadJobList,
   updateListSearch,
   updateListTypeFilter,
@@ -140,10 +146,15 @@ function jobActionLabel(status) {
       <ControlPanel
         :health="health"
         :jobs="filteredJobs"
+        :recentJobs="recentJobs"
+        :recentLoadingMore="recentLoadingMore"
+        :recentHasMore="recentHasMore"
+        :recentLoadError="recentLoadError"
         :currentJobId="sidebarCurrentJobId"
         @open-job="monitorJobFromList"
         @refresh-health="refreshHealth"
-        @refresh-list="loadJobList(false)"
+        @refresh-list="refreshRecentReports"
+        @load-more-recent="loadMoreRecentReports"
       />
 
       <DataCanvas

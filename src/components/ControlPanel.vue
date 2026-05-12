@@ -7,10 +7,20 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  recentJobs: {
+    type: Array,
+    default: () => [],
+  },
+  recentLoadingMore: Boolean,
+  recentHasMore: {
+    type: Boolean,
+    default: true,
+  },
+  recentLoadError: String,
   currentJobId: String,
 })
 
-const emit = defineEmits(['open-job', 'refresh-health', 'refresh-list'])
+const emit = defineEmits(['open-job', 'refresh-health', 'refresh-list', 'load-more-recent'])
 
 const hasHealth = computed(() => Boolean(props.health))
 const healthOk = computed(() => Boolean(props.health?.ok))
@@ -30,7 +40,7 @@ const localStatus = computed(() => {
   if (!hasHealth.value) return '检测中'
   return props.health?.checks?.localProbe ? '正常' : '异常'
 })
-const recentJobs = computed(() => props.jobs)
+const recentJobs = computed(() => props.recentJobs.length ? props.recentJobs : props.jobs)
 
 function jobTitle(item) {
   return item.displayTitle || item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId
@@ -53,6 +63,14 @@ function statusClass(status) {
   if (status === 'succeeded') return 'bg-neon-green shadow-[0_0_8px_rgba(0,255,136,0.38)]'
   if (status === 'failed' || status === 'cancelled') return 'bg-red-300 shadow-[0_0_8px_rgba(252,90,122,0.35)]'
   return 'bg-cyber-yellow shadow-[0_0_8px_rgba(252,238,10,0.32)]'
+}
+
+function handleRecentScroll(event) {
+  const target = event.currentTarget
+  if (!target || props.recentLoadingMore || props.recentLoadError || !props.recentHasMore) return
+  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 80) {
+    emit('load-more-recent')
+  }
 }
 </script>
 
@@ -92,39 +110,50 @@ function statusClass(status) {
       </div>
     </section>
 
-    <section class="panel flex-1 min-h-0 flex flex-col">
-      <div class="panel-header justify-between px-4 py-4">
+    <section class="panel recent-card flex-1 min-h-0 flex flex-col">
+      <div class="panel-header recent-header justify-between px-4 py-4">
         <div>
-          <span class="font-mono text-sm neon-text tracking-widest">历史记录</span>
-          <div class="mt-1 font-mono text-[10px] text-neon-cyan/30">RECENT REPORTS</div>
+          <span class="font-mono text-sm neon-text tracking-widest">最近</span>
+          <div class="mt-1 font-mono text-[10px] text-neon-cyan/30">RECENT</div>
         </div>
         <button class="sci-btn text-[10px] px-2.5 py-1.5" @click="emit('refresh-list')">↻</button>
       </div>
 
-      <div class="flex-1 overflow-auto p-3">
+      <div class="recent-list flex-1 overflow-auto p-3" @scroll="handleRecentScroll">
         <div v-if="recentJobs.length" class="space-y-2">
           <button
             v-for="item in recentJobs"
             :key="item.jobId"
-            class="history-item w-full text-left rounded-xl px-3.5 py-3.5 transition-all"
+            class="history-item recent-item w-full text-left rounded-xl px-3.5 py-3.5 transition-all"
             :class="{ active: item.jobId === currentJobId }"
             @click="emit('open-job', item)"
           >
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusClass(item.status)"></span>
-              <span class="font-mono text-xs text-slate-100/82 truncate">{{ jobTitle(item) }}</span>
+              <span class="recent-title font-mono text-xs truncate">{{ jobTitle(item) }}</span>
               <span class="ml-auto text-neon-cyan/45 shrink-0">›</span>
             </div>
-            <div class="font-mono text-[10px] text-neon-cyan/35 mt-2 pl-3.5">
+            <div class="recent-time font-mono text-[10px] mt-2 pl-3.5">
               {{ formatTime(item.updatedAt || item.createdAt) }}
             </div>
           </button>
+
+          <button
+            v-if="recentLoadError"
+            type="button"
+            class="recent-load-state recent-load-retry w-full"
+            @click="emit('load-more-recent')"
+          >
+            加载失败，点击重试
+          </button>
+          <div v-else-if="recentLoadingMore" class="recent-load-state">加载中...</div>
+          <div v-else-if="!recentHasMore" class="recent-load-state">没有更多了</div>
         </div>
 
         <div v-else class="h-full flex items-center justify-center text-center">
           <div>
-            <div class="font-mono text-3xl text-neon-cyan/15 mb-2">HISTORY</div>
-            <div class="font-mono text-xs text-neon-cyan/45">暂无历史记录</div>
+            <div class="font-mono text-3xl text-neon-cyan/15 mb-2">RECENT</div>
+            <div class="font-mono text-xs text-neon-cyan/45">{{ recentLoadingMore ? '加载中...' : '暂无最近任务' }}</div>
           </div>
         </div>
       </div>

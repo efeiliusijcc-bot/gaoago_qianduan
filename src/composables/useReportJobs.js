@@ -68,6 +68,12 @@ export function useReportJobs() {
   const listTotal = ref(0)
   const listTotalPages = ref(1)
   const listStatusCounts = ref({ succeeded: 0, running: 0 })
+  const recentJobs = ref([])
+  const recentPage = ref(0)
+  const recentPageSize = 8
+  const recentLoadingMore = ref(false)
+  const recentHasMore = ref(true)
+  const recentLoadError = ref('')
   const health = ref(null)
   const errorMessage = ref('')
   const selectedReport = ref(null)
@@ -216,6 +222,70 @@ export function useReportJobs() {
     } else {
       jobList.value = [nextItem, ...jobList.value]
     }
+  }
+
+  function upsertJobInRecent(item) {
+    if (!item?.jobId) return
+    const drafts = readDrafts()
+    const nextItem = {
+      ...item,
+      displayTitle: drafts[item.jobId]?.title || item.displayTitle,
+    }
+    const index = recentJobs.value.findIndex((existing) => existing.jobId === item.jobId)
+    if (index >= 0) {
+      recentJobs.value = [
+        nextItem,
+        ...recentJobs.value.slice(0, index),
+        ...recentJobs.value.slice(index + 1),
+      ]
+    } else {
+      recentJobs.value = [nextItem, ...recentJobs.value]
+    }
+  }
+
+  async function loadMoreRecentReports({ reset = false } = {}) {
+    if (recentLoadingMore.value) return
+    if (!reset && !recentHasMore.value) return
+
+    recentLoadingMore.value = true
+    recentLoadError.value = ''
+    try {
+      const nextPage = reset ? 1 : recentPage.value + 1
+      const drafts = readDrafts()
+      const response = await fetchReportJobs({
+        page: nextPage,
+        pageSize: recentPageSize,
+        type: 'all',
+      })
+      const items = (Array.isArray(response) ? response : response.items || []).map((item) => ({
+        ...item,
+        displayTitle: drafts[item.jobId]?.title || undefined,
+      }))
+      const merged = reset ? items : [...recentJobs.value, ...items]
+      const seen = new Set()
+      recentJobs.value = merged.filter((item) => {
+        if (!item?.jobId || seen.has(item.jobId)) return false
+        seen.add(item.jobId)
+        return true
+      })
+      recentPage.value = Array.isArray(response) ? nextPage : response.page || nextPage
+      if (Array.isArray(response)) {
+        recentHasMore.value = items.length >= recentPageSize
+      } else {
+        recentHasMore.value = recentPage.value < (response.totalPages || 1)
+      }
+    } catch (error) {
+      recentLoadError.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      recentLoadingMore.value = false
+    }
+  }
+
+  function refreshRecentReports() {
+    recentPage.value = 0
+    recentHasMore.value = true
+    recentLoadError.value = ''
+    return loadMoreRecentReports({ reset: true })
   }
 
   function closeJobEvents() {
@@ -706,6 +776,7 @@ export function useReportJobs() {
           pushWorkspaceSnapshotLog(`任务状态：${next.status}${next.stage ? ` / ${next.stage}` : ''}`)
         }
         upsertJobInList(next)
+        upsertJobInRecent(next)
         tick += 1
 
         if (next.status === 'succeeded') {
@@ -733,6 +804,7 @@ export function useReportJobs() {
             isGenerating: false,
           }
           upsertJobInList(completedJob)
+          upsertJobInRecent(completedJob)
           await loadJobList(false)
           return
         }
@@ -852,6 +924,7 @@ export function useReportJobs() {
       job.value = { jobId: created.jobId, status: created.status }
       activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: job.value })
       upsertJobInList(job.value)
+      upsertJobInRecent(job.value)
       resetReportPlan()
       pushLog(`任务已创建：${created.jobId}`)
       subscribeJobEvents(created.jobId)
@@ -1053,6 +1126,7 @@ export function useReportJobs() {
   onMounted(async () => {
     await refreshHealth()
     await loadJobList(false)
+    await refreshRecentReports()
     listRefreshTimer = window.setInterval(() => {
       if (currentView.value === 'list' && runningCount.value > 0) {
         loadJobList(false)
@@ -1100,6 +1174,10 @@ export function useReportJobs() {
     loadingStep,
     job,
     jobList,
+    recentJobs,
+    recentLoadingMore,
+    recentHasMore,
+    recentLoadError,
     listSearch,
     listTypeFilter,
     listPage,
@@ -1130,6 +1208,8 @@ export function useReportJobs() {
     nextPlanStep,
     prevPlanStep,
     refreshHealth,
+    refreshRecentReports,
+    loadMoreRecentReports,
     loadJobList,
     updateListSearch,
     updateListTypeFilter,
