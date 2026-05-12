@@ -187,13 +187,14 @@ function jobActionLabel(status) {
       />
     </div>
 
-    <main v-else class="p-6">
-      <div class="flex items-center justify-between mb-6">
+    <main v-else class="archive-main">
+      <div class="archive-content">
+      <div class="archive-header flex items-center justify-between mb-6">
         <div>
           <div class="neon-text font-mono text-xl font-bold tracking-widest">报告档案库</div>
           <div class="font-mono text-[10px] text-neon-cyan/40 mt-1">真实后端任务列表 / 点击查看已生成报告</div>
         </div>
-        <div class="flex gap-2">
+        <div class="archive-actions flex gap-2">
           <button
             v-if="hasActiveWorkspace"
             class="sci-btn text-[10px] px-3 py-2"
@@ -207,7 +208,7 @@ function jobActionLabel(status) {
         </div>
       </div>
 
-      <div class="panel p-4 mb-6">
+      <div class="panel p-4 mb-6 archive-filter-panel">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div class="relative flex-1">
             <input
@@ -232,7 +233,7 @@ function jobActionLabel(status) {
         </div>
       </div>
 
-      <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="archive-stats grid grid-cols-3 gap-4 mb-6">
         <div class="panel p-4">
           <div class="font-mono text-[10px] text-neon-cyan/50 tracking-widest mb-2">任务总数</div>
           <div class="font-mono text-3xl neon-text">{{ listTotal }}</div>
@@ -247,8 +248,8 @@ function jobActionLabel(status) {
         </div>
       </div>
 
-      <div class="panel overflow-hidden">
-        <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-border-glow bg-neon-cyan/5">
+      <div class="panel overflow-hidden archive-table-panel">
+        <div class="archive-table-head grid grid-cols-12 gap-4 px-4 py-3 border-b border-border-glow bg-neon-cyan/5">
           <div class="col-span-2 font-mono text-[10px] text-neon-cyan/60 tracking-widest">任务编号</div>
           <div class="col-span-3 font-mono text-[10px] text-neon-cyan/60 tracking-widest">主题</div>
           <div class="col-span-1 font-mono text-[10px] text-neon-cyan/60 tracking-widest">类型</div>
@@ -262,7 +263,7 @@ function jobActionLabel(status) {
           <div
             v-for="item in filteredJobs"
             :key="item.jobId"
-            class="grid grid-cols-12 gap-4 px-4 py-4 border-b border-neon-cyan/10 hover:bg-neon-cyan/5 transition-colors"
+            class="archive-row grid grid-cols-12 gap-4 px-4 py-4 border-b border-neon-cyan/10 hover:bg-neon-cyan/5 transition-colors"
           >
             <div class="col-span-2 font-mono text-xs text-neon-cyan">{{ item.jobId.slice(0, 8) }}</div>
             <div class="col-span-3 font-mono text-xs text-neon-cyan/75 truncate">{{ getJobTitle(item) }}</div>
@@ -309,6 +310,7 @@ function jobActionLabel(status) {
           <button class="sci-btn text-[10px] px-3 py-2" :disabled="listPage <= 1" @click="updateListPage(listPage - 1)">上一页</button>
           <button class="sci-btn text-[10px] px-3 py-2" :disabled="listPage >= listTotalPages" @click="updateListPage(listPage + 1)">下一页</button>
         </div>
+      </div>
       </div>
     </main>
   </div>

@@ -696,8 +696,17 @@ canvas {
   backdrop-filter: blur(18px);
   border-right: 1px solid rgba(148, 163, 184, 0.22) !important;
   box-shadow: 14px 0 38px rgba(15, 23, 42, 0.04);
-  overflow-y: auto;
+  min-height: 0;
+  overflow-y: hidden;
   overflow-x: hidden;
+}
+
+.sidebar-shell > .status-card {
+  flex-shrink: 0;
+}
+
+.sidebar-shell > .panel:last-child {
+  min-height: 0;
 }
 
 .data-canvas {
@@ -716,6 +725,42 @@ canvas {
   width: min(100%, 1180px);
   margin: 0 auto;
   padding-inline: clamp(12px, 2vw, 28px);
+}
+
+.archive-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: clamp(16px, 2.6vw, 32px);
+}
+
+.archive-content {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  min-width: 0;
+}
+
+.archive-header,
+.archive-actions,
+.archive-filter-panel,
+.archive-table-panel,
+.archive-row {
+  min-width: 0;
+}
+
+.archive-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.archive-table-panel {
+  width: 100%;
+}
+
+.archive-row > div {
+  min-width: 0;
 }
 
 .workspace-subbar {
@@ -1050,6 +1095,22 @@ canvas {
   .main-content {
     padding-inline: 0;
   }
+
+  .archive-header {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .archive-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .archive-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1113,6 +1174,65 @@ canvas {
   .report-type-grid {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+
+  .archive-main {
+    padding: 14px;
+  }
+
+  .archive-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-table-head {
+    display: none !important;
+  }
+
+  .archive-row {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    gap: 8px !important;
+    margin: 10px;
+    padding: 14px !important;
+    border: 1px solid rgba(148, 163, 184, 0.22) !important;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.86);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  }
+
+  .archive-row > div {
+    grid-column: auto / auto !important;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    white-space: normal;
+  }
+
+  .archive-row > div::before {
+    flex-shrink: 0;
+    width: 64px;
+    color: rgba(100, 116, 139, 0.76);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .archive-row > div:nth-child(1)::before { content: "任务"; }
+  .archive-row > div:nth-child(2)::before { content: "主题"; }
+  .archive-row > div:nth-child(3)::before { content: "类型"; }
+  .archive-row > div:nth-child(4)::before { content: "状态"; }
+  .archive-row > div:nth-child(5)::before { content: "时间"; }
+  .archive-row > div:nth-child(6)::before { content: "文件"; }
+  .archive-row > div:nth-child(7)::before { content: "操作"; }
+
+  .archive-row > div:nth-child(2) {
+    align-items: flex-start;
+  }
+
+  .archive-row > div:nth-child(2),
+  .archive-row > div:nth-child(6) {
+    overflow: visible;
+    text-overflow: initial;
   }
 
   .report-type-card {

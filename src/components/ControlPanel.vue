@@ -30,7 +30,7 @@ const localStatus = computed(() => {
   if (!hasHealth.value) return '检测中'
   return props.health?.checks?.localProbe ? '正常' : '异常'
 })
-const recentJobs = computed(() => props.jobs.slice(0, 8))
+const recentJobs = computed(() => props.jobs)
 
 function jobTitle(item) {
   return item.displayTitle || item.payload?.topic || item.payload?.target_name || item.payload?.target_country || item.jobId

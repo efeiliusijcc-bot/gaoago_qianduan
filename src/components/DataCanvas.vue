@@ -598,34 +598,6 @@ function exportPdf() {
           <div class="rounded-2xl border border-neon-cyan/12 bg-black/16 px-4 py-3 mb-5">
             <div class="font-mono text-sm text-neon-cyan mb-2">{{ reportPlan.title }}</div>
             <div class="text-sm text-slate-300/70 leading-relaxed">{{ reportPlan.summary }}</div>
-            <div v-if="reportPlan.searchQueries?.length" class="mt-4">
-              <div class="font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">规划检索词</div>
-              <div class="flex flex-wrap gap-2">
-              <button
-                v-for="query in reportPlan.searchQueries"
-                :key="query"
-                class="rounded-full border px-3 py-1.5 font-mono text-[10px] transition-all"
-                :class="isPlanSearchQuerySelected(query)
-                  ? 'border-neon-cyan/55 bg-neon-cyan/[0.10] text-neon-cyan shadow-[0_0_14px_rgba(0,243,255,0.10)]'
-                  : 'border-neon-cyan/12 bg-black/18 text-slate-400 hover:border-neon-cyan/30 hover:text-neon-cyan/70'"
-                type="button"
-                @click="emit('toggle-plan-search-query', query)"
-              >
-                {{ query }}
-              </button>
-              </div>
-            </div>
-
-            <div class="mt-4 rounded-2xl border border-neon-cyan/10 bg-black/12 p-3">
-              <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">指定信源 / URL / 机构</label>
-              <textarea
-                class="sci-textarea text-sm bg-black/15"
-                rows="3"
-                :value="planSourceInput"
-                placeholder="可逐行填写必须检索的网页、机构、媒体、数据库或信源说明；未填写则按规划检索词公开检索。"
-                @input="emit('update:planSourceInput', $event.target.value)"
-              ></textarea>
-            </div>
           </div>
 
           <div class="flex items-center gap-2 mb-5">
@@ -682,6 +654,17 @@ function exportPdf() {
                 :value="planSupplement"
                 placeholder="可补充必须纳入编报的方向、限制条件或特别关注点..."
                 @input="emit('update:planSupplement', $event.target.value)"
+              ></textarea>
+            </div>
+
+            <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
+              <label class="block font-mono text-[10px] tracking-widest text-neon-cyan/45 mb-2">指定信源 / URL / 机构</label>
+              <textarea
+                class="sci-textarea text-sm bg-black/15"
+                rows="3"
+                :value="planSourceInput"
+                placeholder="可逐行填写必须检索的网页、机构、媒体、数据库或信源说明；未填写则按系统规划自动检索。"
+                @input="emit('update:planSourceInput', $event.target.value)"
               ></textarea>
             </div>
           </div>
