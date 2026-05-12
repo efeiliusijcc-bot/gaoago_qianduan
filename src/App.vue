@@ -203,7 +203,7 @@ function jobActionLabel(status) {
       <div class="archive-header flex items-center justify-between mb-6">
         <div>
           <div class="neon-text font-mono text-xl font-bold tracking-widest">报告档案库</div>
-          <div class="font-mono text-[10px] text-slate-500 mt-1">真实后端任务列表 / 点击查看已生成报告</div>
+          <div class="font-mono text-[10px] text-[#374151] mt-1">真实后端任务列表 / 点击查看已生成报告</div>
         </div>
         <div class="archive-actions flex gap-2">
           <button
@@ -246,28 +246,28 @@ function jobActionLabel(status) {
 
       <div class="archive-stats grid grid-cols-3 gap-4 mb-6">
         <div class="panel p-4">
-          <div class="font-mono text-[10px] text-slate-500 tracking-widest mb-2">任务总数</div>
+          <div class="font-mono text-[10px] text-[#374151] tracking-widest mb-2">任务总数</div>
           <div class="font-mono text-3xl neon-text">{{ listTotal }}</div>
         </div>
         <div class="panel p-4">
-          <div class="font-mono text-[10px] text-slate-500 tracking-widest mb-2">已完成</div>
+          <div class="font-mono text-[10px] text-[#374151] tracking-widest mb-2">已完成</div>
           <div class="font-mono text-3xl text-neon-green">{{ succeededCount }}</div>
         </div>
         <div class="panel p-4">
-          <div class="font-mono text-[10px] text-slate-500 tracking-widest mb-2">运行中</div>
+          <div class="font-mono text-[10px] text-[#374151] tracking-widest mb-2">运行中</div>
           <div class="font-mono text-3xl text-cyber-yellow">{{ runningCount }}</div>
         </div>
       </div>
 
       <div class="panel overflow-hidden archive-table-panel">
         <div class="archive-table-head grid grid-cols-12 gap-4 px-4 py-3 border-b border-border-glow bg-neon-cyan/5">
-          <div class="col-span-2 font-mono text-[10px] text-slate-700 font-bold tracking-widest">任务编号</div>
-          <div class="col-span-3 font-mono text-[10px] text-slate-700 font-bold tracking-widest">主题</div>
-          <div class="col-span-1 font-mono text-[10px] text-slate-700 font-bold tracking-widest">类型</div>
-          <div class="col-span-2 font-mono text-[10px] text-slate-700 font-bold tracking-widest">状态</div>
-          <div class="col-span-2 font-mono text-[10px] text-slate-700 font-bold tracking-widest">更新时间</div>
-          <div class="col-span-1 font-mono text-[10px] text-slate-700 font-bold tracking-widest">文件</div>
-          <div class="col-span-1 font-mono text-[10px] text-slate-700 font-bold tracking-widest">操作</div>
+          <div class="col-span-2 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">任务编号</div>
+          <div class="col-span-3 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">主题</div>
+          <div class="col-span-1 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">类型</div>
+          <div class="col-span-2 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">状态</div>
+          <div class="col-span-2 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">更新时间</div>
+          <div class="col-span-1 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">文件</div>
+          <div class="col-span-1 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">操作</div>
         </div>
 
         <div v-if="filteredJobs.length">
@@ -276,18 +276,18 @@ function jobActionLabel(status) {
             :key="item.jobId"
             class="archive-row grid grid-cols-12 gap-4 px-4 py-4 border-b border-neon-cyan/10 hover:bg-neon-cyan/5 transition-colors"
           >
-            <div class="col-span-2 font-mono text-xs text-slate-900">{{ item.jobId.slice(0, 8) }}</div>
-            <div class="col-span-3 font-mono text-xs text-slate-900 font-semibold truncate">{{ getJobTitle(item) }}</div>
-            <div class="col-span-1 font-mono text-xs text-slate-700">{{ skillLabel(item) }}</div>
+            <div class="col-span-2 font-mono text-xs text-[#1f2937]" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ item.jobId.slice(0, 8) }}</div>
+            <div class="col-span-3 font-mono text-xs text-[#111827] font-semibold truncate" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ getJobTitle(item) }}</div>
+            <div class="col-span-1 font-mono text-xs text-[#1f2937]" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ skillLabel(item) }}</div>
             <div class="col-span-2 font-mono text-xs" :class="jobStatusClass(item.status)">
               {{ jobStatusLabel(item.status) }}
             </div>
-            <div class="col-span-2 font-mono text-xs text-slate-500">{{ item.updatedAt || item.createdAt }}</div>
-            <div class="col-span-1 font-mono text-xs text-slate-500 truncate">{{ item.resultPath ? '已生成' : '未生成' }}</div>
+            <div class="col-span-2 font-mono text-xs text-[#374151]" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ item.updatedAt || item.createdAt }}</div>
+            <div class="col-span-1 font-mono text-xs text-[#374151] truncate" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ item.resultPath ? '已生成' : '未生成' }}</div>
             <div class="col-span-1">
               <button
                 class="font-mono text-[10px] hover:text-neon-green disabled:opacity-30"
-                style="color: #0ea5e9"
+                style="color: #0369a1; font-weight: 700"
                 @click="monitorJobFromList(item)"
               >
                 {{ jobActionLabel(item.status) }}
@@ -305,7 +305,7 @@ function jobActionLabel(status) {
       </div>
 
       <div class="panel mt-4 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div class="font-mono text-[10px] text-slate-500">
+        <div class="font-mono text-[10px] text-[#374151]">
           第 {{ listPage }} / {{ listTotalPages }} 页 · 共 {{ listTotal }} 条
         </div>
         <div class="flex flex-wrap items-center gap-2">

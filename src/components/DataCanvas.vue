@@ -643,7 +643,7 @@ function exportPdf() {
   <main class="data-canvas flex-1 flex flex-col overflow-hidden relative">
     <div class="workspace-subbar h-14 flex items-center justify-between px-5">
       <div class="workspace-meta flex items-center gap-3">
-        <span class="font-mono text-[10px] tracking-widest text-slate-700">
+        <span class="font-mono text-[10px] tracking-widest text-[#374151]">
           [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
         </span>
         <span v-if="phase !== 'idle'" class="font-mono text-[10px] text-neon-green">
@@ -691,7 +691,7 @@ function exportPdf() {
         <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
           <div>
             <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
-            <div class="font-mono text-[10px] text-slate-500">OpenClaw 工具调用摘要</div>
+            <div class="font-mono text-[10px] text-[#374151]">OpenClaw 工具调用摘要</div>
           </div>
           <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
         </div>
@@ -746,7 +746,7 @@ function exportPdf() {
       <section class="plan-modal-panel w-full max-w-4xl rounded-[24px] border overflow-hidden">
         <div class="px-6 py-5 border-b border-neon-cyan/12 flex items-start justify-between gap-4">
           <div>
-            <div class="font-mono text-[11px] tracking-[0.28em] text-slate-500 mb-2">PLAN MODE</div>
+            <div class="font-mono text-[11px] tracking-[0.28em] text-[#374151] mb-2">PLAN MODE</div>
             <h2 class="font-mono text-xl neon-text">编报规划确认</h2>
             <p class="mt-2 text-sm text-slate-300/60">
               先按主题生成检索方向和子任务，勾选需要纳入正式编报的内容后再提交。
@@ -761,8 +761,8 @@ function exportPdf() {
             <div class="loader-ring ring-b"></div>
             <div class="loader-core"></div>
           </div>
-          <div class="font-mono text-slate-900 mt-6">正在规划检索方向...</div>
-          <div class="font-mono text-[11px] text-slate-500 mt-2">预计 10-30 秒，请稍候</div>
+          <div class="font-mono text-[#0f172a] mt-6">正在规划检索方向...</div>
+          <div class="font-mono text-[11px] text-[#374151] mt-2">预计 10-30 秒，请稍候</div>
         </div>
 
         <div v-else-if="planError" class="px-6 py-8">
@@ -779,7 +779,7 @@ function exportPdf() {
 
         <div v-else class="px-6 py-5">
           <div class="rounded-2xl border border-neon-cyan/12 bg-black/16 px-4 py-3 mb-5">
-            <div class="font-mono text-sm text-slate-900 mb-2">{{ reportPlan.title }}</div>
+            <div class="font-mono text-sm text-[#0f172a] mb-2">{{ reportPlan.title }}</div>
             <div class="text-sm text-slate-300/70 leading-relaxed">{{ reportPlan.summary }}</div>
           </div>
 
@@ -799,8 +799,8 @@ function exportPdf() {
               <div class="font-mono text-[11px] tracking-[0.24em] text-slate-700 mb-2">
                 STEP {{ planStepIndex + 1 }} / {{ reportPlan.steps.length }} · {{ planStepTypeLabel(currentPlanStep.type) }}
               </div>
-              <h3 class="font-mono text-lg text-slate-900">{{ currentPlanStep.sectionTitle || currentPlanStep.title }}</h3>
-              <p class="text-sm text-slate-300/58 mt-1">{{ currentPlanStep.description }}</p>
+              <h3 class="font-mono text-lg text-[#0f172a]">{{ currentPlanStep.sectionTitle || currentPlanStep.title }}</h3>
+              <p class="text-sm text-[#374151] mt-1">{{ currentPlanStep.description }}</p>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -826,12 +826,12 @@ function exportPdf() {
                     ✓
                   </span>
                 </div>
-                <div class="text-xs leading-relaxed text-slate-300/58">{{ option.detail }}</div>
+                <div class="text-xs leading-relaxed text-[#374151]">{{ option.detail }}</div>
               </button>
             </div>
 
             <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
-              <label class="block font-mono text-[10px] tracking-widest text-slate-500 mb-2">补充方向</label>
+              <label class="block font-mono text-[10px] tracking-widest text-[#374151] mb-2">补充方向</label>
               <textarea
                 class="sci-textarea text-sm bg-black/15"
                 rows="3"
@@ -842,7 +842,7 @@ function exportPdf() {
             </div>
 
             <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
-              <label class="block font-mono text-[10px] tracking-widest text-slate-500 mb-2">指定信源 / URL / 机构</label>
+              <label class="block font-mono text-[10px] tracking-widest text-[#374151] mb-2">指定信源 / URL / 机构</label>
               <textarea
                 class="sci-textarea text-sm bg-black/15"
                 rows="3"
@@ -867,7 +867,7 @@ function exportPdf() {
               <button
                 v-if="!isLastPlanStep"
                 class="sci-btn text-[10px] px-3 py-2 border-neon-cyan"
-                style="color: #0ea5e9"
+                style="color: #0369a1"
                 type="button"
                 @click="emit('next-plan-step')"
               >
@@ -890,8 +890,8 @@ function exportPdf() {
     <div ref="reportRef" class="main-scroll flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
         <section class="main-content w-full text-center">
-          <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-slate-900">开始新的报告任务</h1>
-          <p class="font-mono text-sm text-slate-300/55 mb-12">
+          <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-[#0f172a]" style="font-size: 32px; font-weight: 800">开始新的报告任务</h1>
+          <p class="font-mono text-sm text-[#374151] mb-12" style="font-size: 14px; font-weight: 500">
             请先选择编报类型，再输入标题，并补充关键参数信息，以便 AI 为您生成更精准的编报内容。
           </p>
 
@@ -912,7 +912,7 @@ function exportPdf() {
               </span>
               <div class="h-full flex flex-col items-center justify-center">
                 <div class="font-mono text-[34px] mb-4" :class="reportType === type.value ? '' : 'text-slate-400/80'" :style="reportType === type.value ? 'color: #0ea5e9' : ''">{{ type.icon }}</div>
-                <div class="font-mono text-base font-semibold" :class="reportType === type.value ? '' : 'text-slate-200/84'" :style="reportType === type.value ? 'color: #0ea5e9' : ''">{{ type.label }}</div>
+                <div class="font-mono text-base font-semibold" :class="reportType === type.value ? '' : 'text-[#111827]'" :style="reportType === type.value ? 'color: #0ea5e9' : ''">{{ type.label }}</div>
               </div>
             </button>
           </div>
@@ -920,7 +920,7 @@ function exportPdf() {
           <div class="input-panel mx-auto text-left p-5 md:p-6">
             <div class="input-title-shell p-5 md:p-6">
               <div class="flex items-center justify-between gap-4 mb-4">
-                <label class="block font-mono text-[11px] tracking-widest text-slate-500">报告标题</label>
+                <label class="block font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">报告标题</label>
                 <span class="font-mono text-[10px] text-slate-500">{{ titleLength }}/200</span>
               </div>
               <textarea
@@ -934,7 +934,7 @@ function exportPdf() {
 
             <div v-if="selectedReportType" class="mt-5">
               <div class="flex items-center justify-between mb-3 px-1">
-                <div class="font-mono text-[11px] tracking-widest text-slate-500">需要补充的参数</div>
+                <div class="font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">需要补充的参数</div>
                 <span class="font-mono text-[10px] text-neon-green/80">已选择</span>
               </div>
 
@@ -960,7 +960,7 @@ function exportPdf() {
                   :key="param"
                   class="soft-field p-3"
                 >
-                  <span class="block font-mono text-[10px] tracking-widest text-slate-500 mb-2">{{ param }}</span>
+                  <span class="block font-mono text-[10px] tracking-widest text-[#111827] mb-2" style="font-size: 14px; font-weight: 700">{{ param }}</span>
                   <input
                     v-if="parameterInputType(param) === 'input'"
                     class="sci-input text-sm"
@@ -980,7 +980,7 @@ function exportPdf() {
               </div>
 
               <div class="soft-field p-3">
-                <label class="block font-mono text-[10px] tracking-widest text-slate-500 mb-2">综合补充说明</label>
+                <label class="block font-mono text-[10px] tracking-widest text-[#111827] mb-2" style="font-size: 14px; font-weight: 700">综合补充说明</label>
                 <textarea
                   ref="contextTextRef"
                   :value="contextText"
@@ -1020,13 +1020,13 @@ function exportPdf() {
             <div class="loader-core"></div>
           </div>
           <div class="font-mono text-lg neon-text mt-8">{{ loadingStep || '正在生成报告' }}</div>
-          <div class="font-mono text-[10px] text-slate-500 mt-2">预计 3-5 分钟生成，请耐心等待；后台任务运行中，请保持 OpenClaw gateway 在线</div>
+          <div class="font-mono text-[10px] text-[#374151] mt-2">预计 3-5 分钟生成，请耐心等待；后台任务运行中，请保持 OpenClaw gateway 在线</div>
 
             <div class="live-log-panel mt-6 text-left border border-neon-cyan/25 bg-black/35 rounded overflow-hidden shadow-[0_0_28px_rgba(0,243,255,0.12)]">
               <div class="h-10 px-4 border-b border-neon-cyan/15 flex items-center justify-between">
                 <div>
                   <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
-                  <div class="font-mono text-[10px] text-slate-500">运行中实时同步 OpenClaw 工具调用</div>
+                  <div class="font-mono text-[10px] text-[#374151]">运行中实时同步 OpenClaw 工具调用</div>
                 </div>
                 <div class="flex items-center gap-2 font-mono text-[10px] text-neon-green">
                   <span class="data-pulse" style="background: #00ff88;"></span>
@@ -1120,11 +1120,11 @@ function exportPdf() {
         <div class="border border-neon-cyan/30 rounded p-6 mb-6 bg-black/30">
           <div class="grid grid-cols-2 gap-4 text-xs font-mono">
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
-              <span class="text-slate-500">报告类型</span>
-              <span class="text-slate-900">{{ reportTypeLabel }}</span>
+              <span class="text-[#374151]">报告类型</span>
+              <span class="text-[#0f172a]">{{ reportTypeLabel }}</span>
             </div>
             <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
-              <span class="text-slate-500">任务状态</span>
+              <span class="text-[#374151]">任务状态</span>
               <span :class="taskStatusClass">{{ taskStatusLabel }}</span>
             </div>
           </div>

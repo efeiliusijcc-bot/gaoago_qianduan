@@ -610,13 +610,15 @@ body {
   --green: #16a34a;
   --amber: #b7791f;
   --red: #dc4967;
-  --text-main: #0f172a;
-  --text-sub: #64748b;
+  --text-main: #1f2937;
+  --text-sub: #374151;
   --text-muted: #64748b;
   --text-primary: #0f172a;
-  --text-secondary: #334155;
+  --text-secondary: #374151;
   --text-faint: #94a3b8;
-  --accent-blue: #0ea5e9;
+  --accent-blue: #0284c7;
+  --accent-blue-strong: #0369a1;
+  --accent-orange: #d97706;
   --accent-green: #16a34a;
   --border: rgba(148, 163, 184, 0.34);
   --border-soft: rgba(148, 163, 184, 0.22);
@@ -643,6 +645,8 @@ body {
     radial-gradient(circle at 100% 20%, rgba(0, 188, 212, 0.08), transparent 28%),
     linear-gradient(180deg, #f7fbff 0%, #eef6fb 100%);
   color: var(--text-main);
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 500;
   width: 100%;
   min-height: 100%;
   overflow-x: hidden;
@@ -671,6 +675,7 @@ canvas {
     radial-gradient(circle at 100% 18%, rgba(0, 188, 212, 0.08), transparent 30%),
     linear-gradient(180deg, #f7fbff 0%, #eef6fb 100%) !important;
   color: var(--text-main);
+  font-family: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app-body {
@@ -708,7 +713,7 @@ canvas {
 }
 
 .neon-text {
-  background: linear-gradient(90deg, #0f172a, #2563eb, #0ea5e9);
+  background: linear-gradient(90deg, #0f172a, #1e40af, #0369a1);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent !important;
@@ -778,18 +783,28 @@ canvas {
   color: #94a3b8;
 }
 
+.sci-btn {
+  font-weight: 600;
+}
+
+.app-shell button {
+  font-weight: 600;
+}
+
 .sci-input,
 .sci-textarea {
   background: rgba(248, 250, 252, 0.88) !important;
   border: 1px solid rgba(148, 163, 184, 0.36);
   border-radius: 16px;
-  color: var(--text-main);
+  color: #111827;
+  font-size: 14px;
+  font-weight: 500;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.88);
 }
 
 .sci-input::placeholder,
 .sci-textarea::placeholder {
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .sci-input:focus,
@@ -1211,7 +1226,11 @@ canvas {
 }
 
 .report-html {
-  color: #0f172a;
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.85;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .report-html h1,
@@ -1221,6 +1240,12 @@ canvas {
   color: var(--cyan-dark);
 }
 
+.report-html h2 {
+  color: #0284c7;
+  font-size: 20px;
+  font-weight: 700;
+}
+
 .report-html h2,
 .report-html th,
 .report-html td {
@@ -1228,7 +1253,8 @@ canvas {
 }
 
 .report-html strong {
-  color: #075f6f;
+  color: #111827;
+  font-weight: 700;
 }
 
 .report-html table {
@@ -1237,7 +1263,32 @@ canvas {
 
 .report-html th {
   background: rgba(230, 252, 255, 0.70);
-  color: var(--cyan-dark);
+  color: #374151;
+  font-weight: 700;
+}
+
+.readable-content {
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.85;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.readable-content p {
+  margin-bottom: 16px;
+}
+
+.readable-content h2 {
+  color: #0284c7;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 28px 0 14px;
+}
+
+.readable-content strong {
+  color: #111827;
+  font-weight: 700;
 }
 
 .loader-ring {

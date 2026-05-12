@@ -80,7 +80,7 @@ function handleRecentScroll(event) {
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="font-mono text-sm neon-text tracking-widest">AI引擎状态</h2>
-          <div class="mt-1 font-mono text-[10px] text-slate-500">ENGINE STATUS</div>
+          <div class="mt-1 font-mono text-[10px] text-[#374151]">ENGINE STATUS</div>
         </div>
         <button class="sci-btn text-[10px] px-3 py-1.5" @click="emit('refresh-health')">检测</button>
       </div>
@@ -114,7 +114,7 @@ function handleRecentScroll(event) {
       <div class="panel-header recent-header justify-between px-4 py-4">
         <div>
           <span class="font-mono text-sm neon-text tracking-widest">最近</span>
-          <div class="mt-1 font-mono text-[10px] text-slate-400">RECENT</div>
+          <div class="mt-1 font-mono text-[10px] text-[#374151]">RECENT</div>
         </div>
         <button class="sci-btn text-[10px] px-2.5 py-1.5" @click="emit('refresh-list')">↻</button>
       </div>
@@ -131,7 +131,7 @@ function handleRecentScroll(event) {
             <div class="flex items-center gap-2 min-w-0">
               <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusClass(item.status)"></span>
               <span class="recent-title font-mono text-xs truncate">{{ jobTitle(item) }}</span>
-              <span class="ml-auto text-slate-400 shrink-0">›</span>
+              <span class="ml-auto text-[#64748b] shrink-0">›</span>
             </div>
             <div class="recent-time font-mono text-[10px] mt-2 pl-3.5">
               {{ formatTime(item.updatedAt || item.createdAt) }}

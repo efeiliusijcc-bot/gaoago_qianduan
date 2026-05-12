@@ -77,20 +77,10 @@ onUnmounted(() => {
 
 <template>
   <header class="topbar flex items-center justify-between px-6">
-    <div class="header-brand flex items-center gap-4">
-      <div class="flex flex-col">
-        <span class="neon-text font-mono font-bold tracking-wide text-base">
-          AI深度编报
-        </span>
-        <span class="font-mono text-[9px] text-slate-500 tracking-[0.18em]">
-          // 智能研判工作台 · v4.2.1
-        </span>
-      </div>
-
-      <div class="flex items-center gap-1.5 ml-2">
-        <span class="data-pulse" style="background: #00ff88;"></span>
-        <span class="font-mono text-[9px] text-neon-green/80 tracking-widest">已就绪</span>
-      </div>
+    <div class="header-brand flex items-center">
+      <span class="font-mono tracking-wide" style="font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: 0.02em; line-height: 1.2;">
+        AI深度编报
+      </span>
     </div>
 
     <div class="header-tech-line flex-1 mx-8 h-8 opacity-70">
