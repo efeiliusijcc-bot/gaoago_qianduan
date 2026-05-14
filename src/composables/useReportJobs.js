@@ -319,6 +319,9 @@ export function useReportJobs() {
         status: item.status || 'running',
         summary: item.summary || '',
         command: item.command || '',
+        phase: item.phase || '',
+        actor: item.actor || '',
+        detail: item.detail || '',
       }))
       executionLogsByJobId.set(jobId, normalized)
       seenExecutionEventsByJobId.set(jobId, new Set(normalized.map((item) => executionLogKey(item))))
@@ -379,6 +382,9 @@ export function useReportJobs() {
     const label = raw.label || event.name || event.stage || event.type
     const status = raw.status || (event.type === 'tool_start' ? 'started' : event.type === 'tool_end' ? 'completed' : event.type)
     const summary = raw.summary || event.message || event.content || ''
+    const phase = raw.phase || event.stage || ''
+    const actor = raw.actor || ''
+    const detail = raw.detail || ''
 
     if (event.type === 'stage') {
       return {
@@ -386,6 +392,8 @@ export function useReportJobs() {
         label: '阶段进度',
         status: event.stage || 'running',
         summary: event.message || event.stage || 'OpenClaw 阶段更新',
+        phase,
+        actor: actor || (String(event.stage || '').includes('openclaw') ? 'main-agent' : 'system'),
         eventId: event.stage,
       }
     }
@@ -397,16 +405,19 @@ export function useReportJobs() {
         status,
         summary: summary || `${label} ${status}`,
         command: raw.command,
+        phase,
+        actor,
+        detail,
         eventId: event.id,
       }
     }
 
     if (event.type === 'error') {
-      return { type: 'error', label: '任务错误', status: 'failed', summary: event.message || '任务失败' }
+      return { type: 'error', label: '任务错误', status: 'failed', summary: event.message || '任务失败', phase: 'error', actor: 'system' }
     }
 
     if (event.type === 'done') {
-      return { type: 'done', label: '任务完成', status: 'completed', summary: '后端任务已结束。', eventId: event.jobId }
+      return { type: 'done', label: '任务完成', status: 'completed', summary: '后端任务已结束。', phase: 'done', actor: 'system', eventId: event.jobId }
     }
 
     return null

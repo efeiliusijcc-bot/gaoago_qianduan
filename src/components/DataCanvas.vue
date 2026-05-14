@@ -262,7 +262,7 @@ function logStatusClass(status) {
 }
 
 function buildRawLogText(log) {
-  return [log?.label, log?.summary, log?.command]
+  return [log?.label, log?.summary, log?.command, log?.detail]
     .filter(Boolean)
     .join('\n')
 }
@@ -274,6 +274,56 @@ function extractQuery(rawLog) {
   const plain = text.match(/--query\s+([^\n\r]+)/i)
   if (!plain?.[1]) return ''
   return plain[1].replace(/\s+--\S+.*$/, '').trim()
+}
+
+function workflowLogView(phase, rawLog, status) {
+  const lowerPhase = String(phase || '').toLowerCase()
+  const lower = String(rawLog || '').toLowerCase()
+  const views = {
+    start: ['CONNECTING', '正在连接 AI 编报引擎', '系统正在与后端 Agent 建立任务通道。'],
+    running: ['AGENT_START', 'AI 编报助手已启动', '任务已进入 OpenClaw report-agent 执行流程。'],
+    'openclaw:start': ['AGENT_START', 'AI 编报助手已启动', 'OpenClaw report-agent 已开始处理本次编报任务。'],
+    'openclaw:complete': ['COMPLETED', '编报 Agent 已完成', 'OpenClaw report-agent 已完成执行。'],
+    waiting_final_report: ['WAITING_REPORT', '等待最终报告文件', 'Agent 已返回文件指针，系统正在等待最终 Markdown 报告落盘。'],
+    context_preparing: ['PREPARING', '准备任务上下文', '系统正在整理本次编报所需的主题、参数和上下文文件。'],
+    research_planning: ['PLANNING', '生成调研计划', 'AI 正在把编报主题拆解为可执行的调研计划。'],
+    research_dispatch: ['RESEARCH_TASK', '启动调研子任务', '系统正在创建调研分组并分派 research 子任务。'],
+    research_waiting: ['WAITING_RESEARCH', '等待调研完成', '主 Agent 正在等待 research 子任务返回调研结果。'],
+    research_collecting: ['RESEARCHING', '执行资料调研', '调研子任务正在检索、读取和整理公开资料。'],
+    research_complete: ['RESEARCH_DONE', '调研结果已返回', 'research 子任务已完成，主 Agent 正在收集结果。'],
+    synthesis_dispatch: ['SYNTHESIS_TASK', '启动撰稿子任务', '系统正在启动 synthesis 子任务生成报告正文。'],
+    synthesis_waiting: ['WAITING_SYNTHESIS', '等待撰稿完成', '主 Agent 正在等待 synthesis 子任务完成报告正文。'],
+    synthesis_writing: ['WRITING', '整合并撰写报告', 'AI 正在整合调研材料并撰写最终报告。'],
+    report_verifying: ['VERIFYING', '校验报告文件', '系统正在确认 Markdown 报告文件已经生成且内容可用。'],
+    report_saving: ['SAVING', '保存报告文件', '报告正文已经生成，系统正在保存并登记报告文件。'],
+    technical_detail: ['DETAIL', '处理技术细节', '系统正在读取技能、配置或中间文件；可展开查看原始命令。'],
+    done: ['COMPLETED', '编报任务已完成', '报告已生成，可以查看或导出。'],
+    error: ['ERROR', '任务执行出现异常', '系统执行过程中出现异常，请查看技术详情或重试。'],
+  }
+  const match = views[lowerPhase]
+  if (match) return { stage: match[0], title: match[1], description: match[2], status }
+  if (lower.includes('preparing openclaw gateway')) return { stage: 'CONNECTING', title: views.start[1], description: views.start[2], status }
+  if (lower.includes('running openclaw report-agent')) return { stage: 'AGENT_START', title: views.running[1], description: views.running[2], status }
+  if (lower.includes('waiting_final_report') || lower.includes('waiting for the final report')) return { stage: 'WAITING_REPORT', title: views.waiting_final_report[1], description: views.waiting_final_report[2], status }
+  if (lower.includes('sessions_spawn') && lower.includes('research-group')) return { stage: 'RESEARCH_TASK', title: views.research_dispatch[1], description: views.research_dispatch[2], status }
+  if (lower.includes('sessions_spawn') && lower.includes('synthesis')) return { stage: 'SYNTHESIS_TASK', title: views.synthesis_dispatch[1], description: views.synthesis_dispatch[2], status }
+  if (lower.includes('sessions_yield') && lower.includes('synthesis')) return { stage: 'WAITING_SYNTHESIS', title: views.synthesis_waiting[1], description: views.synthesis_waiting[2], status }
+  if (lower.includes('sessions_yield')) return { stage: 'WAITING_RESEARCH', title: views.research_waiting[1], description: views.research_waiting[2], status }
+  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) return { stage: 'PLANNING', title: views.research_planning[1], description: views.research_planning[2], status }
+  if (lower.includes('group_') && lower.includes('.json')) return { stage: 'RESEARCH_TASK', title: views.research_dispatch[1], description: views.research_dispatch[2], status }
+  if (lower.includes('context.json')) return { stage: 'PREPARING', title: views.context_preparing[1], description: views.context_preparing[2], status }
+  if ((lower.includes('report_file') || lower.includes('final/report.md')) && !lower.includes('error')) return { stage: 'SAVING', title: views.report_saving[1], description: views.report_saving[2], status }
+  return null
+}
+
+function isLowValueTechnicalLog(rawLog) {
+  const lower = String(rawLog || '').toLowerCase()
+  return lower.includes('skill.md') ||
+    lower.includes('/skills/') ||
+    lower.includes('sessions.json') ||
+    lower.includes('uuid') ||
+    lower.includes('read completed') ||
+    lower.includes('command completed')
 }
 
 function translateOpenClawLog(log) {
@@ -311,6 +361,19 @@ function translateOpenClawLog(log) {
       title: '编报任务已完成',
       description: '报告已生成，可查看或导出。',
       status: 'done',
+    }
+  }
+
+  const workflowView = workflowLogView(log?.phase || log?.status, rawLog, status)
+  if (workflowView) return { ...base, ...workflowView }
+
+  if (isLowValueTechnicalLog(rawLog)) {
+    return {
+      ...base,
+      stage: 'DETAIL',
+      title: '处理技术细节',
+      description: '系统正在读取技能、配置或中间文件；可展开查看原始命令。',
+      status,
     }
   }
 
