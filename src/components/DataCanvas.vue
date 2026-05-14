@@ -743,8 +743,8 @@ function exportPdf() {
       v-if="reportPlan || isPlanning || planError"
       class="plan-modal-backdrop absolute inset-0 z-30 flex items-center justify-center backdrop-blur-sm px-6"
     >
-      <section class="plan-modal-panel w-full max-w-4xl rounded-[24px] border overflow-hidden">
-        <div class="px-6 py-5 border-b border-neon-cyan/12 flex items-start justify-between gap-4">
+      <section class="plan-modal-panel w-full max-w-4xl rounded-[24px] border overflow-hidden flex flex-col">
+        <div class="flex-shrink-0 px-6 py-5 border-b border-neon-cyan/12 flex items-start justify-between gap-4">
           <div>
             <div class="font-mono text-[11px] tracking-[0.28em] text-[#374151] mb-2">PLAN MODE</div>
             <h2 class="font-mono text-xl neon-text">编报规划确认</h2>
@@ -755,7 +755,7 @@ function exportPdf() {
           <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">关闭</button>
         </div>
 
-        <div v-if="isPlanning" class="px-6 py-14 text-center">
+        <div v-if="isPlanning" class="plan-modal-scroll px-6 py-14 text-center">
           <div class="nexus-loader scale-75 mx-auto">
             <div class="loader-ring ring-a"></div>
             <div class="loader-ring ring-b"></div>
@@ -765,7 +765,7 @@ function exportPdf() {
           <div class="font-mono text-[11px] text-[#374151] mt-2">预计 10-30 秒，请稍候</div>
         </div>
 
-        <div v-else-if="planError" class="px-6 py-8">
+        <div v-else-if="planError" class="plan-modal-scroll px-6 py-8">
           <div class="rounded-2xl border border-red-400/35 bg-red-950/25 px-4 py-4 text-red-200 text-sm">
             {{ planError }}
           </div>
@@ -777,24 +777,26 @@ function exportPdf() {
           </div>
         </div>
 
-        <div v-else class="px-6 py-5">
-          <div class="rounded-2xl border border-neon-cyan/12 bg-black/16 px-4 py-3 mb-5">
-            <div class="font-mono text-sm text-[#0f172a] mb-2">{{ reportPlan.title }}</div>
-            <div class="text-sm text-slate-300/70 leading-relaxed">{{ reportPlan.summary }}</div>
+        <div v-else class="plan-modal-body">
+          <div class="flex-shrink-0 px-6 pt-5">
+            <div class="rounded-2xl border border-neon-cyan/12 bg-black/16 px-4 py-3 mb-5">
+              <div class="font-mono text-sm text-[#0f172a] mb-2">{{ reportPlan.title }}</div>
+              <div class="text-sm text-slate-300/70 leading-relaxed">{{ reportPlan.summary }}</div>
+            </div>
+
+            <div class="flex items-center gap-2 mb-5">
+              <button
+                v-for="(step, index) in reportPlan.steps"
+                :key="step.id"
+                class="h-2 flex-1 rounded-full transition-all"
+                :class="index <= planStepIndex ? 'bg-neon-cyan/75 shadow-[0_0_10px_rgba(0,243,255,0.16)]' : 'bg-neon-cyan/10'"
+                type="button"
+                @click="index < planStepIndex ? emit('prev-plan-step') : null"
+              ></button>
+            </div>
           </div>
 
-          <div class="flex items-center gap-2 mb-5">
-            <button
-              v-for="(step, index) in reportPlan.steps"
-              :key="step.id"
-              class="h-2 flex-1 rounded-full transition-all"
-              :class="index <= planStepIndex ? 'bg-neon-cyan/75 shadow-[0_0_10px_rgba(0,243,255,0.16)]' : 'bg-neon-cyan/10'"
-              type="button"
-              @click="index < planStepIndex ? emit('prev-plan-step') : null"
-            ></button>
-          </div>
-
-          <div v-if="currentPlanStep">
+          <div v-if="currentPlanStep" class="plan-modal-scroll px-6 pb-5">
             <div class="mb-4">
               <div class="font-mono text-[11px] tracking-[0.24em] text-slate-700 mb-2">
                 STEP {{ planStepIndex + 1 }} / {{ reportPlan.steps.length }} · {{ planStepTypeLabel(currentPlanStep.type) }}
@@ -853,7 +855,7 @@ function exportPdf() {
             </div>
           </div>
 
-          <div class="mt-6 flex items-center justify-between gap-3">
+          <div class="plan-modal-actions flex items-center justify-between gap-3">
             <button
               class="sci-btn text-[10px] px-3 py-2"
               type="button"
