@@ -100,6 +100,7 @@ const canExport = computed(() => props.phase === 'done' && Boolean(props.generat
 const isLiveLogVisible = computed(() => props.phase === 'loading')
 const canOpenLogDrawer = computed(() => !isLiveLogVisible.value)
 const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value)
+const showNewReportButton = computed(() => props.isHistoryMode || props.phase === 'done' || props.phase === 'error')
 const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating && !props.isPlanning)
 const titleLength = computed(() => props.title?.length || 0)
 const currentPlanStep = computed(() => props.reportPlan?.steps?.[props.planStepIndex] || null)
@@ -738,7 +739,7 @@ function exportPdf() {
             {{ unreadLogCount > 99 ? '99+' : unreadLogCount }}
           </span>
         </button>
-        <button v-if="isHistoryMode" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-2">
+        <button v-if="showNewReportButton" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-2">
           清屏并开启下一个编报
         </button>
         <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-2">导出 Word</button>
