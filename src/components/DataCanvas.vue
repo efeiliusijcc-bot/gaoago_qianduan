@@ -344,7 +344,13 @@ function translateOpenClawLog(log) {
     status,
   }
 
-  if (lower.includes('error') || lower.includes('failed') || lower.includes('timeout')) {
+  const hasFailureText = lower.includes('error') ||
+    lower.includes('failed') ||
+    lower.includes('timed out') ||
+    lower.includes('timeout exceeded') ||
+    lower.includes('超时')
+
+  if (hasFailureText) {
     return {
       ...base,
       stage: 'ERROR',
