@@ -75,9 +75,9 @@ function handleRecentScroll(event) {
 </script>
 
 <template>
-  <aside class="sidebar-shell w-[312px] shrink-0 flex flex-col p-4 gap-4">
-    <section class="panel status-card p-5">
-      <div class="flex items-center justify-between mb-6">
+  <aside class="sidebar-shell w-[312px] shrink-0 flex flex-col p-4 gap-3">
+    <section class="panel status-card compact-status-card p-4">
+      <div class="flex items-center justify-between mb-3">
         <div>
           <h2 class="font-mono text-sm neon-text tracking-widest">AI引擎状态</h2>
           <div class="mt-1 font-mono text-[10px] text-[#374151]">ENGINE STATUS</div>
@@ -85,25 +85,25 @@ function handleRecentScroll(event) {
         <button class="sci-btn text-[10px] px-3 py-1.5" @click="emit('refresh-health')">检测</button>
       </div>
 
-      <div class="flex items-center gap-4 mb-6">
+      <div class="flex items-center gap-3 mb-3">
         <div
-          class="status-orb w-14 h-14 rounded-2xl border flex items-center justify-center text-2xl"
+          class="status-orb w-10 h-10 rounded-xl border flex items-center justify-center text-lg"
           :class="healthOk ? 'border-neon-green/45 text-neon-green shadow-[0_0_22px_rgba(0,255,136,0.16)]' : !hasHealth ? 'border-cyber-yellow/35 text-cyber-yellow shadow-[0_0_18px_rgba(252,238,10,0.12)]' : 'border-red-300/45 text-red-300 shadow-[0_0_18px_rgba(252,90,122,0.14)]'"
         >
           ✓
         </div>
         <div class="min-w-0">
-          <div class="font-mono text-[28px] leading-none font-bold" :class="healthOk ? 'text-neon-green' : !hasHealth ? 'text-cyber-yellow' : 'text-red-300'">{{ engineStatus }}</div>
-          <div class="font-mono text-xs text-slate-300/70 mt-2 truncate">{{ engineText }}</div>
+          <div class="font-mono text-[22px] leading-none font-bold" :class="healthOk ? 'text-neon-green' : !hasHealth ? 'text-cyber-yellow' : 'text-red-300'">{{ engineStatus }}</div>
+          <div class="font-mono text-[10px] text-slate-300/70 mt-1 truncate">{{ engineText }}</div>
         </div>
       </div>
 
-      <div class="space-y-2 border-t border-neon-cyan/10 pt-4">
-        <div class="soft-field flex items-center justify-between px-3 py-3">
+      <div class="space-y-1.5 border-t border-neon-cyan/10 pt-3">
+        <div class="soft-field flex items-center justify-between px-3 py-2">
           <span class="font-mono text-xs text-slate-300/65">服务连接状态</span>
           <span class="font-mono text-xs" :class="serviceStatus === '正常' ? 'text-neon-green' : serviceStatus === '检测中' ? 'text-cyber-yellow' : 'text-red-300'">{{ serviceStatus }}</span>
         </div>
-        <div class="soft-field flex items-center justify-between px-3 py-3">
+        <div class="soft-field flex items-center justify-between px-3 py-2">
           <span class="font-mono text-xs text-slate-300/65">本地服务引擎</span>
           <span class="font-mono text-xs" :class="localStatus === '正常' ? 'text-neon-green' : localStatus === '检测中' ? 'text-cyber-yellow' : 'text-red-300'">{{ localStatus }}</span>
         </div>

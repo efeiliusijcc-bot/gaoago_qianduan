@@ -947,6 +947,10 @@ canvas {
   border-radius: 20px;
 }
 
+.compact-status-card {
+  max-height: 210px;
+}
+
 .status-orb {
   background: #ffffff !important;
   border-color: rgba(22, 163, 74, 0.34) !important;
@@ -976,7 +980,7 @@ canvas {
 
 .recent-card {
   flex: 1;
-  min-height: 0;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
 }
@@ -990,7 +994,7 @@ canvas {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 4px;
+  padding-right: 6px;
 }
 
 .recent-list::-webkit-scrollbar {
