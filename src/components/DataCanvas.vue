@@ -66,11 +66,13 @@ const props = defineProps({
     default: 0,
   },
   isLogDrawerOpen: Boolean,
+  hasReturnableWorkspace: Boolean,
 })
 
 const emit = defineEmits([
   'list',
   'new-report',
+  'show-active-workspace',
   'toggle-log-drawer',
   'update:title',
   'update:reportType',
@@ -725,6 +727,13 @@ function exportPdf() {
       </div>
 
       <div class="workspace-actions flex items-center gap-2">
+        <button
+          v-if="hasReturnableWorkspace"
+          @click="emit('show-active-workspace')"
+          class="sci-btn text-[10px] px-3 py-2 border-neon-green text-neon-green"
+        >
+          返回生成编报
+        </button>
         <button
           @click="toggleLogDrawer"
           :disabled="!canOpenLogDrawer"

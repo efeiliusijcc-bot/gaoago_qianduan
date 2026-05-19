@@ -205,6 +205,22 @@ export function useReportJobs() {
     return true
   }
 
+  function getUnfinishedWorkspaceSnapshot(exceptJobId = '') {
+    if (
+      activeWorkspaceSnapshot.value?.job?.jobId &&
+      activeWorkspaceSnapshot.value.job.jobId !== exceptJobId &&
+      isUnfinishedJob(activeWorkspaceSnapshot.value.job)
+    ) {
+      return activeWorkspaceSnapshot.value
+    }
+
+    if (job.value?.jobId && job.value.jobId !== exceptJobId && isUnfinishedJob(job.value)) {
+      return makeWorkspaceSnapshot()
+    }
+
+    return null
+  }
+
   function upsertJobInList(item) {
     if (!item?.jobId) return
     const drafts = readDrafts()
@@ -1079,13 +1095,14 @@ export function useReportJobs() {
       return
     }
 
+    const unfinishedWorkspace = getUnfinishedWorkspaceSnapshot(item.jobId)
     currentView.value = 'generator'
     if (activePollJobId.value === item.jobId) {
       restoreWorkspaceSnapshot()
       return
     }
 
-    closeJobEvents()
+    if (!unfinishedWorkspace) closeJobEvents()
     await loadExecutionLog(item.jobId)
     openedHistoryJobId.value = null
     selectedReport.value = null
@@ -1095,9 +1112,9 @@ export function useReportJobs() {
     processLogs.value = []
     job.value = item
     applyJobFormData(item)
-    activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: item })
+    activeWorkspaceSnapshot.value = unfinishedWorkspace || makeWorkspaceSnapshot({ job: item })
     upsertJobInList(item)
-    subscribeJobEvents(item.jobId)
+    if (!unfinishedWorkspace) subscribeJobEvents(item.jobId)
 
     if (item.status === 'failed' || item.status === 'waiting_approval' || item.status === 'cancelled') {
       phase.value = 'error'

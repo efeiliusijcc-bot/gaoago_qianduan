@@ -96,6 +96,10 @@ const hasGeneratingWorkspace = computed(() => {
   )
 })
 
+const hasReturnableWorkspace = computed(() => {
+  return hasGeneratingWorkspace.value && Boolean(job.value?.jobId) && job.value.jobId !== activeWorkspaceJobId.value
+})
+
 const sidebarCurrentJobId = computed(() => {
   return openedHistoryJobId.value || job.value?.jobId || activeWorkspaceJobId.value
 })
@@ -185,6 +189,7 @@ function jobActionLabel(status) {
         :executionLogs="executionLogs"
         :unreadLogCount="unreadLogCount"
         :isLogDrawerOpen="isLogDrawerOpen"
+        :hasReturnableWorkspace="hasReturnableWorkspace"
         @generate="handleGenerate"
         @confirm-plan="confirmReportPlan"
         @cancel-plan="cancelReportPlan"
@@ -194,6 +199,7 @@ function jobActionLabel(status) {
         @prev-plan-step="prevPlanStep"
         @list="loadJobList"
         @new-report="resetForNewReport"
+        @show-active-workspace="showGenerator"
         @toggle-log-drawer="toggleLogDrawer"
       />
     </div>
