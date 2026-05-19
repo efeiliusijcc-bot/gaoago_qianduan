@@ -1109,13 +1109,13 @@ function exportPdf() {
             <div class="loader-core"></div>
           </div>
           <div class="font-mono text-lg neon-text mt-8">{{ loadingStep || '正在生成报告' }}</div>
-          <div class="font-mono text-[10px] text-[#374151] mt-2">预计 3-5 分钟生成，请耐心等待；后台任务运行中，请保持 OpenClaw gateway 在线</div>
+          <div class="font-mono text-[10px] text-[#374151] mt-2">预计 10-15 分钟生成，请耐心等待；后台任务运行中，请保持AI智能体在线</div>
 
             <div class="live-log-panel mt-6 text-left border border-neon-cyan/25 bg-black/35 rounded overflow-hidden shadow-[0_0_28px_rgba(0,243,255,0.12)]">
               <div class="h-10 px-4 border-b border-neon-cyan/15 flex items-center justify-between">
                 <div>
                   <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
-                  <div class="font-mono text-[10px] text-[#374151]">运行中实时同步 OpenClaw 工具调用</div>
+                  <div class="font-mono text-[10px] text-[#374151]">运行中实时同步 AI agent 工具调用</div>
                 </div>
                 <div class="flex items-center gap-2 font-mono text-[10px] text-neon-green">
                   <span class="data-pulse" style="background: #00ff88;"></span>
