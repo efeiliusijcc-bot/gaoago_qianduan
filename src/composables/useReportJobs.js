@@ -101,6 +101,12 @@ export function useReportJobs() {
   })
   const activeWorkspaceJobId = computed(() => activeWorkspaceSnapshot.value?.job?.jobId || job.value?.jobId || '')
   const activeWorkspaceStatus = computed(() => activeWorkspaceSnapshot.value?.job?.status || job.value?.status || '')
+  const returnableWorkspaceJobId = computed(() => {
+    const snapshotJob = activeWorkspaceSnapshot.value?.job
+    if (!snapshotJob?.jobId || !isUnfinishedJob(snapshotJob)) return ''
+    if (!job.value?.jobId) return snapshotJob.jobId
+    return snapshotJob.jobId !== job.value.jobId ? snapshotJob.jobId : ''
+  })
 
   const filteredJobs = computed(() => {
     return [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
@@ -161,7 +167,9 @@ export function useReportJobs() {
     const currentJobId = current?.job?.jobId
     const visibleJobId = job.value?.jobId
     if (!currentJobId && !visibleJobId) return
-    if (!__force && currentJobId && visibleJobId && currentJobId !== visibleJobId && openedHistoryJobId.value) return
+    if (!__force && currentJobId && visibleJobId && currentJobId !== visibleJobId) {
+      if (isUnfinishedJob(current?.job) || openedHistoryJobId.value) return
+    }
     const shouldRefreshFromVisibleState = Object.keys(nextOverrides).length === 0
     activeWorkspaceSnapshot.value = {
       ...(shouldRefreshFromVisibleState ? makeWorkspaceSnapshot() : current || makeWorkspaceSnapshot()),
@@ -1050,13 +1058,11 @@ export function useReportJobs() {
 
   async function openReportFromList(item) {
     const requestId = ++historyOpenRequestId
-    const keepActiveStream =
-      activeWorkspaceSnapshot.value?.job?.jobId &&
-      activeWorkspaceSnapshot.value.job.jobId !== item.jobId &&
-      isUnfinishedJob(activeWorkspaceSnapshot.value.job)
-    if (!keepActiveStream) closeJobEvents()
+    const unfinishedWorkspace = getUnfinishedWorkspaceSnapshot(item.jobId)
+    if (!unfinishedWorkspace) closeJobEvents()
     await loadExecutionLog(item.jobId)
     if (requestId !== historyOpenRequestId) return
+    if (unfinishedWorkspace) activeWorkspaceSnapshot.value = unfinishedWorkspace
     selectedReport.value = null
     generatedHtml.value = ''
     errorMessage.value = ''
@@ -1221,6 +1227,7 @@ export function useReportJobs() {
     hasActiveWorkspace,
     activeWorkspaceJobId,
     activeWorkspaceStatus,
+    returnableWorkspaceJobId,
     filteredJobs,
     succeededCount,
     runningCount,

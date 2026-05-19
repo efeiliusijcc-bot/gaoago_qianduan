@@ -52,6 +52,7 @@ const {
   hasActiveWorkspace,
   activeWorkspaceJobId,
   activeWorkspaceStatus,
+  returnableWorkspaceJobId,
   savedNotice,
   executionLogs,
   unreadLogCount,
@@ -97,7 +98,7 @@ const hasGeneratingWorkspace = computed(() => {
 })
 
 const hasReturnableWorkspace = computed(() => {
-  return hasGeneratingWorkspace.value && Boolean(job.value?.jobId) && job.value.jobId !== activeWorkspaceJobId.value
+  return Boolean(returnableWorkspaceJobId.value)
 })
 
 const sidebarCurrentJobId = computed(() => {
