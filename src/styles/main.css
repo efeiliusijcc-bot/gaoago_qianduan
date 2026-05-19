@@ -1070,6 +1070,17 @@ canvas {
   box-shadow: 0 18px 40px rgba(37, 99, 235, 0.14);
 }
 
+.report-type-card.disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.report-type-card.disabled:hover {
+  transform: none;
+  border-color: rgba(148, 163, 184, 0.35) !important;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+}
+
 .report-type-card.active {
   border-color: var(--blue) !important;
   background: #ffffff !important;

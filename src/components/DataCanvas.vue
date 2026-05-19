@@ -170,11 +170,17 @@ const activeSelectedParameters = computed(() => {
   const params = selectedReportType.value?.params || []
   return props.activeParameters.filter((param) => params.includes(param))
 })
+const enabledReportTypes = new Set(['write-hb-k'])
 
 const singleLineParameters = new Set(['时间范围', '地区 / 对象', '国家 / 地区', '当前职务', '材料范围'])
 
 function selectReportType(value) {
+  if (!enabledReportTypes.has(value)) return
   emit('update:reportType', props.reportType === value ? '' : value)
+}
+
+function isReportTypeDisabled(value) {
+  return !enabledReportTypes.has(value)
 }
 
 function isParameterActive(param) {
@@ -981,8 +987,10 @@ function exportPdf() {
               v-for="type in reportTypeOptions"
               :key="type.value"
               class="report-type-card relative px-5 py-6 transition-all duration-200"
-              :class="{ active: reportType === type.value }"
+              :class="{ active: reportType === type.value, disabled: isReportTypeDisabled(type.value) }"
               type="button"
+              :disabled="isReportTypeDisabled(type.value)"
+              :title="isReportTypeDisabled(type.value) ? '该报类暂未开放' : ''"
               @click="selectReportType(type.value)"
             >
               <span
