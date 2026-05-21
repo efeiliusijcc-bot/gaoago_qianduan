@@ -158,7 +158,7 @@ const reportTypeOptions = [
   },
   {
     value: 'person-intelligence-report',
-    label: '人文报告编写',
+    label: '人物报告编写',
     icon: '▣',
     desc: '人物情报报告：基本情况、政治立场、风险点、接待建议',
     params: ['人物背景', '国家 / 地区', '当前职务', '来访场景', '已知上下文'],
@@ -577,6 +577,57 @@ function htmlToPlainText(html) {
   return div.textContent || div.innerText || ''
 }
 
+function collectInlineRuns(node, TextRun, options = {}) {
+  const { size = 24, font = 'SimSun' } = options
+  const segments = []
+
+  function pushText(text, marks) {
+    const normalized = String(text || '').replace(/\s+/g, ' ')
+    if (normalized) segments.push({ text: normalized, ...marks })
+  }
+
+  function walk(current, marks = {}) {
+    if (current.nodeType === Node.TEXT_NODE) {
+      pushText(current.textContent, marks)
+      return
+    }
+
+    if (current.nodeType !== Node.ELEMENT_NODE) return
+
+    const tag = current.tagName.toLowerCase()
+    if (tag === 'br') {
+      segments.push({ break: 1 })
+      return
+    }
+
+    const nextMarks = {
+      ...marks,
+      bold: marks.bold || tag === 'strong' || tag === 'b',
+      italics: marks.italics || tag === 'em' || tag === 'i',
+      underline: marks.underline || tag === 'u',
+    }
+    for (const child of current.childNodes) walk(child, nextMarks)
+  }
+
+  for (const child of node.childNodes) walk(child)
+
+  const firstText = segments.find((segment) => segment.text)
+  if (firstText) firstText.text = firstText.text.trimStart()
+  const lastText = [...segments].reverse().find((segment) => segment.text)
+  if (lastText) lastText.text = lastText.text.trimEnd()
+
+  return segments
+    .filter((segment) => segment.break || segment.text)
+    .map((segment) => new TextRun({
+      ...(segment.break ? { break: segment.break } : { text: segment.text }),
+      size,
+      font,
+      bold: segment.bold || undefined,
+      italics: segment.italics || undefined,
+      underline: segment.underline ? {} : undefined,
+    }))
+}
+
 function collectDocxBlocks(html, docx) {
   const { Paragraph, TextRun, Table, TableCell, TableRow, WidthType, HeadingLevel, AlignmentType, BorderStyle } = docx
   const root = document.createElement('div')
@@ -600,7 +651,7 @@ function collectDocxBlocks(html, docx) {
       for (const li of node.querySelectorAll('li')) {
         blocks.push(
           new Paragraph({
-            children: [new TextRun({ text: li.textContent?.trim() || '', size: 24, font: 'SimSun' })],
+            children: collectInlineRuns(li, TextRun),
             bullet: tag === 'ul' ? { level: 0 } : undefined,
             numbering: tag === 'ol' ? { reference: 'default-numbering', level: 0 } : undefined,
             spacing: { after: 80 },
@@ -613,7 +664,7 @@ function collectDocxBlocks(html, docx) {
           new TableCell({
             children: [
               new Paragraph({
-                children: [new TextRun({ text: cell.textContent?.trim() || '', size: 20, font: 'SimSun' })],
+                children: collectInlineRuns(cell, TextRun, { size: 20 }),
               }),
             ],
             borders: {
@@ -632,7 +683,7 @@ function collectDocxBlocks(html, docx) {
     } else {
       blocks.push(
         new Paragraph({
-          children: [new TextRun({ text, size: 24, font: 'SimSun' })],
+          children: collectInlineRuns(node, TextRun),
           alignment: AlignmentType.JUSTIFIED,
           indent: { firstLine: 480 },
           spacing: { after: 160 },
