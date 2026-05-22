@@ -26,6 +26,7 @@ const {
   planSearchSelections,
   planSourceInput,
   planSupplement,
+  databaseSourceEnabled,
   planError,
   generatedHtml,
   phase,
@@ -186,6 +187,7 @@ function jobActionLabel(status) {
         :planSearchSelections="planSearchSelections"
         v-model:planSourceInput="planSourceInput"
         v-model:planSupplement="planSupplement"
+        v-model:databaseSourceEnabled="databaseSourceEnabled"
         :planError="planError"
         :executionLogs="executionLogs"
         :unreadLogCount="unreadLogCount"

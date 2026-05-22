@@ -54,6 +54,7 @@ export function useReportJobs() {
   const planSearchSelections = ref([])
   const planSourceInput = ref('')
   const planSupplement = ref('')
+  const databaseSourceEnabled = ref(true)
   const planError = ref('')
   const generatedHtml = ref('')
   const phase = ref('idle')
@@ -148,6 +149,7 @@ export function useReportJobs() {
       parameterValues: { ...parameterValues.value },
       activeParameters: [...activeParameters.value],
       outputDepth: outputDepth.value,
+      databaseSourceEnabled: databaseSourceEnabled.value,
       isGenerating: isGenerating.value,
       generatedHtml: generatedHtml.value,
       phase: phase.value,
@@ -195,6 +197,7 @@ export function useReportJobs() {
     parameterValues.value = { ...(snapshot.parameterValues || {}) }
     activeParameters.value = [...(snapshot.activeParameters || [])]
     outputDepth.value = snapshot.outputDepth || 'detailed'
+    databaseSourceEnabled.value = snapshot.databaseSourceEnabled !== false
     isGenerating.value = Boolean(snapshot.isGenerating)
     generatedHtml.value = snapshot.generatedHtml || ''
     phase.value = snapshot.phase || 'idle'
@@ -628,6 +631,7 @@ export function useReportJobs() {
     planSearchSelections.value = []
     planSourceInput.value = ''
     planSupplement.value = ''
+    databaseSourceEnabled.value = true
     planError.value = ''
   }
 
@@ -705,6 +709,14 @@ export function useReportJobs() {
       selectedSearchQueries: selectedQueries,
       selectedSources,
       userProvidedSources,
+      databaseSourceOptions: {
+        enabled: Boolean(databaseSourceEnabled.value),
+        mode: 'summary_first',
+        lookbackDays: 30,
+        maxMetadataRows: 50,
+        maxContentRows: 8,
+        mcpServer: 'mysql-test',
+      },
       selectedModules,
       parameterValues: selectedParameterValues,
       freeTextContext: contextText.value.trim(),
@@ -1201,6 +1213,7 @@ export function useReportJobs() {
     planSearchSelections,
     planSourceInput,
     planSupplement,
+    databaseSourceEnabled,
     planError,
     generatedHtml,
     phase,

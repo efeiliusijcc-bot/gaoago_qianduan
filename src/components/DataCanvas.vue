@@ -56,6 +56,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  databaseSourceEnabled: {
+    type: Boolean,
+    default: true,
+  },
   planError: String,
   executionLogs: {
     type: Array,
@@ -81,6 +85,7 @@ const emit = defineEmits([
   'update:activeParameters',
   'update:planSourceInput',
   'update:planSupplement',
+  'update:databaseSourceEnabled',
   'generate',
   'confirm-plan',
   'cancel-plan',
@@ -966,6 +971,23 @@ function exportPdf() {
                 </div>
                 <div class="text-xs leading-relaxed text-[#374151]">{{ option.detail }}</div>
               </button>
+            </div>
+
+            <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  class="mt-1 h-4 w-4 accent-cyan-500"
+                  type="checkbox"
+                  :checked="databaseSourceEnabled"
+                  @change="emit('update:databaseSourceEnabled', $event.target.checked)"
+                />
+                <span>
+                  <span class="block font-mono text-[10px] tracking-widest text-[#374151] mb-1">数据库信源</span>
+                  <span class="block text-xs leading-relaxed text-[#374151]">
+                    使用近30天历史爬取网页摘要扩展信源；关闭后仅使用公开检索与手动指定信源。
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
