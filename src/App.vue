@@ -27,6 +27,8 @@ const {
   planSourceInput,
   planSupplement,
   databaseSourceEnabled,
+  databaseSources,
+  databaseSourcesLoading,
   planError,
   generatedHtml,
   phase,
@@ -190,6 +192,8 @@ function jobActionLabel(status) {
         v-model:databaseSourceEnabled="databaseSourceEnabled"
         :planError="planError"
         :executionLogs="executionLogs"
+        :databaseSources="databaseSources"
+        :databaseSourcesLoading="databaseSourcesLoading"
         :unreadLogCount="unreadLogCount"
         :isLogDrawerOpen="isLogDrawerOpen"
         :hasReturnableWorkspace="hasReturnableWorkspace"

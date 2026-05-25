@@ -3,6 +3,7 @@ import {
   createReportPlan,
   createReportJob,
   fetchOpenClawHealth,
+  fetchReportDatabaseSources,
   fetchReportJob,
   fetchReportJobEventLog,
   fetchReportJobs,
@@ -82,6 +83,8 @@ export function useReportJobs() {
   const savedNotice = ref('')
   const activePollJobId = ref(null)
   const executionLogs = ref([])
+  const databaseSources = ref(null)
+  const databaseSourcesLoading = ref(false)
   const unreadLogCount = ref(0)
   const isLogDrawerOpen = ref(false)
   let listRefreshTimer = null
@@ -211,6 +214,7 @@ export function useReportJobs() {
     currentView.value = 'generator'
     if (job.value?.jobId) {
       setActiveExecutionLogJob(job.value.jobId)
+      fetchDatabaseSourcesData(job.value.jobId)
       if (isUnfinishedJob(job.value)) subscribeJobEvents(job.value.jobId)
     }
     return true
@@ -387,6 +391,22 @@ export function useReportJobs() {
     }
   }
 
+  async function fetchDatabaseSourcesData(jobId) {
+    if (!jobId) {
+      databaseSources.value = null
+      databaseSourcesLoading.value = false
+      return
+    }
+    databaseSourcesLoading.value = true
+    try {
+      databaseSources.value = await fetchReportDatabaseSources(jobId)
+    } catch {
+      databaseSources.value = null
+    } finally {
+      databaseSourcesLoading.value = false
+    }
+  }
+
   async function loadExecutionLog(jobId) {
     if (!jobId) {
       setActiveExecutionLogJob(null)
@@ -487,6 +507,7 @@ export function useReportJobs() {
     }
 
     if (event.type === 'done') {
+      fetchDatabaseSourcesData(eventJobId)
       closeJobEvents()
     }
   }
@@ -826,7 +847,10 @@ export function useReportJobs() {
         upsertJobInRecent(next)
         tick += 1
 
+        if (tick % 4 === 0) fetchDatabaseSourcesData(jobId)
+
         if (next.status === 'succeeded') {
+          fetchDatabaseSourcesData(jobId)
           if (visibleForPoll) loadingStep.value = '正在读取报告文件内容'
           const result = await fetchReportResult(jobId)
           const completedJob = { ...next, resultPath: result.resultPath || next.resultPath }
@@ -1073,6 +1097,7 @@ export function useReportJobs() {
     const unfinishedWorkspace = getUnfinishedWorkspaceSnapshot(item.jobId)
     if (!unfinishedWorkspace) closeJobEvents()
     await loadExecutionLog(item.jobId)
+    fetchDatabaseSourcesData(item.jobId)
     if (requestId !== historyOpenRequestId) return
     if (unfinishedWorkspace) activeWorkspaceSnapshot.value = unfinishedWorkspace
     selectedReport.value = null
@@ -1122,6 +1147,7 @@ export function useReportJobs() {
 
     if (!unfinishedWorkspace) closeJobEvents()
     await loadExecutionLog(item.jobId)
+    fetchDatabaseSourcesData(item.jobId)
     openedHistoryJobId.value = null
     selectedReport.value = null
     generatedHtml.value = ''
@@ -1245,6 +1271,8 @@ export function useReportJobs() {
     succeededCount,
     runningCount,
     executionLogs,
+    databaseSources,
+    databaseSourcesLoading,
     unreadLogCount,
     isLogDrawerOpen,
     getJobTitle,

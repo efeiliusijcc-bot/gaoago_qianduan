@@ -65,6 +65,14 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  databaseSources: {
+    type: Object,
+    default: null,
+  },
+  databaseSourcesLoading: {
+    type: Boolean,
+    default: false,
+  },
   unreadLogCount: {
     type: Number,
     default: 0,
@@ -99,6 +107,7 @@ const drawerLogListRef = ref(null)
 const liveLogListRef = ref(null)
 const contextTextRef = ref(null)
 const technicalLogOpenIds = ref(new Set())
+const dbSourcesExpanded = ref(false)
 const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
 let liveLogScrollTimer = null
@@ -499,6 +508,32 @@ function toggleTechnicalLog(id) {
   technicalLogOpenIds.value = next
 }
 
+const dbSourcesState = computed(() => {
+  const data = props.databaseSources
+  if (props.databaseSourcesLoading && !data) return 'loading'
+  if (!data || data.status === 'unavailable') return 'unavailable'
+  if (data.status === 'hit') return 'hit'
+  if (data.status === 'empty' || data.status === 'fallback') return 'fallback'
+  return 'unavailable'
+})
+
+const dbSourcesVisible = computed(() => {
+  const data = props.databaseSources
+  if (!data || !data.sources) return []
+  return dbSourcesExpanded.value ? data.sources : data.sources.slice(0, 8)
+})
+
+function formatDbSourceTime(value) {
+  if (!value) return ''
+  try {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return String(value)
+    return d.toLocaleDateString('zh-CN')
+  } catch {
+    return String(value)
+  }
+}
+
 function scrollToBottom() {
   nextTick(() => {
     if (reportRef.value) {
@@ -876,6 +911,42 @@ function exportPdf() {
                 <pre v-if="isTechnicalLogOpen(log.id)" class="friendly-log-raw">{{ translateOpenClawLog(log).raw }}</pre>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div class="db-sources-section border-t border-border-glow px-4 py-3">
+          <div class="font-mono text-[10px] tracking-widest text-[#374151] mb-2">数据库信源检索</div>
+          <div v-if="dbSourcesState === 'loading'" class="text-xs text-[#374151]">正在检查数据库信源...</div>
+          <div v-else-if="dbSourcesState === 'unavailable'" class="text-xs text-[#374151]">数据库信源仍在检索或尚未落盘</div>
+          <div v-else-if="dbSourcesState === 'fallback'" class="text-xs space-y-1">
+            <div class="text-amber-300">数据库无直接命中，已回退公开检索</div>
+            <div v-if="databaseSources?.fallbackReason" class="text-[#374151]">原因：{{ databaseSources.fallbackReason }}</div>
+          </div>
+          <div v-else-if="dbSourcesState === 'hit'" class="text-xs space-y-2">
+            <div class="text-[#00ff88]">
+              数据库命中 <strong>{{ databaseSources?.totalHits || databaseSources?.sources?.length || 0 }}</strong> 条信源
+              <span v-if="databaseSources?.updatedAt" class="text-[#374151] ml-1">| {{ formatDbSourceTime(databaseSources.updatedAt) }}</span>
+            </div>
+            <div class="db-sources-scroll max-h-60 overflow-auto space-y-2">
+              <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">
+                <div class="font-mono text-[11px] leading-relaxed">
+                  <a v-if="src.url" :href="src.url" target="_blank" rel="noopener noreferrer" class="text-neon-cyan hover:underline">{{ src.title || src.url }}</a>
+                  <span v-else class="text-slate-200">{{ src.title || '(无标题)' }}</span>
+                </div>
+                <div v-if="src.summary" class="text-[10px] text-[#64748b] leading-relaxed mt-1 line-clamp-3">{{ src.summary }}</div>
+                <div class="flex gap-3 text-[10px] text-[#374151] mt-1">
+                  <span v-if="src.websiteName">{{ src.websiteName }}</span>
+                  <span v-if="src.publishTime">{{ formatDbSourceTime(src.publishTime) }}</span>
+                </div>
+              </div>
+            </div>
+            <button
+              v-if="databaseSources?.sources?.length > 8"
+              class="w-full text-center text-[10px] text-neon-cyan hover:underline py-1"
+              @click="dbSourcesExpanded = !dbSourcesExpanded"
+            >
+              {{ dbSourcesExpanded ? '收起' : `查看更多 (共 ${databaseSources.sources.length} 条)` }}
+            </button>
           </div>
         </div>
       </aside>
@@ -1263,6 +1334,42 @@ function exportPdf() {
                   </div>
                   <div v-if="!processLogs.length" class="text-slate-500">等待 OpenClaw 返回执行日志...</div>
                   <span class="typing-cursor"></span>
+                </div>
+
+                <div class="db-sources-section border-t border-neon-cyan/20 mt-3 pt-3 px-1">
+                  <div class="font-mono text-[10px] tracking-widest text-[#374151] mb-2">数据库信源检索</div>
+                  <div v-if="dbSourcesState === 'loading'" class="text-xs text-[#374151]">正在检查数据库信源...</div>
+                  <div v-else-if="dbSourcesState === 'unavailable'" class="text-xs text-[#374151]">数据库信源仍在检索或尚未落盘</div>
+                  <div v-else-if="dbSourcesState === 'fallback'" class="text-xs space-y-1">
+                    <div class="text-amber-300">数据库无直接命中，已回退公开检索</div>
+                    <div v-if="databaseSources?.fallbackReason" class="text-[#374151]">原因：{{ databaseSources.fallbackReason }}</div>
+                  </div>
+                  <div v-else-if="dbSourcesState === 'hit'" class="text-xs space-y-2">
+                    <div class="text-[#00ff88]">
+                      数据库命中 <strong>{{ databaseSources?.totalHits || databaseSources?.sources?.length || 0 }}</strong> 条信源
+                      <span v-if="databaseSources?.updatedAt" class="text-[#374151] ml-1">| {{ formatDbSourceTime(databaseSources.updatedAt) }}</span>
+                    </div>
+                    <div class="db-sources-scroll max-h-48 overflow-auto space-y-2">
+                      <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">
+                        <div class="font-mono text-[11px] leading-relaxed">
+                          <a v-if="src.url" :href="src.url" target="_blank" rel="noopener noreferrer" class="text-neon-cyan hover:underline">{{ src.title || src.url }}</a>
+                          <span v-else class="text-slate-200">{{ src.title || '(无标题)' }}</span>
+                        </div>
+                        <div v-if="src.summary" class="text-[10px] text-[#64748b] leading-relaxed mt-1 line-clamp-3">{{ src.summary }}</div>
+                        <div class="flex gap-3 text-[10px] text-[#374151] mt-1">
+                          <span v-if="src.websiteName">{{ src.websiteName }}</span>
+                          <span v-if="src.publishTime">{{ formatDbSourceTime(src.publishTime) }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      v-if="databaseSources?.sources?.length > 8"
+                      class="w-full text-center text-[10px] text-neon-cyan hover:underline py-1"
+                      @click="dbSourcesExpanded = !dbSourcesExpanded"
+                    >
+                      {{ dbSourcesExpanded ? '收起' : `查看更多 (共 ${databaseSources.sources.length} 条)` }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
