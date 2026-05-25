@@ -20,6 +20,17 @@ export function fetchOpenClawHealth() {
   return request('/openclaw/health')
 }
 
+export function fetchResearchKeys() {
+  return request('/research-keys')
+}
+
+export function updateResearchKeys(body) {
+  return request('/research-keys', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
 export function createReportJob(body) {
   return request('/report-jobs', {
     method: 'POST',
