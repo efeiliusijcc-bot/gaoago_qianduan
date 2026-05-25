@@ -523,6 +523,12 @@ const dbSourcesVisible = computed(() => {
   return dbSourcesExpanded.value ? data.sources : data.sources.slice(0, 8)
 })
 
+const dbSourcesQueryPlan = computed(() => props.databaseSources?.queryPlan || {})
+
+const dbSourcesDisplayedCount = computed(() => props.databaseSources?.sources?.length || 0)
+
+const dbSourcesTotalCount = computed(() => props.databaseSources?.totalHits || dbSourcesDisplayedCount.value)
+
 function formatDbSourceTime(value) {
   if (!value) return ''
   try {
@@ -926,6 +932,14 @@ function exportPdf() {
             <div class="text-[#00ff88]">
               数据库命中 <strong>{{ databaseSources?.totalHits || databaseSources?.sources?.length || 0 }}</strong> 条信源
               <span v-if="databaseSources?.updatedAt" class="text-[#374151] ml-1">| {{ formatDbSourceTime(databaseSources.updatedAt) }}</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-[10px] text-[#64748b]">
+              <span>展示 {{ dbSourcesDisplayedCount }} 条 / 候选 {{ dbSourcesTotalCount }} 条</span>
+              <span v-if="dbSourcesQueryPlan.tablesChecked">检查 {{ dbSourcesQueryPlan.tablesChecked }} 张日表</span>
+              <span v-if="dbSourcesQueryPlan.strictHits || dbSourcesQueryPlan.expandedHits">
+                严格 {{ dbSourcesQueryPlan.strictHits || 0 }} / 扩展 {{ dbSourcesQueryPlan.expandedHits || 0 }}
+              </span>
+              <span v-if="dbSourcesQueryPlan.broadeningApplied" class="text-amber-300">已扩展召回</span>
             </div>
             <div class="db-sources-scroll max-h-60 overflow-auto space-y-2">
               <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">
@@ -1348,6 +1362,14 @@ function exportPdf() {
                     <div class="text-[#00ff88]">
                       数据库命中 <strong>{{ databaseSources?.totalHits || databaseSources?.sources?.length || 0 }}</strong> 条信源
                       <span v-if="databaseSources?.updatedAt" class="text-[#374151] ml-1">| {{ formatDbSourceTime(databaseSources.updatedAt) }}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[10px] text-[#64748b]">
+                      <span>展示 {{ dbSourcesDisplayedCount }} 条 / 候选 {{ dbSourcesTotalCount }} 条</span>
+                      <span v-if="dbSourcesQueryPlan.tablesChecked">检查 {{ dbSourcesQueryPlan.tablesChecked }} 张日表</span>
+                      <span v-if="dbSourcesQueryPlan.strictHits || dbSourcesQueryPlan.expandedHits">
+                        严格 {{ dbSourcesQueryPlan.strictHits || 0 }} / 扩展 {{ dbSourcesQueryPlan.expandedHits || 0 }}
+                      </span>
+                      <span v-if="dbSourcesQueryPlan.broadeningApplied" class="text-amber-300">已扩展召回</span>
                     </div>
                     <div class="db-sources-scroll max-h-48 overflow-auto space-y-2">
                       <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">
