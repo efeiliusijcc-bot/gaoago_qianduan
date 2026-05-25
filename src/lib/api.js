@@ -66,6 +66,10 @@ export function fetchReportResult(jobId) {
   return request(`/report-jobs/${jobId}/result`)
 }
 
+export function fetchReportDatabaseSources(jobId) {
+  return request(`/report-jobs/${jobId}/database-sources`)
+}
+
 export function getDownloadUrl(jobId, format = 'md') {
   return `${API_BASE}/report-jobs/${jobId}/download?format=${format}`
 }
