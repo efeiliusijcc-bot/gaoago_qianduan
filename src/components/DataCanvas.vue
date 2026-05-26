@@ -525,6 +525,8 @@ const dbSourcesVisible = computed(() => {
 
 const dbSourcesQueryPlan = computed(() => props.databaseSources?.queryPlan || {})
 
+const dbSourcesVectorPlan = computed(() => props.databaseSources?.vectorPlan || {})
+
 const dbSourcesDisplayedCount = computed(() => props.databaseSources?.sources?.length || 0)
 
 const dbSourcesTotalCount = computed(() => props.databaseSources?.totalHits || dbSourcesDisplayedCount.value)
@@ -940,6 +942,10 @@ function exportPdf() {
                 严格 {{ dbSourcesQueryPlan.strictHits || 0 }} / 扩展 {{ dbSourcesQueryPlan.expandedHits || 0 }}
               </span>
               <span v-if="dbSourcesQueryPlan.broadeningApplied" class="text-amber-300">已扩展召回</span>
+              <span v-if="dbSourcesVectorPlan.vectorHits">向量 {{ dbSourcesVectorPlan.vectorHits }} / 关键词 {{ dbSourcesVectorPlan.keywordBoostedHits || 0 }}</span>
+              <span v-if="dbSourcesVectorPlan.indexedRows">索引 {{ dbSourcesVectorPlan.indexedRows }} 条</span>
+              <span v-if="databaseSources?.retrievalMode" class="text-neon-cyan">{{ databaseSources.retrievalMode }}</span>
+              <span v-if="dbSourcesVectorPlan.fallbackReason" class="text-amber-300">向量回退</span>
             </div>
             <div class="db-sources-scroll max-h-60 overflow-auto space-y-2">
               <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">
@@ -1370,6 +1376,10 @@ function exportPdf() {
                         严格 {{ dbSourcesQueryPlan.strictHits || 0 }} / 扩展 {{ dbSourcesQueryPlan.expandedHits || 0 }}
                       </span>
                       <span v-if="dbSourcesQueryPlan.broadeningApplied" class="text-amber-300">已扩展召回</span>
+                      <span v-if="dbSourcesVectorPlan.vectorHits">向量 {{ dbSourcesVectorPlan.vectorHits }} / 关键词 {{ dbSourcesVectorPlan.keywordBoostedHits || 0 }}</span>
+                      <span v-if="dbSourcesVectorPlan.indexedRows">索引 {{ dbSourcesVectorPlan.indexedRows }} 条</span>
+                      <span v-if="databaseSources?.retrievalMode" class="text-neon-cyan">{{ databaseSources.retrievalMode }}</span>
+                      <span v-if="dbSourcesVectorPlan.fallbackReason" class="text-amber-300">向量回退</span>
                     </div>
                     <div class="db-sources-scroll max-h-48 overflow-auto space-y-2">
                       <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">

@@ -31,6 +31,10 @@ export function updateResearchKeys(body) {
   })
 }
 
+export function fetchVectorSourceStatus() {
+  return request('/vector-sources/status')
+}
+
 export function createReportJob(body) {
   return request('/report-jobs', {
     method: 'POST',

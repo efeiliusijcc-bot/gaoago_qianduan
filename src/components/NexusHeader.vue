@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
-import { fetchResearchKeys, updateResearchKeys } from '../lib/api.js'
+import { fetchResearchKeys, fetchVectorSourceStatus, updateResearchKeys } from '../lib/api.js'
 
 const currentTime = ref('')
 const canvasRef = ref(null)
@@ -10,22 +10,40 @@ const keyForm = ref({
   tavilyApiKey: '',
   exaApiKey: '',
   firecrawlApiKey: '',
+  openaiEmbeddingApiKey: '',
 })
 const keyClears = ref({
   tavilyApiKey: false,
   exaApiKey: false,
   firecrawlApiKey: false,
+  openaiEmbeddingApiKey: false,
 })
 const keyLoading = ref(false)
 const keySaving = ref(false)
 const keyError = ref('')
 const keyNotice = ref('')
+const vectorStatus = ref(null)
 
 const keyFields = [
   { key: 'tavilyApiKey', label: 'Tavily', placeholder: 'tvly-...' },
   { key: 'exaApiKey', label: 'Exa', placeholder: 'Exa API Key' },
   { key: 'firecrawlApiKey', label: 'Firecrawl', placeholder: 'fc-...' },
+  { key: 'openaiEmbeddingApiKey', label: 'OpenAI Embedding', placeholder: 'sk-...' },
 ]
+
+const emptyKeyForm = () => ({
+  tavilyApiKey: '',
+  exaApiKey: '',
+  firecrawlApiKey: '',
+  openaiEmbeddingApiKey: '',
+})
+
+const emptyKeyClears = () => ({
+  tavilyApiKey: false,
+  exaApiKey: false,
+  firecrawlApiKey: false,
+  openaiEmbeddingApiKey: false,
+})
 
 function updateTime() {
   currentTime.value = new Date().toLocaleString('zh-CN', {
@@ -43,7 +61,10 @@ async function loadResearchKeys() {
   keyLoading.value = true
   keyError.value = ''
   try {
-    keyStatus.value = await fetchResearchKeys()
+    const [keys, vector] = await Promise.allSettled([fetchResearchKeys(), fetchVectorSourceStatus()])
+    if (keys.status === 'fulfilled') keyStatus.value = keys.value
+    else throw keys.reason
+    if (vector.status === 'fulfilled') vectorStatus.value = vector.value
   } catch (error) {
     keyError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -55,8 +76,8 @@ function openKeySettings() {
   showKeySettings.value = true
   keyNotice.value = ''
   keyError.value = ''
-  keyForm.value = { tavilyApiKey: '', exaApiKey: '', firecrawlApiKey: '' }
-  keyClears.value = { tavilyApiKey: false, exaApiKey: false, firecrawlApiKey: false }
+  keyForm.value = emptyKeyForm()
+  keyClears.value = emptyKeyClears()
   void loadResearchKeys()
 }
 
@@ -97,8 +118,8 @@ async function saveResearchKeys() {
   try {
     keyStatus.value = await updateResearchKeys(body)
     keyNotice.value = '配置已保存，下一次编报立即生效。'
-    keyForm.value = { tavilyApiKey: '', exaApiKey: '', firecrawlApiKey: '' }
-    keyClears.value = { tavilyApiKey: false, exaApiKey: false, firecrawlApiKey: false }
+    keyForm.value = emptyKeyForm()
+    keyClears.value = emptyKeyClears()
   } catch (error) {
     keyError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -206,7 +227,7 @@ onUnmounted(() => {
         <div class="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 class="font-mono text-lg font-bold text-slate-900">信源设置</h2>
-            <p class="mt-1 text-xs leading-relaxed text-slate-500">配置 Tavily、Exa、Firecrawl API Key。密钥只保存在服务器，前端不回显明文。</p>
+            <p class="mt-1 text-xs leading-relaxed text-slate-500">配置 Tavily、Exa、Firecrawl 和向量检索 API Key。密钥只保存在服务器，前端不回显明文。</p>
           </div>
           <button class="sci-btn px-3 py-2 text-[10px]" type="button" @click="closeKeySettings">关闭</button>
         </div>
@@ -245,6 +266,15 @@ onUnmounted(() => {
                 {{ keyClears[field.key] ? '取消清除' : '清除' }}
               </button>
             </div>
+          </div>
+          <div v-if="vectorStatus" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+            <div class="flex flex-wrap gap-x-4 gap-y-1">
+              <span>向量库：<strong :class="vectorStatus.available ? 'text-emerald-600' : 'text-amber-600'">{{ vectorStatus.available ? '可用' : '未就绪' }}</strong></span>
+              <span>索引 {{ vectorStatus.indexedRows || 0 }} 条</span>
+              <span v-if="vectorStatus.embeddingModel">模型 {{ vectorStatus.embeddingModel }}</span>
+              <span v-if="vectorStatus.lastIndexedAt">更新 {{ new Date(vectorStatus.lastIndexedAt).toLocaleString('zh-CN', { hour12: false }) }}</span>
+            </div>
+            <div v-if="vectorStatus.fallbackReason" class="mt-1 text-amber-600">{{ vectorStatus.fallbackReason }}</div>
           </div>
         </div>
 
