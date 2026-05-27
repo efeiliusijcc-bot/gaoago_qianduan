@@ -109,6 +109,7 @@ const contextTextRef = ref(null)
 const technicalLogOpenIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
 const expandedSourceId = ref('')
+const activeResultTab = ref('report')
 const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
 let liveLogScrollTimer = null
@@ -146,6 +147,12 @@ const taskStatusClass = computed(() => {
   return 'text-cyber-yellow'
 })
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
+const resultTabs = [
+  { key: 'report', label: '报告正文' },
+  { key: 'sources', label: '信源概览' },
+  { key: 'citations', label: '引用依据' },
+  { key: 'progress', label: '任务进度' },
+]
 const reportTypeOptions = [
   {
     value: 'write-hb-k',
@@ -629,6 +636,37 @@ const sourceStats = computed(() => {
   return { discovered, highValue, extracted, pending }
 })
 
+const sourceOverviewStats = computed(() => {
+  const total = props.databaseSources?.totalHits || normalizedSources.value.length || null
+  const failed = normalizedSources.value.filter((item) => item.status === 'failed').length
+  const extracted = props.databaseSources?.queryPlan?.contentRowsRead ||
+    normalizedSources.value.filter((item) => item.status === 'extracted').length ||
+    null
+  const snippetOnly = typeof total === 'number'
+    ? Math.max(total - (extracted || 0) - failed, 0)
+    : normalizedSources.value.filter((item) => item.status === 'snippet_only' || item.status === 'used').length
+  return {
+    total,
+    extracted,
+    snippetOnly: snippetOnly || null,
+    failed: failed || null,
+  }
+})
+
+const resultInfoItems = computed(() => {
+  const sourceTotal = sourceOverviewStats.value.total
+  const bodyCount = sourceOverviewStats.value.extracted
+  const snippetCount = sourceOverviewStats.value.snippetOnly
+  return [
+    ['报告类型', reportTypeLabel.value || '--'],
+    ['任务状态', taskStatusLabel.value || '--'],
+    ['JOB', props.job?.jobId ? props.job.jobId.slice(0, 8) : '--'],
+    ['信源', sourceTotal ?? '--'],
+    ['正文', bodyCount ?? '--'],
+    ['摘要', snippetCount ?? '--'],
+  ]
+})
+
 const technicalLogs = computed(() => {
   if (props.executionLogs?.length) return props.executionLogs
   return (props.processLogs || []).map((log, index) => ({
@@ -636,6 +674,62 @@ const technicalLogs = computed(() => {
     summary: log,
     status: 'running',
   }))
+})
+
+const readableProgressSteps = computed(() => {
+  const logs = technicalLogs.value.map((log) => translateOpenClawLog(log))
+  const logText = logs.map((log) => `${log.stage} ${log.title} ${log.description}`).join('\n').toLowerCase()
+  const isDone = props.job?.status === 'succeeded' || props.phase === 'done'
+  const has = (...needles) => needles.some((needle) => logText.includes(String(needle).toLowerCase()))
+  const steps = [
+    { key: 'submitted', label: '任务已提交', done: Boolean(props.job?.jobId) },
+    { key: 'planned', label: '已生成执行计划', done: isDone || has('PLANNING', 'plan.json', '执行计划') },
+    { key: 'searched', label: '已完成信源检索', done: isDone || has('SEARCHING', 'RESEARCH_DONE', '信源', '检索') },
+    { key: 'extracted', label: '已完成正文抽取', done: isDone || has('EXTRACTING', '正文抽取', '正文') },
+    { key: 'written', label: '已完成综合写作', done: isDone || has('WRITING', 'ANALYZING', '撰写', '综合写作') },
+    { key: 'verified', label: '已完成质量校验', done: isDone || has('VERIFYING', '校验') },
+    { key: 'done', label: '报告已生成', done: isDone },
+  ]
+  return steps.map((step, index) => ({
+    ...step,
+    current: !step.done && steps.slice(0, index).every((item) => item.done),
+  }))
+})
+
+function extractReportPlainText() {
+  return htmlToPlainText(props.generatedHtml || '')
+}
+
+function chapterForCitation(text, matchIndex) {
+  const before = text.slice(0, matchIndex)
+  const headingMatches = [...before.matchAll(/(?:^|\n)\s*(一、[^。\n]+|二、[^。\n]+|三、[^。\n]+|四、[^。\n]+|五、[^。\n]+)/g)]
+  const last = headingMatches[headingMatches.length - 1]
+  return last?.[1]?.trim() || '--'
+}
+
+const citationItems = computed(() => {
+  const text = extractReportPlainText()
+  if (!text) return []
+  const seen = new Set()
+  const refs = []
+  const regex = /(?:\[|〔|【)(\d{1,3})(?:\]|〕|】)/g
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const number = Number(match[1])
+    if (!number || seen.has(number)) continue
+    seen.add(number)
+    const source = normalizedSources.value[number - 1] || null
+    refs.push({
+      number,
+      chapter: chapterForCitation(text, match.index),
+      title: source?.title || '--',
+      sourceName: source?.sourceName || '--',
+      method: source?.method || '--',
+      credibility: source ? (source.relevance === '高相关' ? '高' : '中') : '--',
+      summary: source?.summary || '当前引用未匹配到结构化来源，可查看任务进度中的技术详情或原始来源。',
+    })
+  }
+  return refs
 })
 
 function formatDbSourceTime(value) {
@@ -713,6 +807,9 @@ function handleGeneratedHtmlChange() {
 watch(() => props.generatedHtml, handleGeneratedHtmlChange)
 watch(() => [props.phase, props.isHistoryMode], () => {
   if (props.phase === 'done') scrollToTop()
+})
+watch(() => [props.phase, props.job?.jobId], () => {
+  if (props.phase === 'done') activeResultTab.value = 'report'
 })
 watch(() => props.processLogs, scrollToBottom, { deep: true })
 watch(() => props.processLogs?.length || 0, scrollLogsToBottom)
@@ -946,32 +1043,34 @@ function exportPdf() {
         >
           返回生成编报
         </button>
-        <button
-          @click="toggleLogDrawer"
-          :disabled="!canOpenLogDrawer"
-          class="sci-btn text-[10px] px-3 py-2 relative"
-          :title="isLiveLogVisible ? '任务进度已在中间展示' : '打开任务进度'"
-        >
-          任务进度
-          <span
-            v-if="unreadLogCount"
-            class="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-cyber-yellow text-black text-[10px] leading-5 text-center"
+        <template v-if="phase !== 'done'">
+          <button
+            @click="toggleLogDrawer"
+            :disabled="!canOpenLogDrawer"
+            class="sci-btn text-[10px] px-3 py-2 relative"
+            :title="isLiveLogVisible ? '任务进度已在中间展示' : '打开任务进度'"
           >
-            {{ unreadLogCount > 99 ? '99+' : unreadLogCount }}
-          </span>
-        </button>
-        <button v-if="showNewReportButton" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-2">
-          清屏并开启下一个编报
-        </button>
-        <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-2">导出 Word</button>
-        <button
-          @click="exportPdf"
-          :disabled="!canExport"
-          class="sci-btn text-[10px] px-3 py-2"
-        >
-          导出 PDF
-        </button>
-        <button @click="emit('list')" class="sci-btn text-[10px] px-3 py-2">报告列表</button>
+            任务进度
+            <span
+              v-if="unreadLogCount"
+              class="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-cyber-yellow text-black text-[10px] leading-5 text-center"
+            >
+              {{ unreadLogCount > 99 ? '99+' : unreadLogCount }}
+            </span>
+          </button>
+          <button v-if="showNewReportButton" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-2">
+            清屏并开启下一个编报
+          </button>
+          <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-2">导出 Word</button>
+          <button
+            @click="exportPdf"
+            :disabled="!canExport"
+            class="sci-btn text-[10px] px-3 py-2"
+          >
+            导出 PDF
+          </button>
+          <button @click="emit('list')" class="sci-btn text-[10px] px-3 py-2">报告列表</button>
+        </template>
       </div>
     </div>
 
@@ -1467,28 +1566,201 @@ function exportPdf() {
         </div>
       </div>
 
-      <div v-else class="max-w-5xl mx-auto">
-        <div class="border border-neon-cyan/30 rounded p-6 mb-6 bg-black/30">
-          <div class="grid grid-cols-2 gap-4 text-xs font-mono">
-            <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
-              <span class="text-[#374151]">报告类型</span>
-              <span class="text-[#0f172a]">{{ reportTypeLabel }}</span>
-            </div>
-            <div class="flex justify-between border-b border-neon-cyan/20 pb-2">
-              <span class="text-[#374151]">任务状态</span>
-              <span :class="taskStatusClass">{{ taskStatusLabel }}</span>
-            </div>
+      <div v-else class="result-shell">
+        <div class="result-toolbar">
+          <nav class="result-tabs" aria-label="报告结果切换">
+            <button
+              v-for="tab in resultTabs"
+              :key="tab.key"
+              class="result-tab"
+              :class="{ active: activeResultTab === tab.key }"
+              type="button"
+              @click="activeResultTab = tab.key"
+            >
+              {{ tab.label }}
+            </button>
+          </nav>
+
+          <div class="result-actions">
+            <button @click="exportWord" :disabled="!canExport" class="result-action-btn" type="button">
+              <span>▣</span> 导出 Word
+            </button>
+            <button @click="exportPdf" :disabled="!canExport" class="result-action-btn" type="button">
+              <span>◧</span> 导出 PDF
+            </button>
+            <button @click="emit('list')" class="result-action-btn" type="button">
+              <span>☷</span> 报告列表
+            </button>
+            <button @click="emit('new-report')" class="result-action-btn result-action-primary" type="button">
+              <span>＋</span> 新开一篇
+            </button>
           </div>
         </div>
 
-        <article
-          v-if="generatedHtml"
-          class="report-html prose prose-invert max-w-none text-sm leading-relaxed bg-black/20 border border-neon-cyan/10 rounded p-6"
-          v-html="sanitizedHtml"
-        ></article>
-        <div v-else class="report-html bg-black/20 border border-neon-cyan/10 rounded p-6 text-slate-500">
-          报告文件内容为空或尚未读取到正文，请刷新列表后重新打开该报告。
+        <div class="result-info-bar">
+          <div v-for="item in resultInfoItems" :key="item[0]" class="result-info-item">
+            <span>{{ item[0] }}</span>
+            <strong>{{ item[1] }}</strong>
+          </div>
         </div>
+
+        <section v-if="activeResultTab === 'report'" class="result-tab-panel">
+          <article
+            v-if="generatedHtml"
+            class="report-html prose prose-invert max-w-none text-sm leading-relaxed bg-black/20 border border-neon-cyan/10 rounded p-6"
+            v-html="sanitizedHtml"
+          ></article>
+          <div v-else class="report-html bg-black/20 border border-neon-cyan/10 rounded p-6 text-slate-500">
+            报告文件内容为空或尚未读取到正文，请刷新列表后重新打开该报告。
+          </div>
+        </section>
+
+        <section v-else-if="activeResultTab === 'sources'" class="result-tab-panel">
+          <div class="source-stats-grid result-source-stats">
+            <div class="source-stat-card">
+              <div class="source-stat-icon">◎</div>
+              <div>
+                <div class="source-stat-title">信源总数</div>
+                <div class="source-stat-value">{{ sourceOverviewStats.total ?? '--' }}</div>
+              </div>
+            </div>
+            <div class="source-stat-card">
+              <div class="source-stat-icon">▤</div>
+              <div>
+                <div class="source-stat-title">已抽取正文</div>
+                <div class="source-stat-value">{{ sourceOverviewStats.extracted ?? '--' }}</div>
+              </div>
+            </div>
+            <div class="source-stat-card">
+              <div class="source-stat-icon source-stat-warning">≋</div>
+              <div>
+                <div class="source-stat-title">仅摘要</div>
+                <div class="source-stat-value">{{ sourceOverviewStats.snippetOnly ?? '--' }}</div>
+              </div>
+            </div>
+            <div class="source-stat-card">
+              <div class="source-stat-icon source-stat-danger">!</div>
+              <div>
+                <div class="source-stat-title">抽取失败</div>
+                <div class="source-stat-value">{{ sourceOverviewStats.failed ?? '--' }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="!normalizedSources.length" class="source-empty-state">
+            当前报告未返回结构化信源数据。
+          </div>
+          <div v-else class="source-card-list">
+            <article
+              v-for="source in visibleSourceCards"
+              :key="source.id"
+              class="source-result-card"
+              :class="{ active: expandedSourceId === source.id }"
+              @click="expandedSourceId = expandedSourceId === source.id ? '' : source.id"
+            >
+              <div class="source-result-icon">{{ source.sourceType.slice(0, 1) }}</div>
+              <div class="source-result-body">
+                <div class="source-result-main">
+                  <div>
+                    <h3>{{ source.title }}</h3>
+                    <div class="source-result-meta">
+                      <span>{{ source.sourceType }}</span>
+                      <span>{{ source.sourceName }}</span>
+                      <span>{{ source.publishTime }}</span>
+                    </div>
+                  </div>
+                  <div class="source-result-tags">
+                    <span class="source-status-tag" :class="`source-status-tag-${source.status}`">{{ sourceStatusLabel(source.status) }}</span>
+                    <span class="source-relevance-tag">{{ source.relevance }}</span>
+                  </div>
+                </div>
+                <p :class="expandedSourceId === source.id ? 'source-summary-full' : 'source-summary-clamp'">{{ source.summary }}</p>
+                <div v-if="expandedSourceId === source.id" class="source-detail-box">
+                  <div>采集方式：{{ source.method }}</div>
+                  <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer" @click.stop>打开原始来源</a>
+                  <p v-if="source.note">{{ source.note }}</p>
+                </div>
+              </div>
+              <button class="source-result-arrow" type="button" aria-label="展开信源详情">
+                {{ expandedSourceId === source.id ? '⌃' : '›' }}
+              </button>
+            </article>
+
+            <button
+              v-if="normalizedSources.length > 5"
+              class="source-expand-button"
+              type="button"
+              @click="dbSourcesExpanded = !dbSourcesExpanded"
+            >
+              {{ dbSourcesExpanded ? '收起' : `展开全部信源（共 ${normalizedSources.length} 条）` }}
+            </button>
+          </div>
+        </section>
+
+        <section v-else-if="activeResultTab === 'citations'" class="result-tab-panel">
+          <div v-if="!citationItems.length" class="source-empty-state">
+            当前报告未返回结构化引用依据。
+          </div>
+          <div v-else class="citation-list">
+            <article v-for="item in citationItems" :key="item.number" class="citation-card">
+              <div class="citation-number">[{{ item.number }}]</div>
+              <div class="citation-body">
+                <div class="citation-title">{{ item.title }}</div>
+                <div class="citation-meta">
+                  <span>对应章节：{{ item.chapter }}</span>
+                  <span>来源机构：{{ item.sourceName }}</span>
+                  <span>采集方式：{{ item.method }}</span>
+                  <span>可信度：{{ item.credibility }}</span>
+                </div>
+                <p>{{ item.summary }}</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section v-else class="result-tab-panel">
+          <div class="progress-timeline">
+            <div
+              v-for="step in readableProgressSteps"
+              :key="step.key"
+              class="progress-step"
+              :class="{ done: step.done, current: step.current }"
+            >
+              <span></span>
+              <div>{{ step.label }}</div>
+            </div>
+          </div>
+
+          <details class="source-technical-details result-technical-details">
+            <summary>查看技术详情</summary>
+            <div ref="liveLogListRef" class="source-technical-log" @scroll="handleLogScroll('live', $event)">
+              <div v-if="technicalLogs.length" class="space-y-3">
+                <div
+                  v-for="log in technicalLogs"
+                  :key="log.id"
+                  class="friendly-log-card"
+                  :class="friendlyLogStatusClass(translateOpenClawLog(log).status)"
+                >
+                  <div class="friendly-log-main">
+                    <div class="friendly-log-dot"></div>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-start justify-between gap-3">
+                        <div>
+                          <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
+                          <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
+                        </div>
+                        <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog(log).status) }}</span>
+                      </div>
+                      <div class="friendly-log-description">{{ translateOpenClawLog(log).description }}</div>
+                      <pre v-if="translateOpenClawLog(log).raw" class="friendly-log-raw">{{ translateOpenClawLog(log).raw }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="source-empty-state">当前任务暂无可展示进度日志。</div>
+            </div>
+          </details>
+        </section>
       </div>
     </div>
   </main>
