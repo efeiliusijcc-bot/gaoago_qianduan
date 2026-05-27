@@ -62,7 +62,16 @@ function formatTime(value) {
 function statusClass(status) {
   if (status === 'succeeded') return 'bg-neon-green shadow-[0_0_8px_rgba(0,255,136,0.38)]'
   if (status === 'failed' || status === 'cancelled') return 'bg-red-300 shadow-[0_0_8px_rgba(252,90,122,0.35)]'
-  return 'bg-cyber-yellow shadow-[0_0_8px_rgba(252,238,10,0.32)]'
+  if (status === 'waiting_approval') return 'bg-cyber-yellow shadow-[0_0_8px_rgba(252,238,10,0.32)]'
+  return 'bg-blue-500 shadow-[0_0_8px_rgba(37,99,235,0.32)]'
+}
+
+function statusText(status) {
+  if (status === 'succeeded') return '已完成'
+  if (status === 'failed' || status === 'cancelled') return '失败'
+  if (status === 'waiting_approval') return '等待报告'
+  if (status === 'queued') return '处理中'
+  return '检索中'
 }
 
 function handleRecentScroll(event) {
@@ -134,7 +143,9 @@ function handleRecentScroll(event) {
               <span class="ml-auto text-[#64748b] shrink-0">›</span>
             </div>
             <div class="recent-time font-mono text-[10px] mt-2 pl-3.5">
-              {{ formatTime(item.updatedAt || item.createdAt) }}
+              <span class="recent-status-text">{{ statusText(item.status) }}</span>
+              <span class="recent-time-divider">·</span>
+              <span>{{ formatTime(item.updatedAt || item.createdAt) }}</span>
             </div>
           </button>
 

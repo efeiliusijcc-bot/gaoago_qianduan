@@ -108,6 +108,7 @@ const liveLogListRef = ref(null)
 const contextTextRef = ref(null)
 const technicalLogOpenIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
+const expandedSourceId = ref('')
 const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
 let liveLogScrollTimer = null
@@ -517,19 +518,125 @@ const dbSourcesState = computed(() => {
   return 'unavailable'
 })
 
-const dbSourcesVisible = computed(() => {
-  const data = props.databaseSources
-  if (!data || !data.sources) return []
-  return dbSourcesExpanded.value ? data.sources : data.sources.slice(0, 8)
+const taskProgressView = computed(() => {
+  const status = props.job?.status
+  const step = String(props.loadingStep || '').toLowerCase()
+  if (status === 'queued') {
+    return {
+      title: '任务已提交',
+      subtitle: '系统已接收编报任务，正在等待调度执行。',
+      tone: 'queued',
+    }
+  }
+  if (status === 'failed' || props.phase === 'error') {
+    return {
+      title: '任务执行失败',
+      subtitle: '任务执行过程中出现错误，请展开技术详情查看原因。',
+      tone: 'failed',
+    }
+  }
+  if (status === 'succeeded' || props.phase === 'done') {
+    return {
+      title: '报告已生成',
+      subtitle: '信源采集和报告生成已完成，可以查看或下载结果。',
+      tone: 'succeeded',
+    }
+  }
+  if (step.includes('extract') || step.includes('正文') || step.includes('抽取')) {
+    return {
+      title: '正在提取重点网页正文',
+      subtitle: '系统正在读取高价值来源正文，补充摘要之外的事实材料。',
+      tone: 'extracting',
+    }
+  }
+  if (step.includes('report') || step.includes('撰稿') || step.includes('生成') || step.includes('synthesis')) {
+    return {
+      title: '正在生成最终报告',
+      subtitle: '信源材料已进入撰稿阶段，系统正在组织报告正文。',
+      tone: 'waiting_report',
+    }
+  }
+  return {
+    title: '正在检索公开资料',
+    subtitle: '系统正在围绕当前主题采集公开信源，并筛选可用于编报的材料。',
+    tone: 'searching',
+  }
 })
 
-const dbSourcesQueryPlan = computed(() => props.databaseSources?.queryPlan || {})
+const taskSummaryText = computed(() => {
+  const jobId = props.job?.jobId ? `JOB ${props.job.jobId.slice(0, 8)}` : 'JOB --'
+  return `${reportTypeLabel.value} · ${props.title || props.job?.payload?.topic || '当前主题'} · ${jobId}`
+})
 
-const dbSourcesVectorPlan = computed(() => props.databaseSources?.vectorPlan || {})
+function sourceStatusLabel(status) {
+  const labels = {
+    discovered: '已发现',
+    selected: '已筛选',
+    extracting: '正在抽取',
+    extracted: '已抽取',
+    snippet_only: '仅摘要',
+    failed: '抽取失败',
+    used: '已用于报告',
+  }
+  return labels[status] || '已发现'
+}
 
-const dbSourcesDisplayedCount = computed(() => props.databaseSources?.sources?.length || 0)
+function inferSourceStatus(src) {
+  const text = `${src?.title || ''} ${src?.summary || ''}`.toLowerCase()
+  if (text.includes('fail') || text.includes('失败') || text.includes('error')) return 'failed'
+  if (props.phase === 'done' || props.job?.status === 'succeeded') return 'used'
+  if (src?.summary) return 'snippet_only'
+  return 'discovered'
+}
 
-const dbSourcesTotalCount = computed(() => props.databaseSources?.totalHits || dbSourcesDisplayedCount.value)
+const normalizedSources = computed(() => {
+  const data = props.databaseSources
+  const sources = Array.isArray(data?.sources) ? data.sources : []
+  return sources.map((src, index) => {
+    const status = inferSourceStatus(src)
+    const retrievalMode = data?.retrievalMode || ''
+    const highValue = index < 8 || retrievalMode === 'vector' || retrievalMode === 'hybrid'
+    return {
+      id: `${src.url || src.title || 'source'}-${index}`,
+      title: src.title || src.url || '未命名信源',
+      sourceType: retrievalMode === 'vector' ? '向量召回' : retrievalMode === 'hybrid' ? '混合召回' : '数据库信源',
+      sourceName: src.websiteName || '来源未知',
+      publishTime: formatDbSourceTime(src.publishTime) || '时间未知',
+      summary: src.summary || '该来源暂未提供摘要，系统已记录标题和来源信息。',
+      url: src.url || '',
+      status,
+      relevance: highValue ? '高相关' : '候选',
+      method: retrievalMode === 'vector' ? 'PG 向量语义召回' : retrievalMode === 'hybrid' ? '向量与关键词混合召回' : '数据库关键词召回',
+      note: status === 'snippet_only'
+        ? '该来源仅保留搜索摘要，后续生成时将降低证据权重。'
+        : status === 'failed'
+          ? '正文提取失败，已记录该来源并保留可用摘要。'
+          : '',
+    }
+  })
+})
+
+const visibleSourceCards = computed(() => {
+  return dbSourcesExpanded.value ? normalizedSources.value : normalizedSources.value.slice(0, 5)
+})
+
+const sourceStats = computed(() => {
+  const data = props.databaseSources
+  const discovered = data?.totalHits || data?.vectorPlan?.returnedSources || data?.queryPlan?.returnedSources || normalizedSources.value.length || null
+  const highValue = data?.vectorPlan?.vectorHits || data?.queryPlan?.strictHits || normalizedSources.value.filter((item) => item.relevance === '高相关').length || null
+  const extracted = data?.queryPlan?.contentRowsRead || normalizedSources.value.filter((item) => item.status === 'extracted' || item.status === 'used').length || null
+  const pending = typeof discovered === 'number' && typeof extracted === 'number' ? Math.max(discovered - extracted, 0) : null
+  return { discovered, highValue, extracted, pending }
+})
+
+const technicalLogs = computed(() => {
+  if (props.executionLogs?.length) return props.executionLogs
+  return (props.processLogs || []).map((log, index) => ({
+    id: `process-${index}`,
+    summary: log,
+    status: 'running',
+  }))
+})
 
 function formatDbSourceTime(value) {
   if (!value) return ''
@@ -843,9 +950,9 @@ function exportPdf() {
           @click="toggleLogDrawer"
           :disabled="!canOpenLogDrawer"
           class="sci-btn text-[10px] px-3 py-2 relative"
-          :title="isLiveLogVisible ? '运行中日志已在中间实时展示' : '打开执行日志'"
+          :title="isLiveLogVisible ? '任务进度已在中间展示' : '打开任务进度'"
         >
-          执行日志
+          任务进度
           <span
             v-if="unreadLogCount"
             class="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-cyber-yellow text-black text-[10px] leading-5 text-center"
@@ -874,7 +981,7 @@ function exportPdf() {
       >
         <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
           <div>
-            <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
+            <div class="font-mono text-xs neon-text tracking-widest">任务进度</div>
             <div class="font-mono text-[10px] text-[#374151]">OpenClaw 工具调用摘要</div>
           </div>
           <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
@@ -884,7 +991,7 @@ function exportPdf() {
           <div v-if="!executionLogs.length" class="h-full flex items-center justify-center text-center">
             <div>
               <div class="font-mono text-3xl mb-3" style="color: #94a3b8">LOGS</div>
-              <div class="font-mono text-xs" style="color: #94a3b8">暂无执行日志</div>
+              <div class="font-mono text-xs" style="color: #94a3b8">暂无任务进度</div>
             </div>
           </div>
 
@@ -922,53 +1029,6 @@ function exportPdf() {
           </div>
         </div>
 
-        <div class="db-sources-section border-t border-border-glow px-4 py-3">
-          <div class="font-mono text-[10px] tracking-widest text-[#374151] mb-2">数据库信源检索</div>
-          <div v-if="dbSourcesState === 'loading'" class="text-xs text-[#374151]">正在检查数据库信源...</div>
-          <div v-else-if="dbSourcesState === 'unavailable'" class="text-xs text-[#374151]">数据库信源仍在检索或尚未落盘</div>
-          <div v-else-if="dbSourcesState === 'fallback'" class="text-xs space-y-1">
-            <div class="text-amber-300">数据库无直接命中，已回退公开检索</div>
-            <div v-if="databaseSources?.fallbackReason" class="text-[#374151]">原因：{{ databaseSources.fallbackReason }}</div>
-          </div>
-          <div v-else-if="dbSourcesState === 'hit'" class="text-xs space-y-2">
-            <div class="text-[#00ff88]">
-              数据库命中 <strong>{{ databaseSources?.totalHits || databaseSources?.sources?.length || 0 }}</strong> 条信源
-              <span v-if="databaseSources?.updatedAt" class="text-[#374151] ml-1">| {{ formatDbSourceTime(databaseSources.updatedAt) }}</span>
-            </div>
-            <div class="grid grid-cols-2 gap-2 text-[10px] text-[#64748b]">
-              <span>展示 {{ dbSourcesDisplayedCount }} 条 / 候选 {{ dbSourcesTotalCount }} 条</span>
-              <span v-if="dbSourcesQueryPlan.tablesChecked">检查 {{ dbSourcesQueryPlan.tablesChecked }} 张日表</span>
-              <span v-if="dbSourcesQueryPlan.strictHits || dbSourcesQueryPlan.expandedHits">
-                严格 {{ dbSourcesQueryPlan.strictHits || 0 }} / 扩展 {{ dbSourcesQueryPlan.expandedHits || 0 }}
-              </span>
-              <span v-if="dbSourcesQueryPlan.broadeningApplied" class="text-amber-300">已扩展召回</span>
-              <span v-if="dbSourcesVectorPlan.vectorHits">向量 {{ dbSourcesVectorPlan.vectorHits }} / 关键词 {{ dbSourcesVectorPlan.keywordBoostedHits || 0 }}</span>
-              <span v-if="dbSourcesVectorPlan.indexedRows">索引 {{ dbSourcesVectorPlan.indexedRows }} 条</span>
-              <span v-if="databaseSources?.retrievalMode" class="text-neon-cyan">{{ databaseSources.retrievalMode }}</span>
-              <span v-if="dbSourcesVectorPlan.fallbackReason" class="text-amber-300">向量回退</span>
-            </div>
-            <div class="db-sources-scroll max-h-60 overflow-auto space-y-2">
-              <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">
-                <div class="font-mono text-[11px] leading-relaxed">
-                  <a v-if="src.url" :href="src.url" target="_blank" rel="noopener noreferrer" class="text-neon-cyan hover:underline">{{ src.title || src.url }}</a>
-                  <span v-else class="text-slate-200">{{ src.title || '(无标题)' }}</span>
-                </div>
-                <div v-if="src.summary" class="text-[10px] text-[#64748b] leading-relaxed mt-1 line-clamp-3">{{ src.summary }}</div>
-                <div class="flex gap-3 text-[10px] text-[#374151] mt-1">
-                  <span v-if="src.websiteName">{{ src.websiteName }}</span>
-                  <span v-if="src.publishTime">{{ formatDbSourceTime(src.publishTime) }}</span>
-                </div>
-              </div>
-            </div>
-            <button
-              v-if="databaseSources?.sources?.length > 8"
-              class="w-full text-center text-[10px] text-neon-cyan hover:underline py-1"
-              @click="dbSourcesExpanded = !dbSourcesExpanded"
-            >
-              {{ dbSourcesExpanded ? '收起' : `查看更多 (共 ${databaseSources.sources.length} 条)` }}
-            </button>
-          </div>
-        </div>
       </aside>
 
     <div
@@ -1265,147 +1325,137 @@ function exportPdf() {
         </section>
       </div>
 
-      <div v-else-if="phase === 'loading'" class="h-full flex items-center justify-center">
-        <div class="loading-panel w-[760px] max-w-[calc(100%-2rem)]">
-          <div class="nexus-loader">
-            <div class="loader-ring ring-a"></div>
-            <div class="loader-ring ring-b"></div>
-            <div class="loader-core"></div>
+      <div v-else-if="phase === 'loading'" class="source-workspace">
+        <section class="source-collection-panel">
+          <div class="source-status-area">
+            <div class="source-status-orbit" :class="`source-status-${taskProgressView.tone}`">
+              <span></span>
+            </div>
+            <h1>{{ taskProgressView.title }}</h1>
+            <p>{{ taskProgressView.subtitle }}</p>
+            <div class="source-task-pill">{{ taskSummaryText }}</div>
           </div>
-          <div class="font-mono text-lg neon-text mt-8">{{ loadingStep || '正在生成报告' }}</div>
-          <div class="font-mono text-[10px] text-[#374151] mt-2">预计 10-15 分钟生成，请耐心等待；后台任务运行中，请保持AI智能体在线</div>
 
-            <div class="live-log-panel mt-6 text-left border border-neon-cyan/25 bg-black/35 rounded overflow-hidden shadow-[0_0_28px_rgba(0,243,255,0.12)]">
-              <div class="h-10 px-4 border-b border-neon-cyan/15 flex items-center justify-between">
-                <div>
-                  <div class="font-mono text-xs neon-text tracking-widest">执行日志</div>
-                  <div class="font-mono text-[10px] text-[#374151]">运行中实时同步 AI agent 工具调用</div>
-                </div>
-                <div class="flex items-center gap-2 font-mono text-[10px] text-neon-green">
-                  <span class="data-pulse" style="background: #00ff88;"></span>
-                  LIVE
-                </div>
-              </div>
-
-              <div ref="liveLogListRef" class="max-h-72 overflow-auto p-4 space-y-3" @scroll="handleLogScroll('live', $event)">
-                <div v-if="executionLogs.length">
-                  <div
-                    v-for="log in executionLogs"
-                    :key="log.id"
-                    class="friendly-log-card mb-3"
-                    :class="friendlyLogStatusClass(translateOpenClawLog(log).status)"
-                  >
-                    <div class="friendly-log-main">
-                      <div class="friendly-log-dot"></div>
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-start justify-between gap-3">
-                          <div>
-                            <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
-                            <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
-                          </div>
-                          <div class="flex shrink-0 items-center gap-2">
-                            <span class="friendly-log-time">{{ translateOpenClawLog(log).time }}</span>
-                            <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog(log).status) }}</span>
-                          </div>
-                        </div>
-                        <div class="friendly-log-description">{{ translateOpenClawLog(log).description }}</div>
-                        <button
-                          v-if="translateOpenClawLog(log).raw"
-                          type="button"
-                          class="friendly-log-toggle"
-                          @click="toggleTechnicalLog(log.id)"
-                        >
-                          {{ isTechnicalLogOpen(log.id) ? '收起技术详情' : '查看技术详情' }}
-                        </button>
-                        <pre v-if="isTechnicalLogOpen(log.id)" class="friendly-log-raw">{{ translateOpenClawLog(log).raw }}</pre>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div v-else class="space-y-3">
-                  <div
-                    v-for="(log, i) in processLogs"
-                    :key="i"
-                    class="friendly-log-card"
-                    :class="friendlyLogStatusClass(translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).status)"
-                  >
-                    <div class="friendly-log-main">
-                      <div class="friendly-log-dot"></div>
-                      <div class="min-w-0 flex-1">
-                        <div class="flex items-start justify-between gap-3">
-                          <div>
-                            <div class="friendly-log-stage">{{ translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).stage }}</div>
-                            <div class="friendly-log-title">{{ translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).title }}</div>
-                          </div>
-                          <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).status) }}</span>
-                        </div>
-                        <div class="friendly-log-description">{{ translateOpenClawLog({ id: `process-${i}`, summary: log, status: 'running' }).description }}</div>
-                        <button
-                          type="button"
-                          class="friendly-log-toggle"
-                          @click="toggleTechnicalLog(`process-${i}`)"
-                        >
-                          {{ isTechnicalLogOpen(`process-${i}`) ? '收起技术详情' : '查看技术详情' }}
-                        </button>
-                        <pre v-if="isTechnicalLogOpen(`process-${i}`)" class="friendly-log-raw">{{ log }}</pre>
-                      </div>
-                    </div>
-                  </div>
-                  <div v-if="!processLogs.length" class="text-slate-500">等待 OpenClaw 返回执行日志...</div>
-                  <span class="typing-cursor"></span>
-                </div>
-
-                <div class="db-sources-section border-t border-neon-cyan/20 mt-3 pt-3 px-1">
-                  <div class="font-mono text-[10px] tracking-widest text-[#374151] mb-2">数据库信源检索</div>
-                  <div v-if="dbSourcesState === 'loading'" class="text-xs text-[#374151]">正在检查数据库信源...</div>
-                  <div v-else-if="dbSourcesState === 'unavailable'" class="text-xs text-[#374151]">数据库信源仍在检索或尚未落盘</div>
-                  <div v-else-if="dbSourcesState === 'fallback'" class="text-xs space-y-1">
-                    <div class="text-amber-300">数据库无直接命中，已回退公开检索</div>
-                    <div v-if="databaseSources?.fallbackReason" class="text-[#374151]">原因：{{ databaseSources.fallbackReason }}</div>
-                  </div>
-                  <div v-else-if="dbSourcesState === 'hit'" class="text-xs space-y-2">
-                    <div class="text-[#00ff88]">
-                      数据库命中 <strong>{{ databaseSources?.totalHits || databaseSources?.sources?.length || 0 }}</strong> 条信源
-                      <span v-if="databaseSources?.updatedAt" class="text-[#374151] ml-1">| {{ formatDbSourceTime(databaseSources.updatedAt) }}</span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-[10px] text-[#64748b]">
-                      <span>展示 {{ dbSourcesDisplayedCount }} 条 / 候选 {{ dbSourcesTotalCount }} 条</span>
-                      <span v-if="dbSourcesQueryPlan.tablesChecked">检查 {{ dbSourcesQueryPlan.tablesChecked }} 张日表</span>
-                      <span v-if="dbSourcesQueryPlan.strictHits || dbSourcesQueryPlan.expandedHits">
-                        严格 {{ dbSourcesQueryPlan.strictHits || 0 }} / 扩展 {{ dbSourcesQueryPlan.expandedHits || 0 }}
-                      </span>
-                      <span v-if="dbSourcesQueryPlan.broadeningApplied" class="text-amber-300">已扩展召回</span>
-                      <span v-if="dbSourcesVectorPlan.vectorHits">向量 {{ dbSourcesVectorPlan.vectorHits }} / 关键词 {{ dbSourcesVectorPlan.keywordBoostedHits || 0 }}</span>
-                      <span v-if="dbSourcesVectorPlan.indexedRows">索引 {{ dbSourcesVectorPlan.indexedRows }} 条</span>
-                      <span v-if="databaseSources?.retrievalMode" class="text-neon-cyan">{{ databaseSources.retrievalMode }}</span>
-                      <span v-if="dbSourcesVectorPlan.fallbackReason" class="text-amber-300">向量回退</span>
-                    </div>
-                    <div class="db-sources-scroll max-h-48 overflow-auto space-y-2">
-                      <div v-for="(src, i) in dbSourcesVisible" :key="i" class="border-b border-neon-cyan/10 pb-2">
-                        <div class="font-mono text-[11px] leading-relaxed">
-                          <a v-if="src.url" :href="src.url" target="_blank" rel="noopener noreferrer" class="text-neon-cyan hover:underline">{{ src.title || src.url }}</a>
-                          <span v-else class="text-slate-200">{{ src.title || '(无标题)' }}</span>
-                        </div>
-                        <div v-if="src.summary" class="text-[10px] text-[#64748b] leading-relaxed mt-1 line-clamp-3">{{ src.summary }}</div>
-                        <div class="flex gap-3 text-[10px] text-[#374151] mt-1">
-                          <span v-if="src.websiteName">{{ src.websiteName }}</span>
-                          <span v-if="src.publishTime">{{ formatDbSourceTime(src.publishTime) }}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      v-if="databaseSources?.sources?.length > 8"
-                      class="w-full text-center text-[10px] text-neon-cyan hover:underline py-1"
-                      @click="dbSourcesExpanded = !dbSourcesExpanded"
-                    >
-                      {{ dbSourcesExpanded ? '收起' : `查看更多 (共 ${databaseSources.sources.length} 条)` }}
-                    </button>
-                  </div>
-                </div>
+          <div class="source-stats-grid">
+            <div class="source-stat-card">
+              <div class="source-stat-icon">◎</div>
+              <div>
+                <div class="source-stat-title">已发现信源</div>
+                <div class="source-stat-value">{{ sourceStats.discovered ?? '--' }}</div>
               </div>
             </div>
-        </div>
+            <div class="source-stat-card">
+              <div class="source-stat-icon">◇</div>
+              <div>
+                <div class="source-stat-title">高相关信源</div>
+                <div class="source-stat-value">{{ sourceStats.highValue ?? '--' }}</div>
+              </div>
+            </div>
+            <div class="source-stat-card">
+              <div class="source-stat-icon">▤</div>
+              <div>
+                <div class="source-stat-title">已抽取正文</div>
+                <div class="source-stat-value">{{ sourceStats.extracted ?? '--' }}</div>
+              </div>
+            </div>
+            <div class="source-stat-card">
+              <div class="source-stat-icon source-stat-warning">⌛</div>
+              <div>
+                <div class="source-stat-title">待处理</div>
+                <div class="source-stat-value">{{ sourceStats.pending ?? '--' }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="source-results-title">
+            <span></span>
+            <h2>信源采集结果</h2>
+          </div>
+
+          <div v-if="databaseSourcesLoading && !normalizedSources.length" class="source-empty-state">
+            正在检查可展示信源...
+          </div>
+          <div v-else-if="!normalizedSources.length" class="source-empty-state">
+            <div>{{ dbSourcesState === 'fallback' ? '数据库无直接命中，已回退公开检索。' : '暂未采集到可展示信源，系统仍在检索中。' }}</div>
+            <div v-if="databaseSources?.fallbackReason" class="source-empty-reason">原因：{{ databaseSources.fallbackReason }}</div>
+          </div>
+
+          <div v-else class="source-card-list">
+            <article
+              v-for="source in visibleSourceCards"
+              :key="source.id"
+              class="source-result-card"
+              :class="{ active: expandedSourceId === source.id }"
+              @click="expandedSourceId = expandedSourceId === source.id ? '' : source.id"
+            >
+              <div class="source-result-icon">{{ source.sourceType.slice(0, 1) }}</div>
+              <div class="source-result-body">
+                <div class="source-result-main">
+                  <div>
+                    <h3>{{ source.title }}</h3>
+                    <div class="source-result-meta">
+                      <span>{{ source.sourceType }}</span>
+                      <span>{{ source.sourceName }}</span>
+                      <span>{{ source.publishTime }}</span>
+                    </div>
+                  </div>
+                  <div class="source-result-tags">
+                    <span class="source-status-tag" :class="`source-status-tag-${source.status}`">{{ sourceStatusLabel(source.status) }}</span>
+                    <span class="source-relevance-tag">{{ source.relevance }}</span>
+                  </div>
+                </div>
+                <p :class="expandedSourceId === source.id ? 'source-summary-full' : 'source-summary-clamp'">{{ source.summary }}</p>
+                <div v-if="expandedSourceId === source.id" class="source-detail-box">
+                  <div>采集方式：{{ source.method }}</div>
+                  <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer" @click.stop>打开原始来源</a>
+                  <p v-if="source.note">{{ source.note }}</p>
+                </div>
+              </div>
+              <button class="source-result-arrow" type="button" aria-label="展开信源详情">
+                {{ expandedSourceId === source.id ? '⌃' : '›' }}
+              </button>
+            </article>
+
+            <button
+              v-if="normalizedSources.length > 5"
+              class="source-expand-button"
+              type="button"
+              @click="dbSourcesExpanded = !dbSourcesExpanded"
+            >
+              {{ dbSourcesExpanded ? '收起' : `展开全部信源（共 ${normalizedSources.length} 条）` }}
+            </button>
+          </div>
+
+          <details class="source-technical-details">
+            <summary>查看技术详情</summary>
+            <div ref="liveLogListRef" class="source-technical-log" @scroll="handleLogScroll('live', $event)">
+              <div v-if="technicalLogs.length" class="space-y-3">
+                <div
+                  v-for="log in technicalLogs"
+                  :key="log.id"
+                  class="friendly-log-card"
+                  :class="friendlyLogStatusClass(translateOpenClawLog(log).status)"
+                >
+                  <div class="friendly-log-main">
+                    <div class="friendly-log-dot"></div>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-start justify-between gap-3">
+                        <div>
+                          <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
+                          <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
+                        </div>
+                        <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog(log).status) }}</span>
+                      </div>
+                      <div class="friendly-log-description">{{ translateOpenClawLog(log).description }}</div>
+                      <pre v-if="translateOpenClawLog(log).raw" class="friendly-log-raw">{{ translateOpenClawLog(log).raw }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="source-empty-state">等待 OpenClaw 返回执行日志...</div>
+            </div>
+          </details>
+        </section>
       </div>
 
       <div v-else-if="phase === 'error'" class="max-w-4xl mx-auto">
