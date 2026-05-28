@@ -241,11 +241,33 @@ const qaStatusTitle = computed(() => {
   return '等待提问'
 })
 const qaStatusDescription = computed(() => {
-  if (qaStatus.value === 'failed') return '系统暂时无法完成检索与整合，请稍后重试。'
-  if (qaStatus.value === 'done') return '可复制答案、继续追问，或导入为编报背景。'
-  if (isQaRunning.value) return '正在检索数据库并整合相关信息'
+  if (qaStatus.value === 'failed') return qaError.value || '回答生成失败，请稍后重试。'
+  if (qaStatus.value === 'done') return '回答已完成。'
+  if (isQaRunning.value) return '正在检索数据库并整合相关信息。'
   return '请输入问题后，系统将检索数据库并生成回答。'
 })
+
+const qaTechnicalLabels = {
+  stage: '流程状态',
+  status: '状态更新',
+  tool_start: '检索事件',
+  tool_delta: '检索事件',
+  tool_end: '检索事件',
+  error: '错误信息',
+  message: '系统消息',
+}
+
+const qaSensitiveTermReplacements = [
+  [/OpenClaw/gi, '底层系统'],
+  [/\bAgent\b/gi, '处理服务'],
+  [/\bGateway\b/gi, '连接服务'],
+  [/\bMCP\b/gi, '检索服务'],
+  [/\bSQL\b/gi, '查询语句'],
+  [/\bSSE\b/gi, '连接通道'],
+  [/tool_call/gi, '工具调用'],
+  [/\bcommand\b/gi, '命令'],
+  [/REPORT_FILE/gi, '报告文件'],
+]
 
 function selectReportType(value) {
   if (!enabledReportTypes.has(value)) return
@@ -367,12 +389,33 @@ function closeQaStream() {
   }
 }
 
+function sanitizeQaText(value, maxLength = 240) {
+  let text = String(value || '').replace(/\s+/g, ' ').trim()
+  for (const [pattern, replacement] of qaSensitiveTermReplacements) {
+    text = text.replace(pattern, replacement)
+  }
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
+}
+
+function sanitizeQaAnswerDelta(value) {
+  let text = String(value || '')
+  for (const [pattern, replacement] of qaSensitiveTermReplacements) {
+    text = text.replace(pattern, replacement)
+  }
+  return text
+}
+
+function qaTechnicalLabel(type) {
+  return qaTechnicalLabels[type] || '系统事件'
+}
+
 function pushQaTechnical(event) {
+  const summary = event?.message || event?.name || event?.content || '系统事件'
   qaTechnicalEvents.value.push({
     id: `${Date.now()}-${qaTechnicalEvents.value.length}`,
     time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-    type: event?.type || 'event',
-    summary: event?.message || event?.name || event?.content || '系统事件',
+    type: qaTechnicalLabel(event?.type),
+    summary: sanitizeQaText(summary),
   })
   if (qaTechnicalEvents.value.length > 80) qaTechnicalEvents.value = qaTechnicalEvents.value.slice(-80)
 }
@@ -381,7 +424,7 @@ function handleQaEvent(event) {
   if (!event || typeof event !== 'object') return
   if (event.type === 'text_delta') {
     qaStatus.value = 'streaming'
-    qaAnswer.value += event.content || ''
+    qaAnswer.value += sanitizeQaAnswerDelta(event.content || '')
     return
   }
   if (event.type === 'token') return
@@ -397,7 +440,7 @@ function handleQaEvent(event) {
   }
   if (event.type === 'error') {
     qaStatus.value = 'failed'
-    qaError.value = event.message || '问答失败'
+    qaError.value = '回答生成失败，请稍后重试。'
     pushQaTechnical(event)
     closeQaStream()
   }
@@ -449,15 +492,15 @@ async function startQa() {
       }
       if (qaStatus.value !== 'done') {
         qaStatus.value = 'failed'
-        qaError.value = '回答连接中断，请稍后重试。'
+        qaError.value = '连接中断，可重新提问。'
         pushQaTechnical({ type: 'error', message: qaError.value })
       }
       closeQaStream()
     }
   } catch (error) {
     qaStatus.value = 'failed'
-    qaError.value = error instanceof Error ? error.message : String(error)
-    pushQaTechnical({ type: 'error', message: qaError.value })
+    qaError.value = '回答生成失败，请稍后重试。'
+    pushQaTechnical({ type: 'error', message: error instanceof Error ? error.message : String(error) })
     closeQaStream()
   }
 }
