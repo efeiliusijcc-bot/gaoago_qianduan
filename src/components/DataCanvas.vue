@@ -1,6 +1,7 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import DOMPurify from 'dompurify'
+import { createChatCompletion, getChatStreamUrl } from '../lib/api.js'
 
 const purifyConfig = {
   ALLOWED_TAGS: [
@@ -109,13 +110,22 @@ const reportRef = ref(null)
 const drawerLogListRef = ref(null)
 const liveLogListRef = ref(null)
 const contextTextRef = ref(null)
+const qaInputRef = ref(null)
 const technicalLogOpenIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
 const expandedSourceId = ref('')
 const activeResultTab = ref('report')
+const homeMode = ref('report')
+const qaQuestion = ref('')
+const qaAnswer = ref('')
+const qaStatus = ref('idle')
+const qaError = ref('')
+const qaTechnicalEvents = ref([])
+const qaImportNotice = ref('')
 const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
 let liveLogScrollTimer = null
+let qaEventSource = null
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
 const isLiveLogVisible = computed(() => props.phase === 'loading')
@@ -158,52 +168,73 @@ const resultTabs = [
   { key: 'citations', label: '引用依据' },
   { key: 'progress', label: '任务进度' },
 ]
+const featureCards = [
+  {
+    key: 'report',
+    title: 'K报编写',
+    icon: '▤',
+    desc: '围绕特定主题，生成结构化的 K 报。',
+    tags: ['深度调研', '多维分析', '专业编报'],
+    action: '开始编写 K报',
+  },
+  {
+    key: 'qa',
+    title: '知识问答',
+    icon: '⌕',
+    desc: '基于知识库，检索并整合相关信息，快速获取专业回答。',
+    tags: ['数据库检索', '信息整合', '流式回答'],
+    action: '开始提问',
+  },
+]
+
 const reportTypeOptions = [
   {
     value: 'write-hb-k',
-    label: 'K报告编写',
+    label: 'K报编写',
     icon: '▤',
-    desc: '三段式现场调研报告：基本情况、涉我风险、对策建议',
-    params: ['背景信息', '关注方向', '时间范围', '地区 / 对象', '已知上下文'],
-    placeholder: '请输入需要编报的标题，例如：2026年东南亚区域安全态势研判',
-  },
-  {
-    value: 'write-hb-hb',
-    label: 'HB报告编写',
-    icon: '◇',
-    desc: '综合汇编类报告：背景脉络、关键动态、风险判断、后续建议',
-    params: ['背景信息', '关注方向', '材料范围', '地区 / 对象', '已知上下文'],
-    placeholder: '请输入HB报主题，例如：重点行业政策动态汇编',
-  },
-  {
-    value: 'risk-assessment-reports',
-    label: '风险报告编写',
-    icon: '◎',
-    desc: '风险评估报告：场景设定、风险识别、趋势研判、处置建议',
-    params: ['风险场景', '研判方向', '时间范围', '地区 / 对象', '已知上下文'],
-    placeholder: '请输入风险报标题，例如：企业员工关怀月活动风险评估',
-  },
-  {
-    value: 'person-intelligence-report',
-    label: '人物报告编写',
-    icon: '▣',
-    desc: '人物情报报告：基本情况、政治立场、风险点、接待建议',
-    params: ['人物背景', '国家 / 地区', '当前职务', '来访场景', '已知上下文'],
-    placeholder: '请输入人物报标题，例如：某国政要人物情报报告',
+    desc: '围绕特定主题，生成结构化的 K 报。',
+    params: ['背景信息', '关注方向', '时间范围', '地区 / 对象', '标签', '已知上下文'],
+    placeholder: '请输入需要编报的标题，例如：欧美贸易政策变化涉我风险研判',
   },
 ]
-const selectedReportType = computed(() => reportTypeOptions.find((item) => item.value === props.reportType))
+const selectedReportType = computed(() => reportTypeOptions.find((item) => item.value === props.reportType) || reportTypeOptions[0])
 const activeSelectedParameters = computed(() => {
   const params = selectedReportType.value?.params || []
   return props.activeParameters.filter((param) => params.includes(param))
 })
 const enabledReportTypes = new Set(['write-hb-k'])
 
-const singleLineParameters = new Set(['时间范围', '地区 / 对象', '国家 / 地区', '当前职务', '材料范围'])
+const singleLineParameters = new Set(['时间范围', '地区 / 对象', '国家 / 地区', '当前职务', '材料范围', '标签'])
+
+const recommendedQuestions = [
+  '近期中美贸易摩擦主要体现在哪些方面？',
+  '美国对华关税政策最新变化是什么？',
+  '欧盟贸易限制措施对我国产业链有何影响？',
+  '当前全球供应链风险有哪些？',
+]
+
+const isQaRunning = computed(() => ['searching', 'integrating', 'streaming'].includes(qaStatus.value))
+const qaStepItems = computed(() => [
+  { key: 'searching', label: '检索中', done: ['integrating', 'streaming', 'done'].includes(qaStatus.value), active: qaStatus.value === 'searching' },
+  { key: 'integrating', label: '整合中', done: ['streaming', 'done'].includes(qaStatus.value), active: qaStatus.value === 'integrating' },
+  { key: 'streaming', label: '输出中', done: qaStatus.value === 'done', active: qaStatus.value === 'streaming' },
+])
+const qaStatusTitle = computed(() => {
+  if (qaStatus.value === 'failed') return '回答生成失败'
+  if (qaStatus.value === 'done') return '回答已完成'
+  if (isQaRunning.value) return '正在检索数据库并整合相关信息'
+  return '等待提问'
+})
+const qaStatusDescription = computed(() => {
+  if (qaStatus.value === 'failed') return qaError.value || '请稍后重试，或换一个问题重新提问。'
+  if (qaStatus.value === 'done') return '可复制答案、继续追问，或导入为编报背景。'
+  if (isQaRunning.value) return '系统正在围绕问题检索知识库并生成回答。'
+  return '请输入问题后，系统将检索数据库并生成回答。'
+})
 
 function selectReportType(value) {
   if (!enabledReportTypes.has(value)) return
-  emit('update:reportType', props.reportType === value ? '' : value)
+  emit('update:reportType', value)
 }
 
 function isReportTypeDisabled(value) {
@@ -224,6 +255,7 @@ function parameterPlaceholder(param) {
     '关注方向': '说明重点研判角度、必须覆盖的问题或核心判断方向。',
     '时间范围': '例如：2026年5月、近三个月、2025年至今。',
     '地区 / 对象': '例如：欧盟、东南亚、某城市、某机构或重点企业。',
+    '标签': '例如：贸易、制裁、产业链、科技、地区安全。',
     '已知上下文': '粘贴已有材料、口径、线索、数据或需要引用的上下文。',
     '材料范围': '说明需要汇编的材料类型、来源范围或时间跨度。',
     '风险场景': '描述需要评估的场景、触发条件或潜在事件。',
@@ -255,6 +287,139 @@ function updateParameterValue(param, value) {
 
 function submitReport() {
   if (canGenerate.value) emit('generate')
+}
+
+function ensureReportDefaults() {
+  if (props.reportType !== 'write-hb-k') emit('update:reportType', 'write-hb-k')
+  const defaults = ['背景信息', '关注方向', '时间范围', '地区 / 对象', '标签']
+  const current = new Set(props.activeParameters || [])
+  let changed = false
+  for (const item of defaults) {
+    if (!current.has(item)) {
+      current.add(item)
+      changed = true
+    }
+  }
+  if (changed) emit('update:activeParameters', Array.from(current))
+}
+
+function selectHomeMode(mode) {
+  homeMode.value = mode
+  qaImportNotice.value = ''
+  if (mode === 'report') ensureReportDefaults()
+}
+
+function fillRecommendedQuestion(question) {
+  qaQuestion.value = question
+  nextTick(() => qaInputRef.value?.focus())
+}
+
+function closeQaStream() {
+  if (qaEventSource) {
+    qaEventSource.close()
+    qaEventSource = null
+  }
+}
+
+function pushQaTechnical(event) {
+  qaTechnicalEvents.value.push({
+    id: `${Date.now()}-${qaTechnicalEvents.value.length}`,
+    time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    type: event?.type || 'event',
+    summary: event?.message || event?.name || event?.content || '系统事件',
+  })
+  if (qaTechnicalEvents.value.length > 80) qaTechnicalEvents.value = qaTechnicalEvents.value.slice(-80)
+}
+
+function handleQaEvent(event) {
+  if (!event || typeof event !== 'object') return
+  if (event.type === 'text_delta') {
+    qaStatus.value = 'streaming'
+    qaAnswer.value += event.content || ''
+    return
+  }
+  if (event.type === 'token') return
+  if (event.type === 'tool_start' || event.type === 'tool_delta' || event.type === 'tool_end' || event.type === 'stage' || event.type === 'status') {
+    if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
+    pushQaTechnical(event)
+    return
+  }
+  if (event.type === 'done') {
+    qaStatus.value = 'done'
+    closeQaStream()
+    return
+  }
+  if (event.type === 'error') {
+    qaStatus.value = 'failed'
+    qaError.value = event.message || '问答失败'
+    pushQaTechnical(event)
+    closeQaStream()
+  }
+}
+
+async function startQa() {
+  const question = qaQuestion.value.trim()
+  if (!question || isQaRunning.value) return
+  closeQaStream()
+  qaAnswer.value = ''
+  qaError.value = ''
+  qaImportNotice.value = ''
+  qaTechnicalEvents.value = []
+  qaStatus.value = 'searching'
+
+  try {
+    const response = await createChatCompletion({
+      stream: true,
+      messages: [
+        {
+          role: 'system',
+          content: '你是知识问答助手。请优先围绕知识库和数据库信源进行检索、归纳和交叉核验，用中文直接回答用户问题。不要在回答中提及底层系统、工具调用、网关、SSE、命令或技术日志。',
+        },
+        { role: 'user', content: question },
+      ],
+    })
+    const url = getChatStreamUrl(response?.eventsUrl)
+    if (!url) throw new Error('未获得回答通道')
+    qaEventSource = new EventSource(url)
+    qaEventSource.onmessage = (message) => {
+      try {
+        handleQaEvent(JSON.parse(message.data))
+      } catch {
+        pushQaTechnical({ type: 'message', message: '收到一条无法解析的系统事件' })
+      }
+    }
+    qaEventSource.onerror = () => {
+      if (qaStatus.value !== 'done') {
+        qaStatus.value = 'failed'
+        qaError.value = '回答连接中断，请稍后重试。'
+      }
+      closeQaStream()
+    }
+  } catch (error) {
+    qaStatus.value = 'failed'
+    qaError.value = error instanceof Error ? error.message : String(error)
+    closeQaStream()
+  }
+}
+
+async function copyQaAnswer() {
+  if (!qaAnswer.value) return
+  await navigator.clipboard?.writeText(qaAnswer.value)
+}
+
+function continueQa() {
+  nextTick(() => qaInputRef.value?.focus())
+}
+
+function importQaAsReportContext() {
+  if (!qaAnswer.value.trim()) return
+  selectHomeMode('report')
+  if (!props.title?.trim() && qaQuestion.value.trim()) emit('update:title', qaQuestion.value.trim().slice(0, 200))
+  const nextContext = [props.contextText, `【知识问答问题】${qaQuestion.value.trim()}`, `【知识问答回答】${qaAnswer.value.trim()}`]
+    .filter(Boolean)
+    .join('\n\n')
+  emit('update:contextText', nextContext)
+  qaImportNotice.value = '已作为编报背景导入'
 }
 
 function isPlanOptionSelected(stepId, optionId) {
@@ -898,7 +1063,16 @@ watch(isLiveLogVisible, (visible) => {
   setLiveLogAutoScroll(visible)
 }, { immediate: true })
 
-onBeforeUnmount(() => setLiveLogAutoScroll(false))
+onMounted(() => ensureReportDefaults())
+
+watch(() => props.phase, (phase) => {
+  if (phase === 'idle') ensureReportDefaults()
+})
+
+onBeforeUnmount(() => {
+  setLiveLogAutoScroll(false)
+  closeQaStream()
+})
 
 function htmlToPlainText(html) {
   const div = document.createElement('div')
@@ -1138,11 +1312,12 @@ function exportPdf() {
           <button v-if="showNewReportButton" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-2">
             清屏并开启下一个编报
           </button>
-          <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-2">导出 Word</button>
+          <button @click="exportWord" :disabled="!canExport" class="sci-btn text-[10px] px-3 py-2" :title="canExport ? '导出 Word' : '报告生成后可导出'">导出 Word</button>
           <button
             @click="exportPdf"
             :disabled="!canExport"
             class="sci-btn text-[10px] px-3 py-2"
+            :title="canExport ? '导出 PDF' : '报告生成后可导出'"
           >
             导出 PDF
           </button>
@@ -1376,37 +1551,36 @@ function exportPdf() {
 
     <div ref="reportRef" class="main-scroll flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
-        <section class="main-content w-full text-center">
-          <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-[#0f172a]" style="font-size: 32px; font-weight: 800">开始新的报告任务</h1>
-          <p class="font-mono text-sm text-[#374151] mb-12" style="font-size: 14px; font-weight: 500">
-            请先选择编报类型，再输入标题，并补充关键参数信息，以便 AI 为您生成更精准的编报内容。
-          </p>
+        <section class="main-content home-dual-mode w-full">
+          <div class="text-center">
+            <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-[#0f172a]" style="font-size: 32px; font-weight: 800">AI深度编报工作台</h1>
+            <p class="font-mono text-sm text-[#374151] mb-10" style="font-size: 14px; font-weight: 500">
+              选择 K报编写生成正式编报，或进入知识问答快速检索和整合信源信息。
+            </p>
+          </div>
 
-          <div class="report-type-grid mb-9">
+          <div class="home-mode-grid mb-8">
             <button
-              v-for="type in reportTypeOptions"
-              :key="type.value"
-              class="report-type-card relative px-5 py-6 transition-all duration-200"
-              :class="{ active: reportType === type.value, disabled: isReportTypeDisabled(type.value) }"
+              v-for="card in featureCards"
+              :key="card.key"
+              class="home-mode-card"
+              :class="{ active: homeMode === card.key }"
               type="button"
-              :disabled="isReportTypeDisabled(type.value)"
-              :title="isReportTypeDisabled(type.value) ? '该报类暂未开放' : ''"
-              @click="selectReportType(type.value)"
+              @click="selectHomeMode(card.key)"
             >
-              <span
-                v-if="reportType === type.value"
-                class="absolute right-3 top-3 h-6 w-6 rounded-full border border-neon-cyan/40 bg-neon-cyan/90 text-deep-void font-mono text-xs flex items-center justify-center shadow-[0_0_14px_rgba(0,243,255,0.18)]"
-              >
-                ✓
-              </span>
-              <div class="h-full flex flex-col items-center justify-center">
-                <div class="font-mono text-[34px] mb-4" :class="reportType === type.value ? '' : 'text-slate-400/80'" :style="reportType === type.value ? 'color: #0ea5e9' : ''">{{ type.icon }}</div>
-                <div class="font-mono text-base font-semibold" :class="reportType === type.value ? '' : 'text-[#111827]'" :style="reportType === type.value ? 'color: #0ea5e9' : ''">{{ type.label }}</div>
+              <span v-if="homeMode === card.key" class="home-mode-check">✓</span>
+              <div class="home-mode-icon">{{ card.icon }}</div>
+              <div class="home-mode-title">{{ card.title }}</div>
+              <p>{{ card.desc }}</p>
+              <div class="home-mode-tags">
+                <span v-for="tag in card.tags" :key="tag">{{ tag }}</span>
               </div>
+              <div class="home-mode-action">{{ card.action }}</div>
             </button>
           </div>
 
-          <div class="input-panel mx-auto text-left p-5 md:p-6">
+          <div v-if="homeMode === 'report'" class="input-panel mx-auto text-left p-5 md:p-6">
+            <div v-if="qaImportNotice" class="qa-import-notice mb-4">{{ qaImportNotice }}</div>
             <div class="input-title-shell p-5 md:p-6">
               <div class="flex items-center justify-between gap-4 mb-4">
                 <label class="block font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">报告标题</label>
@@ -1417,14 +1591,14 @@ function exportPdf() {
                 :value="title"
                 maxlength="200"
                 @input="emit('update:title', $event.target.value)"
-                :placeholder="selectedReportType?.placeholder || '请输入需要编报的标题，例如：2026年东南亚区域安全态势研判'"
+                :placeholder="selectedReportType?.placeholder"
               ></textarea>
             </div>
 
-            <div v-if="selectedReportType" class="mt-5">
+            <div class="mt-5">
               <div class="flex items-center justify-between mb-3 px-1">
-                <div class="font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">需要补充的参数</div>
-                <span class="font-mono text-[10px] text-neon-green/80">已选择</span>
+                <div class="font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">K报编写参数</div>
+                <span class="font-mono text-[10px] text-neon-green/80">规划前可调整</span>
               </div>
 
               <div class="flex flex-wrap gap-2.5 mb-4">
@@ -1469,34 +1643,105 @@ function exportPdf() {
               </div>
 
               <div class="soft-field p-3">
-                <label class="block font-mono text-[10px] tracking-widest text-[#111827] mb-2" style="font-size: 14px; font-weight: 700">综合补充说明</label>
+                <label class="block font-mono text-[10px] tracking-widest text-[#111827] mb-2" style="font-size: 14px; font-weight: 700">补充背景</label>
                 <textarea
                   ref="contextTextRef"
                   :value="contextText"
                   @input="emit('update:contextText', $event.target.value)"
-                  placeholder="可继续补充自由文本、特殊要求、口径限制或已有材料..."
+                  placeholder="可补充事件背景、已知材料、特殊要求、口径限制或知识问答导入内容..."
                   rows="4"
                   class="sci-textarea text-sm"
                 ></textarea>
               </div>
             </div>
 
-            <div v-else class="soft-field mt-5 px-4 py-5 text-center font-mono text-xs text-slate-500">
-              选择一个编报类型后，可填写对应的背景、方向、时间、地区对象和上下文参数。
-            </div>
-
-            <div class="mt-5 flex items-center justify-between gap-4">
-              <div class="font-mono text-[10px] text-slate-500">AI 生成内容仅供参考，请结合专业判断使用</div>
+            <div class="mt-5 flex items-center justify-between gap-4 report-form-actions">
+              <div class="font-mono text-[10px] text-slate-500">先生成编报规划，确认后才会创建正式编报任务</div>
               <button
                 class="generate-btn shrink-0 font-mono text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 type="button"
                 :disabled="!canGenerate"
-                :title="isPlanning ? '正在生成编报规划' : !reportType ? '请先选择编报类型' : !title?.trim() ? '请输入报告标题' : '生成编报规划'"
+                :title="isPlanning ? '正在生成编报规划' : !title?.trim() ? '请输入报告标题' : '生成编报规划'"
                 @click="submitReport"
               >
-                ↗
+                生成编报规划
               </button>
             </div>
+          </div>
+
+          <div v-else class="qa-workspace">
+            <section class="qa-question-panel">
+              <div class="qa-panel-heading">
+                <span>提问</span>
+                <small>基于知识库检索与整合</small>
+              </div>
+              <textarea
+                ref="qaInputRef"
+                v-model="qaQuestion"
+                class="qa-question-input"
+                rows="8"
+                placeholder="请输入您的问题，系统将检索数据库并整合相关信息……"
+                @keydown.ctrl.enter.prevent="startQa"
+              ></textarea>
+              <button
+                class="qa-submit-btn"
+                type="button"
+                :disabled="!qaQuestion.trim() || isQaRunning"
+                @click="startQa"
+              >
+                {{ isQaRunning ? '正在回答' : '开始提问' }}
+              </button>
+
+              <div class="qa-recommendations">
+                <div class="qa-recommend-title">推荐问题</div>
+                <button
+                  v-for="question in recommendedQuestions"
+                  :key="question"
+                  type="button"
+                  @click="fillRecommendedQuestion(question)"
+                >
+                  {{ question }}
+                </button>
+              </div>
+            </section>
+
+            <section class="qa-answer-panel">
+              <div class="qa-panel-heading">
+                <span>实时回答</span>
+                <small>{{ qaStatusTitle }}</small>
+              </div>
+              <div class="qa-status-steps" v-if="qaStatus !== 'idle' && qaStatus !== 'failed'">
+                <span
+                  v-for="step in qaStepItems"
+                  :key="step.key"
+                  :class="{ active: step.active, done: step.done }"
+                >
+                  {{ step.label }}
+                </span>
+              </div>
+              <p class="qa-status-desc">{{ qaStatusDescription }}</p>
+              <div class="qa-answer-box" :class="{ empty: !qaAnswer }">
+                <template v-if="qaAnswer">{{ qaAnswer }}</template>
+                <template v-else>等待提问</template>
+              </div>
+              <div v-if="qaStatus === 'done'" class="qa-answer-actions">
+                <button type="button" @click="copyQaAnswer">复制答案</button>
+                <button type="button" @click="importQaAsReportContext">作为编报背景</button>
+                <button type="button" @click="continueQa">继续追问</button>
+              </div>
+              <details v-if="qaTechnicalEvents.length" class="source-technical-details qa-technical-details">
+                <summary>查看技术详情</summary>
+                <div class="source-technical-log">
+                  <div v-for="event in qaTechnicalEvents" :key="event.id" class="friendly-log-card">
+                    <div class="friendly-log-title">
+                      <span>{{ event.time }}</span>
+                      <strong>{{ event.type }}</strong>
+                    </div>
+                    <p>{{ event.summary }}</p>
+                  </div>
+                </div>
+              </details>
+            </section>
           </div>
         </section>
       </div>

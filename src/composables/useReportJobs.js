@@ -26,7 +26,7 @@ function writeDrafts(value) {
 }
 
 const REPORT_PARAMETERS = {
-  'write-hb-k': ['背景信息', '关注方向', '时间范围', '地区 / 对象', '已知上下文'],
+  'write-hb-k': ['背景信息', '关注方向', '时间范围', '地区 / 对象', '标签', '已知上下文'],
   'write-hb-hb': ['背景信息', '关注方向', '材料范围', '地区 / 对象', '已知上下文'],
   'risk-assessment-reports': ['风险场景', '研判方向', '时间范围', '地区 / 对象', '已知上下文'],
   'person-intelligence-report': ['人物背景', '国家 / 地区', '当前职务', '来访场景', '已知上下文'],

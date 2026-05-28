@@ -49,6 +49,13 @@ export function createReportPlan(body) {
   })
 }
 
+export function createChatCompletion(body) {
+  return request('/chat/completions', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export function fetchReportJobs(params = {}) {
   const query = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
@@ -80,4 +87,11 @@ export function getDownloadUrl(jobId, format = 'md') {
 
 export function getJobEventsUrl(jobId) {
   return `${API_BASE}/report-jobs/${jobId}/events`
+}
+
+export function getChatStreamUrl(eventsUrl) {
+  if (!eventsUrl) return ''
+  if (/^https?:\/\//i.test(eventsUrl)) return eventsUrl
+  const normalized = eventsUrl.startsWith('/api/') ? eventsUrl.slice(4) : eventsUrl
+  return `${API_BASE}${normalized.startsWith('/') ? normalized : `/${normalized}`}`
 }
