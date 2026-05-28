@@ -32,6 +32,8 @@ const props = defineProps({
   jobList: Array,
   health: Object,
   errorMessage: String,
+  detailLoading: Boolean,
+  detailLoadError: String,
   isHistoryMode: Boolean,
   isGenerating: Boolean,
   isPlanning: Boolean,
@@ -84,6 +86,7 @@ const props = defineProps({
 const emit = defineEmits([
   'list',
   'new-report',
+  'retry-history-report',
   'show-active-workspace',
   'toggle-log-drawer',
   'update:title',
@@ -117,7 +120,9 @@ let liveLogScrollTimer = null
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
 const isLiveLogVisible = computed(() => props.phase === 'loading')
 const canOpenLogDrawer = computed(() => !isLiveLogVisible.value)
-const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value)
+const isHistoryDetailLoading = computed(() => props.detailLoading || props.phase === 'history-loading')
+const isHistoryDetailError = computed(() => props.phase === 'history-error' || Boolean(props.detailLoadError))
+const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value && !isHistoryDetailLoading.value && !isHistoryDetailError.value)
 const showNewReportButton = computed(() => props.isHistoryMode || props.phase === 'done' || props.phase === 'error')
 const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating && !props.isPlanning)
 const titleLength = computed(() => props.title?.length || 0)
@@ -1028,7 +1033,7 @@ function exportPdf() {
           [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
         </span>
         <span v-if="phase !== 'idle'" class="font-mono text-[10px] text-neon-green">
-          {{ reportTypeLabel }} / {{ phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
+          {{ reportTypeLabel }} / {{ isHistoryDetailLoading ? '加载中' : isHistoryDetailError ? '加载失败' : phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
         </span>
         <span v-if="job?.jobId" class="font-mono text-[10px] text-slate-500">
           JOB {{ job.jobId.slice(0, 8) }}
@@ -1043,7 +1048,7 @@ function exportPdf() {
         >
           返回生成编报
         </button>
-        <template v-if="phase !== 'done'">
+        <template v-if="phase !== 'done' && !isHistoryDetailLoading && !isHistoryDetailError">
           <button
             @click="toggleLogDrawer"
             :disabled="!canOpenLogDrawer"
@@ -1420,6 +1425,41 @@ function exportPdf() {
                 ↗
               </button>
             </div>
+          </div>
+        </section>
+      </div>
+
+      <div v-else-if="isHistoryDetailLoading" class="history-detail-state">
+        <section class="history-loading-card">
+          <div class="history-loading-icon">▤</div>
+          <h1>正在加载历史报告</h1>
+          <p>系统正在读取报告正文、信源概览和引用依据。</p>
+          <div class="history-skeleton-info">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="history-skeleton-body">
+            <i class="wide"></i>
+            <i></i>
+            <i></i>
+            <i class="short"></i>
+            <i></i>
+          </div>
+        </section>
+      </div>
+
+      <div v-else-if="isHistoryDetailError" class="history-detail-state">
+        <section class="history-loading-card history-error-card">
+          <div class="history-loading-icon history-error-icon">!</div>
+          <h1>历史报告加载失败</h1>
+          <p>请稍后重试，或返回报告列表。</p>
+          <div v-if="detailLoadError || errorMessage" class="history-error-message">
+            {{ detailLoadError || errorMessage }}
+          </div>
+          <div class="history-error-actions">
+            <button class="result-action-btn result-action-primary" type="button" @click="emit('retry-history-report')">重新加载</button>
+            <button class="result-action-btn" type="button" @click="emit('list')">返回报告列表</button>
           </div>
         </section>
       </div>

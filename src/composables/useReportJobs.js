@@ -80,6 +80,8 @@ export function useReportJobs() {
   const errorMessage = ref('')
   const selectedReport = ref(null)
   const openedHistoryJobId = ref(null)
+  const detailLoading = ref(false)
+  const detailLoadError = ref('')
   const savedNotice = ref('')
   const activePollJobId = ref(null)
   const executionLogs = ref([])
@@ -93,6 +95,7 @@ export function useReportJobs() {
   let subscribedJobId = null
   let activeExecutionLogJobId = null
   let historyOpenRequestId = 0
+  let databaseSourcesRequestId = 0
   const activeWorkspaceSnapshot = ref(null)
   const executionLogsByJobId = new Map()
   const seenExecutionEventsByJobId = new Map()
@@ -211,6 +214,8 @@ export function useReportJobs() {
     selectedReport.value = snapshot.selectedReport ? { ...snapshot.selectedReport } : null
     savedNotice.value = snapshot.savedNotice || ''
     openedHistoryJobId.value = null
+    detailLoading.value = false
+    detailLoadError.value = ''
     currentView.value = 'generator'
     if (job.value?.jobId) {
       setActiveExecutionLogJob(job.value.jobId)
@@ -391,7 +396,8 @@ export function useReportJobs() {
     }
   }
 
-  async function fetchDatabaseSourcesData(jobId) {
+  async function fetchDatabaseSourcesData(jobId, shouldApply = () => true) {
+    const requestId = ++databaseSourcesRequestId
     if (!jobId) {
       databaseSources.value = null
       databaseSourcesLoading.value = false
@@ -399,28 +405,31 @@ export function useReportJobs() {
     }
     databaseSourcesLoading.value = true
     try {
-      databaseSources.value = await fetchReportDatabaseSources(jobId)
+      const result = await fetchReportDatabaseSources(jobId)
+      if (requestId !== databaseSourcesRequestId || !shouldApply()) return
+      databaseSources.value = result
     } catch {
+      if (requestId !== databaseSourcesRequestId || !shouldApply()) return
       databaseSources.value = null
     } finally {
-      databaseSourcesLoading.value = false
+      if (requestId === databaseSourcesRequestId && shouldApply()) databaseSourcesLoading.value = false
     }
   }
 
-  async function loadExecutionLog(jobId) {
+  async function loadExecutionLog(jobId, shouldApply = () => true) {
     if (!jobId) {
       setActiveExecutionLogJob(null)
       return
     }
     if (executionLogsByJobId.has(jobId)) {
-      setActiveExecutionLogJob(jobId)
+      if (shouldApply()) setActiveExecutionLogJob(jobId)
       return
     }
     try {
       const result = await fetchReportJobEventLog(jobId)
-      setActiveExecutionLogJob(jobId, result?.items || [])
+      if (shouldApply()) setActiveExecutionLogJob(jobId, result?.items || [])
     } catch {
-      setActiveExecutionLogJob(jobId, [])
+      if (shouldApply()) setActiveExecutionLogJob(jobId, [])
     }
   }
 
@@ -600,6 +609,8 @@ export function useReportJobs() {
     activeWorkspaceSnapshot.value = null
     resetExecutionLogs()
     openedHistoryJobId.value = null
+    detailLoading.value = false
+    detailLoadError.value = ''
     selectedReport.value = null
     generatedHtml.value = ''
     errorMessage.value = ''
@@ -1096,38 +1107,50 @@ export function useReportJobs() {
     const requestId = ++historyOpenRequestId
     const unfinishedWorkspace = getUnfinishedWorkspaceSnapshot(item.jobId)
     if (!unfinishedWorkspace) closeJobEvents()
-    await loadExecutionLog(item.jobId)
-    fetchDatabaseSourcesData(item.jobId)
-    if (requestId !== historyOpenRequestId) return
     if (unfinishedWorkspace) activeWorkspaceSnapshot.value = unfinishedWorkspace
-    selectedReport.value = null
-    generatedHtml.value = ''
-    errorMessage.value = ''
-    savedNotice.value = ''
-    phase.value = 'loading'
-    loadingStep.value = '正在读取历史报告文件'
     currentView.value = 'generator'
     openedHistoryJobId.value = item.jobId
     job.value = item
+    selectedReport.value = null
+    generatedHtml.value = ''
+    databaseSources.value = null
+    databaseSourcesLoading.value = false
+    setActiveExecutionLogJob(item.jobId)
+    errorMessage.value = ''
+    detailLoadError.value = ''
+    detailLoading.value = true
+    savedNotice.value = ''
+    phase.value = 'history-loading'
+    loadingStep.value = '正在加载历史报告'
+
+    const isCurrentHistory = () => requestId === historyOpenRequestId && openedHistoryJobId.value === item.jobId
+    void loadExecutionLog(item.jobId, isCurrentHistory)
+    void fetchDatabaseSourcesData(item.jobId, isCurrentHistory)
 
     try {
       const result = await fetchReportResult(item.jobId)
-      if (requestId !== historyOpenRequestId || openedHistoryJobId.value !== item.jobId) return
+      if (!isCurrentHistory()) return
       job.value = { ...item, resultPath: result.resultPath || item.resultPath }
       generatedHtml.value = result.html || ''
       selectedReport.value = { ...job.value, html: generatedHtml.value }
       applyHistoryDraft(item)
       phase.value = 'done'
+      detailLoadError.value = ''
       pushLog(`已打开历史报告：${item.jobId}`)
     } catch (error) {
-      if (requestId !== historyOpenRequestId || openedHistoryJobId.value !== item.jobId) return
-      errorMessage.value = error instanceof Error ? error.message : String(error)
-      phase.value = 'error'
+      if (!isCurrentHistory()) return
+      const message = error instanceof Error ? error.message : String(error)
+      errorMessage.value = message
+      detailLoadError.value = message || '历史报告加载失败'
+      phase.value = 'history-error'
+    } finally {
+      if (isCurrentHistory()) detailLoading.value = false
     }
   }
 
   async function monitorJobFromList(item) {
     historyOpenRequestId += 1
+    const requestId = historyOpenRequestId
     if (activeWorkspaceSnapshot.value?.job?.jobId === item.jobId) {
       restoreWorkspaceSnapshot()
       return
@@ -1146,19 +1169,27 @@ export function useReportJobs() {
     }
 
     if (!unfinishedWorkspace) closeJobEvents()
-    await loadExecutionLog(item.jobId)
-    fetchDatabaseSourcesData(item.jobId)
     openedHistoryJobId.value = null
+    detailLoading.value = false
+    detailLoadError.value = ''
     selectedReport.value = null
     generatedHtml.value = ''
+    databaseSources.value = null
+    databaseSourcesLoading.value = false
+    setActiveExecutionLogJob(item.jobId)
     errorMessage.value = ''
     savedNotice.value = ''
     processLogs.value = []
     job.value = item
+    phase.value = 'loading'
+    loadingStep.value = '正在跟踪后端任务状态'
     applyJobFormData(item)
     activeWorkspaceSnapshot.value = unfinishedWorkspace || makeWorkspaceSnapshot({ job: item })
     upsertJobInList(item)
     if (!unfinishedWorkspace) subscribeJobEvents(item.jobId)
+    const isCurrentRunning = () => historyOpenRequestId === requestId && openedHistoryJobId.value === null && job.value?.jobId === item.jobId
+    void loadExecutionLog(item.jobId, isCurrentRunning)
+    void fetchDatabaseSourcesData(item.jobId, isCurrentRunning)
 
     if (item.status === 'failed' || item.status === 'waiting_approval' || item.status === 'cancelled') {
       phase.value = 'error'
@@ -1168,8 +1199,6 @@ export function useReportJobs() {
       return
     }
 
-    phase.value = 'loading'
-    loadingStep.value = '正在跟踪后端任务状态'
     isGenerating.value = true
     activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: item, phase: 'loading', loadingStep: loadingStep.value, isGenerating: true })
     pushLog(`继续查看任务：${item.jobId}`)
@@ -1185,6 +1214,15 @@ export function useReportJobs() {
       isGenerating.value = false
       if (activeWorkspaceSnapshot.value?.job?.jobId) patchActiveWorkspaceSnapshot({ isGenerating: false, __force: true })
     }
+  }
+
+  async function retryOpenCurrentHistoryReport() {
+    const jobId = openedHistoryJobId.value || job.value?.jobId
+    if (!jobId) return
+    const item = job.value?.jobId === jobId
+      ? job.value
+      : jobList.value.find((entry) => entry.jobId === jobId) || recentJobs.value.find((entry) => entry.jobId === jobId)
+    if (item) await openReportFromList(item)
   }
 
   function showGenerator() {
@@ -1261,6 +1299,8 @@ export function useReportJobs() {
     errorMessage,
     selectedReport,
     openedHistoryJobId,
+    detailLoading,
+    detailLoadError,
     savedNotice,
     isHistoryMode,
     hasActiveWorkspace,
@@ -1293,6 +1333,7 @@ export function useReportJobs() {
     updateListPageSize,
     openReportFromList,
     monitorJobFromList,
+    retryOpenCurrentHistoryReport,
     showGenerator,
     resetForNewReport: resetAndShowGenerator,
     saveCurrentReportDraft,

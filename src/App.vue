@@ -41,6 +41,8 @@ const {
   recentLoadError,
   health,
   errorMessage,
+  detailLoading,
+  detailLoadError,
   filteredJobs,
   openedHistoryJobId,
   listSearch,
@@ -77,6 +79,7 @@ const {
   updateListPage,
   updateListPageSize,
   monitorJobFromList,
+  retryOpenCurrentHistoryReport,
   showGenerator,
   resetForNewReport,
   saveCurrentReportDraft,
@@ -180,6 +183,8 @@ function jobActionLabel(status) {
         :jobList="filteredJobs"
         :health="health"
         :errorMessage="errorMessage"
+        :detailLoading="detailLoading"
+        :detailLoadError="detailLoadError"
         :isHistoryMode="isHistoryMode"
         :isGenerating="isGenerating"
         :isPlanning="isPlanning"
@@ -206,6 +211,7 @@ function jobActionLabel(status) {
         @prev-plan-step="prevPlanStep"
         @list="loadJobList"
         @new-report="resetForNewReport"
+        @retry-history-report="retryOpenCurrentHistoryReport"
         @show-active-workspace="showGenerator"
         @toggle-log-drawer="toggleLogDrawer"
       />
