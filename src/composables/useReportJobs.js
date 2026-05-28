@@ -26,11 +26,64 @@ function writeDrafts(value) {
 }
 
 const REPORT_PARAMETERS = {
-  'write-hb-k': ['背景信息', '关注方向', '时间范围', '地区 / 对象', '标签', '已知上下文'],
+  'write-hb-k': ['关注方向', '时间范围', '地区 / 对象', '标签'],
   'write-hb-hb': ['背景信息', '关注方向', '材料范围', '地区 / 对象', '已知上下文'],
   'risk-assessment-reports': ['风险场景', '研判方向', '时间范围', '地区 / 对象', '已知上下文'],
   'person-intelligence-report': ['人物背景', '国家 / 地区', '当前职务', '来访场景', '已知上下文'],
 }
+
+const K_SOURCE_SCOPE_STEP = {
+  id: 'k_source_scope',
+  type: 'source_scope',
+  title: '信源范围',
+  sectionTitle: '信源范围',
+  description: '确认本次 K 报优先采集和使用的信源类型。',
+  allowMultiple: true,
+  options: [
+    { id: 'public_news', label: '公开新闻报道', detail: '覆盖主流媒体、区域媒体和专题报道。', selected: true },
+    { id: 'government_notice', label: '政府与机构公告', detail: '覆盖政府部门、监管机构、国际组织和官方公告。', selected: true },
+    { id: 'think_tank_report', label: '行业报告与智库分析', detail: '覆盖行业研究、智库研判和专业机构分析。', selected: true },
+    { id: 'enterprise_activity', label: '企业与主体动态', detail: '覆盖重点企业、产业主体和相关组织动态。', selected: true },
+    { id: 'public_opinion', label: '舆情与公众反应', detail: '覆盖公开舆论、社交传播和公众反馈。', selected: true },
+    { id: 'trade_supply_data', label: '供应链与贸易数据', detail: '覆盖贸易、供应链、产业链和关键数据线索。', selected: true },
+  ],
+}
+
+const K_SECTION_DEFS = [
+  {
+    id: 'k_basic_situation',
+    sectionTitle: '基本情况',
+    description: '梳理事件背景、关键主体、时间线和主要事实。',
+    match: /(基本|背景|事实|情况|态势|概况)/,
+    fallback: [
+      { id: 'basic_context', label: '事件背景与演变', detail: '说明主题背景、近期变化和关键时间节点。' },
+      { id: 'basic_actors', label: '关键主体与关系', detail: '梳理相关国家、机构、企业或组织的角色关系。' },
+      { id: 'basic_current', label: '当前态势与主要事实', detail: '归纳当前状态、公开事实和核心信息。' },
+    ],
+  },
+  {
+    id: 'k_china_risks',
+    sectionTitle: '涉我风险',
+    description: '研判对我国利益、产业链、贸易、安全和舆论环境的影响。',
+    match: /(涉我|风险|影响|挑战|安全|产业链|供应链|贸易)/,
+    fallback: [
+      { id: 'risk_interest', label: '涉我利益影响', detail: '分析对我国相关利益、政策空间和外部环境的影响。' },
+      { id: 'risk_industry', label: '产业链与供应链风险', detail: '研判关键产业、贸易链路和供应链环节的风险。' },
+      { id: 'risk_public', label: '舆情与外溢风险', detail: '评估舆论传播、国际叙事和潜在外溢影响。' },
+    ],
+  },
+  {
+    id: 'k_countermeasures',
+    sectionTitle: '对策建议',
+    description: '提出应对思路、工作建议和后续跟踪重点。',
+    match: /(建议|对策|应对|处置|措施|跟踪)/,
+    fallback: [
+      { id: 'counter_policy', label: '政策与工作建议', detail: '提出政策沟通、风险防控和工作推进建议。' },
+      { id: 'counter_industry', label: '产业与主体应对', detail: '提出产业链、企业和重点主体的应对方向。' },
+      { id: 'counter_monitor', label: '后续跟踪重点', detail: '明确后续需要持续监测的信源、指标和事件。' },
+    ],
+  },
+]
 
 export function useReportJobs() {
   const currentView = ref('generator')
@@ -447,7 +500,7 @@ export function useReportJobs() {
         type: 'stage',
         label: '阶段进度',
         status: event.stage || 'running',
-        summary: event.message || event.stage || 'OpenClaw 阶段更新',
+        summary: event.message || event.stage || '任务阶段更新',
         phase,
         actor: actor || (String(event.stage || '').includes('openclaw') ? 'main-agent' : 'system'),
         eventId: event.stage,
@@ -620,10 +673,10 @@ export function useReportJobs() {
     loadingStep.value = '等待输入任务'
     savedNotice.value = ''
     title.value = ''
-    reportType.value = ''
+    reportType.value = 'write-hb-k'
     contextText.value = ''
     parameterValues.value = {}
-    activeParameters.value = []
+    activeParameters.value = ['关注方向', '时间范围', '地区 / 对象', '标签']
     countryOrRegion.value = ''
     currentPosition.value = ''
     scenario.value = 'foreign_leader_visit'
@@ -665,6 +718,45 @@ export function useReportJobs() {
     planSupplement.value = ''
     databaseSourceEnabled.value = true
     planError.value = ''
+  }
+
+  function normalizeKReportPlan(plan) {
+    if (reportType.value !== 'write-hb-k' || !plan) return plan
+    const originalSteps = Array.isArray(plan.steps) ? plan.steps : []
+    const sourceStep = {
+      ...K_SOURCE_SCOPE_STEP,
+      options: K_SOURCE_SCOPE_STEP.options.map((option) => ({ ...option })),
+    }
+    const sectionSteps = K_SECTION_DEFS.map((sectionDef) => {
+      const matchedStep = originalSteps.find((step) => {
+        const text = `${step.sectionTitle || ''} ${step.title || ''} ${step.description || ''}`
+        return sectionDef.match.test(text)
+      })
+      const matchedOptions = (matchedStep?.options || []).map((option, index) => ({
+        id: option.id || `${sectionDef.id}_${index}`,
+        label: option.label || option.title || `方向 ${index + 1}`,
+        detail: option.detail || option.description || '',
+        selected: option.selected !== false,
+      }))
+      const fallbackOptions = sectionDef.fallback.map((option) => ({
+        ...option,
+        selected: true,
+      }))
+      return {
+        id: matchedStep?.id || sectionDef.id,
+        type: 'report_section',
+        sectionKey: matchedStep?.sectionKey || sectionDef.id,
+        title: sectionDef.sectionTitle,
+        sectionTitle: sectionDef.sectionTitle,
+        description: matchedStep?.description || sectionDef.description,
+        allowMultiple: true,
+        options: matchedOptions.length ? matchedOptions : fallbackOptions,
+      }
+    })
+    return {
+      ...plan,
+      steps: [sourceStep, ...sectionSteps],
+    }
   }
 
   function buildContext(extraSections = []) {
@@ -831,7 +923,7 @@ export function useReportJobs() {
     activePollJobId.value = jobId
 
     const stepMessages = [
-      'OpenClaw 已接收任务',
+      '系统已接收任务',
       '正在检索公开信息',
       '正在整理证据和来源',
       '正在生成报告正文',
@@ -973,8 +1065,9 @@ export function useReportJobs() {
         context: buildContext(),
         parameters,
       })
-      reportPlan.value = plan
-      initializePlanSelections(plan)
+      const normalizedPlan = normalizeKReportPlan(plan)
+      reportPlan.value = normalizedPlan
+      initializePlanSelections(normalizedPlan)
     } catch (error) {
       planError.value = error instanceof Error ? error.message : String(error)
     } finally {
@@ -1111,17 +1204,20 @@ export function useReportJobs() {
     currentView.value = 'generator'
     openedHistoryJobId.value = item.jobId
     job.value = item
+    phase.value = 'history-loading'
+    loadingStep.value = '正在加载历史报告'
+    detailLoading.value = true
+    detailLoadError.value = ''
     selectedReport.value = null
     generatedHtml.value = ''
     databaseSources.value = null
     databaseSourcesLoading.value = false
-    setActiveExecutionLogJob(item.jobId)
+    executionLogs.value = []
+    unreadLogCount.value = 0
+    activeExecutionLogJobId = item.jobId
+    processLogs.value = []
     errorMessage.value = ''
-    detailLoadError.value = ''
-    detailLoading.value = true
     savedNotice.value = ''
-    phase.value = 'history-loading'
-    loadingStep.value = '正在加载历史报告'
 
     const isCurrentHistory = () => requestId === historyOpenRequestId && openedHistoryJobId.value === item.jobId
     void loadExecutionLog(item.jobId, isCurrentHistory)
@@ -1176,7 +1272,9 @@ export function useReportJobs() {
     generatedHtml.value = ''
     databaseSources.value = null
     databaseSourcesLoading.value = false
-    setActiveExecutionLogJob(item.jobId)
+    executionLogs.value = []
+    unreadLogCount.value = 0
+    activeExecutionLogJobId = item.jobId
     errorMessage.value = ''
     savedNotice.value = ''
     processLogs.value = []

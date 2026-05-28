@@ -122,6 +122,9 @@ const qaStatus = ref('idle')
 const qaError = ref('')
 const qaTechnicalEvents = ref([])
 const qaImportNotice = ref('')
+const qaValidationError = ref('')
+const qaCopyNotice = ref('')
+const titleValidationError = ref('')
 const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
 let liveLogScrollTimer = null
@@ -134,7 +137,7 @@ const isHistoryDetailLoading = computed(() => props.detailLoading || props.phase
 const isHistoryDetailError = computed(() => props.phase === 'history-error' || Boolean(props.detailLoadError))
 const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value && !isHistoryDetailLoading.value && !isHistoryDetailError.value)
 const showNewReportButton = computed(() => props.isHistoryMode || props.phase === 'done' || props.phase === 'error')
-const canGenerate = computed(() => Boolean(props.reportType) && Boolean(props.title?.trim()) && !props.isGenerating && !props.isPlanning)
+const canSubmitPlanning = computed(() => Boolean(props.reportType) && !props.isGenerating && !props.isPlanning)
 const titleLength = computed(() => props.title?.length || 0)
 const currentPlanStep = computed(() => props.reportPlan?.steps?.[props.planStepIndex] || null)
 const isLastPlanStep = computed(() => props.planStepIndex >= ((props.reportPlan?.steps?.length || 1) - 1))
@@ -173,7 +176,7 @@ const featureCards = [
     key: 'report',
     title: 'K报编写',
     icon: '▤',
-    desc: '围绕特定主题，生成结构化的 K 报。',
+    desc: '围绕特定主题，生成结构化、全面、深度的 K 报。',
     tags: ['深度调研', '多维分析', '专业编报'],
     action: '开始编写 K报',
   },
@@ -181,7 +184,7 @@ const featureCards = [
     key: 'qa',
     title: '知识问答',
     icon: '⌕',
-    desc: '基于知识库，检索并整合相关信息，快速获取专业回答。',
+    desc: '基于知识库，快速获取专业回答。',
     tags: ['数据库检索', '信息整合', '流式回答'],
     action: '开始提问',
   },
@@ -192,9 +195,9 @@ const reportTypeOptions = [
     value: 'write-hb-k',
     label: 'K报编写',
     icon: '▤',
-    desc: '围绕特定主题，生成结构化的 K 报。',
-    params: ['背景信息', '关注方向', '时间范围', '地区 / 对象', '标签', '已知上下文'],
-    placeholder: '请输入需要编报的标题，例如：欧美贸易政策变化涉我风险研判',
+    desc: '围绕特定主题，生成结构化、全面、深度的 K 报。',
+    params: ['关注方向', '时间范围', '地区 / 对象', '标签'],
+    placeholder: '请输入需要编写的报告标题，例如：2026年东南亚区域安全态势研判',
   },
 ]
 const selectedReportType = computed(() => reportTypeOptions.find((item) => item.value === props.reportType) || reportTypeOptions[0])
@@ -206,11 +209,23 @@ const enabledReportTypes = new Set(['write-hb-k'])
 
 const singleLineParameters = new Set(['时间范围', '地区 / 对象', '国家 / 地区', '当前职务', '材料范围', '标签'])
 
+const focusDirectionOptions = [
+  '政策法规',
+  '产业链安全',
+  '国际关系',
+  '市场与行业',
+  '舆情与传播',
+  '科技与标准',
+  '供应链风险',
+  '对策建议',
+]
+
 const recommendedQuestions = [
   '近期中美贸易摩擦主要体现在哪些方面？',
   '美国对华关税政策最新变化是什么？',
   '欧盟贸易限制措施对我国产业链有何影响？',
   '当前全球供应链风险有哪些？',
+  '中美科技竞争的最新态势如何？',
 ]
 
 const isQaRunning = computed(() => ['searching', 'integrating', 'streaming'].includes(qaStatus.value))
@@ -222,13 +237,13 @@ const qaStepItems = computed(() => [
 const qaStatusTitle = computed(() => {
   if (qaStatus.value === 'failed') return '回答生成失败'
   if (qaStatus.value === 'done') return '回答已完成'
-  if (isQaRunning.value) return '正在检索数据库并整合相关信息'
+  if (isQaRunning.value) return '生成中'
   return '等待提问'
 })
 const qaStatusDescription = computed(() => {
-  if (qaStatus.value === 'failed') return qaError.value || '请稍后重试，或换一个问题重新提问。'
+  if (qaStatus.value === 'failed') return '系统暂时无法完成检索与整合，请稍后重试。'
   if (qaStatus.value === 'done') return '可复制答案、继续追问，或导入为编报背景。'
-  if (isQaRunning.value) return '系统正在围绕问题检索知识库并生成回答。'
+  if (isQaRunning.value) return '正在检索数据库并整合相关信息'
   return '请输入问题后，系统将检索数据库并生成回答。'
 })
 
@@ -251,8 +266,7 @@ function parameterInputType(param) {
 
 function parameterPlaceholder(param) {
   const hints = {
-    '背景信息': '补充事件背景、已知事实、历史脉络或前置材料。',
-    '关注方向': '说明重点研判角度、必须覆盖的问题或核心判断方向。',
+    '关注方向': '请选择需要重点覆盖的研判方向。',
     '时间范围': '例如：2026年5月、近三个月、2025年至今。',
     '地区 / 对象': '例如：欧盟、东南亚、某城市、某机构或重点企业。',
     '标签': '例如：贸易、制裁、产业链、科技、地区安全。',
@@ -279,19 +293,31 @@ function toggleParameter(param) {
 }
 
 function updateParameterValue(param, value) {
+  if (titleValidationError.value) titleValidationError.value = ''
   emit('update:parameterValues', {
     ...props.parameterValues,
     [param]: value,
   })
 }
 
+function updateTitle(value) {
+  if (titleValidationError.value) titleValidationError.value = ''
+  emit('update:title', value)
+}
+
 function submitReport() {
-  if (canGenerate.value) emit('generate')
+  if (props.isGenerating || props.isPlanning) return
+  if (!props.title?.trim()) {
+    titleValidationError.value = '请先输入需要编报的主题。'
+    return
+  }
+  titleValidationError.value = ''
+  if (canSubmitPlanning.value) emit('generate')
 }
 
 function ensureReportDefaults() {
   if (props.reportType !== 'write-hb-k') emit('update:reportType', 'write-hb-k')
-  const defaults = ['背景信息', '关注方向', '时间范围', '地区 / 对象', '标签']
+  const defaults = ['关注方向', '时间范围', '地区 / 对象', '标签']
   const current = new Set(props.activeParameters || [])
   let changed = false
   for (const item of defaults) {
@@ -303,14 +329,34 @@ function ensureReportDefaults() {
   if (changed) emit('update:activeParameters', Array.from(current))
 }
 
+function selectedFocusDirections() {
+  return String(props.parameterValues?.['关注方向'] || '')
+    .split(/[、,，\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function isFocusDirectionSelected(direction) {
+  return selectedFocusDirections().includes(direction)
+}
+
+function toggleFocusDirection(direction) {
+  const current = new Set(selectedFocusDirections())
+  if (current.has(direction)) current.delete(direction)
+  else current.add(direction)
+  updateParameterValue('关注方向', Array.from(current).join('、'))
+}
+
 function selectHomeMode(mode) {
   homeMode.value = mode
   qaImportNotice.value = ''
+  qaValidationError.value = ''
   if (mode === 'report') ensureReportDefaults()
 }
 
 function fillRecommendedQuestion(question) {
   qaQuestion.value = question
+  qaValidationError.value = ''
   nextTick(() => qaInputRef.value?.focus())
 }
 
@@ -359,11 +405,18 @@ function handleQaEvent(event) {
 
 async function startQa() {
   const question = qaQuestion.value.trim()
-  if (!question || isQaRunning.value) return
+  if (isQaRunning.value) return
+  if (!question) {
+    qaValidationError.value = '请先输入需要咨询的问题。'
+    nextTick(() => qaInputRef.value?.focus())
+    return
+  }
   closeQaStream()
   qaAnswer.value = ''
   qaError.value = ''
   qaImportNotice.value = ''
+  qaValidationError.value = ''
+  qaCopyNotice.value = ''
   qaTechnicalEvents.value = []
   qaStatus.value = 'searching'
 
@@ -392,12 +445,14 @@ async function startQa() {
       if (qaStatus.value !== 'done') {
         qaStatus.value = 'failed'
         qaError.value = '回答连接中断，请稍后重试。'
+        pushQaTechnical({ type: 'error', message: qaError.value })
       }
       closeQaStream()
     }
   } catch (error) {
     qaStatus.value = 'failed'
     qaError.value = error instanceof Error ? error.message : String(error)
+    pushQaTechnical({ type: 'error', message: qaError.value })
     closeQaStream()
   }
 }
@@ -405,17 +460,33 @@ async function startQa() {
 async function copyQaAnswer() {
   if (!qaAnswer.value) return
   await navigator.clipboard?.writeText(qaAnswer.value)
+  qaCopyNotice.value = '答案已复制'
+  window.setTimeout(() => {
+    qaCopyNotice.value = ''
+  }, 1800)
 }
 
 function continueQa() {
+  qaValidationError.value = ''
   nextTick(() => qaInputRef.value?.focus())
+}
+
+function buildQaReportTitle(question) {
+  const cleaned = String(question || '')
+    .replace(/[？?。！!：:；;，,、\s]+$/g, '')
+    .replace(/^(请问|请分析|分析一下|介绍一下|说明一下)/, '')
+    .trim()
+  if (!cleaned) return ''
+  if (/(研判|报告|分析|态势|情况)$/.test(cleaned)) return cleaned.slice(0, 200)
+  return `${cleaned}情况研判`.slice(0, 200)
 }
 
 function importQaAsReportContext() {
   if (!qaAnswer.value.trim()) return
   selectHomeMode('report')
-  if (!props.title?.trim() && qaQuestion.value.trim()) emit('update:title', qaQuestion.value.trim().slice(0, 200))
-  const nextContext = [props.contextText, `【知识问答问题】${qaQuestion.value.trim()}`, `【知识问答回答】${qaAnswer.value.trim()}`]
+  const titleCandidate = buildQaReportTitle(qaQuestion.value)
+  if (!props.title?.trim() && titleCandidate) emit('update:title', titleCandidate)
+  const nextContext = [props.contextText, qaAnswer.value.trim()]
     .filter(Boolean)
     .join('\n\n')
   emit('update:contextText', nextContext)
@@ -481,23 +552,23 @@ function workflowLogView(phase, rawLog, status) {
   const lowerPhase = String(phase || '').toLowerCase()
   const lower = String(rawLog || '').toLowerCase()
   const views = {
-    start: ['CONNECTING', '正在连接 AI 编报引擎', '系统正在与后端 Agent 建立任务通道。'],
-    running: ['AGENT_START', 'AI 编报助手已启动', '任务已进入 OpenClaw report-agent 执行流程。'],
-    'openclaw:start': ['AGENT_START', 'AI 编报助手已启动', 'OpenClaw report-agent 已开始处理本次编报任务。'],
-    'openclaw:complete': ['COMPLETED', '编报 Agent 已完成', 'OpenClaw report-agent 已完成执行。'],
-    waiting_final_report: ['WAITING_REPORT', '等待最终报告文件', 'Agent 已返回文件指针，系统正在等待最终 Markdown 报告落盘。'],
+    start: ['CONNECTING', '正在连接 AI 编报引擎', '系统正在建立任务通道。'],
+    running: ['TASK_START', 'AI 编报助手已启动', '任务已进入自动编报执行流程。'],
+    'openclaw:start': ['TASK_START', 'AI 编报助手已启动', '系统已开始处理本次编报任务。'],
+    'openclaw:complete': ['COMPLETED', '编报任务已完成', '系统已完成执行。'],
+    waiting_final_report: ['WAITING_REPORT', '等待最终报告文件', '系统已返回文件指针，正在等待最终报告落盘。'],
     context_preparing: ['PREPARING', '准备任务上下文', '系统正在整理本次编报所需的主题、参数和上下文文件。'],
     research_planning: ['PLANNING', '生成调研计划', 'AI 正在把编报主题拆解为可执行的调研计划。'],
-    research_dispatch: ['RESEARCH_TASK', '启动调研子任务', '系统正在创建调研分组并分派 research 子任务。'],
-    research_waiting: ['WAITING_RESEARCH', '等待调研完成', '主 Agent 正在等待 research 子任务返回调研结果。'],
+    research_dispatch: ['RESEARCH_TASK', '启动调研任务', '系统正在创建调研分组并分派资料采集任务。'],
+    research_waiting: ['WAITING_RESEARCH', '等待调研完成', '系统正在等待调研结果返回。'],
     research_collecting: ['RESEARCHING', '执行资料调研', '调研子任务正在检索、读取和整理公开资料。'],
-    research_complete: ['RESEARCH_DONE', '调研结果已返回', 'research 子任务已完成，主 Agent 正在收集结果。'],
-    synthesis_dispatch: ['SYNTHESIS_TASK', '启动撰稿子任务', '系统正在启动 synthesis 子任务生成报告正文。'],
-    synthesis_waiting: ['WAITING_SYNTHESIS', '等待撰稿完成', '主 Agent 正在等待 synthesis 子任务完成报告正文。'],
+    research_complete: ['RESEARCH_DONE', '调研结果已返回', '调研已完成，系统正在收集结果。'],
+    synthesis_dispatch: ['SYNTHESIS_TASK', '启动撰稿任务', '系统正在生成报告正文。'],
+    synthesis_waiting: ['WAITING_SYNTHESIS', '等待撰稿完成', '系统正在等待报告正文完成。'],
     synthesis_writing: ['WRITING', '整合并撰写报告', 'AI 正在整合调研材料并撰写最终报告。'],
     report_verifying: ['VERIFYING', '校验报告文件', '系统正在确认 Markdown 报告文件已经生成且内容可用。'],
     report_saving: ['SAVING', '保存报告文件', '报告正文已经生成，系统正在保存并登记报告文件。'],
-    technical_detail: ['DETAIL', '处理技术细节', '系统正在读取技能、配置或中间文件；可展开查看原始命令。'],
+    technical_detail: ['DETAIL', '处理技术细节', '系统正在读取配置或中间文件；可展开查看原始记录。'],
     done: ['COMPLETED', '编报任务已完成', '报告已生成，可以查看或导出。'],
     error: ['ERROR', '任务执行出现异常', '系统执行过程中出现异常，请查看技术详情或重试。'],
   }
@@ -579,7 +650,7 @@ function translateOpenClawLog(log) {
       ...base,
       stage: 'DETAIL',
       title: '处理技术细节',
-      description: '系统正在读取技能、配置或中间文件；可展开查看原始命令。',
+      description: '系统正在读取配置或中间文件；可展开查看原始记录。',
       status,
     }
   }
@@ -589,16 +660,16 @@ function translateOpenClawLog(log) {
       ...base,
       stage: 'CONNECTING',
       title: '正在连接 AI 编报引擎',
-      description: '系统正在与后端 Agent 建立任务通道。',
+      description: '系统正在建立任务通道。',
     }
   }
 
   if (lower.includes('running openclaw report-agent')) {
     return {
       ...base,
-      stage: 'AGENT_START',
+      stage: 'TASK_START',
       title: 'AI 编报助手已启动',
-      description: '任务已进入 Agent 执行流程。',
+      description: '任务已进入自动编报执行流程。',
     }
   }
 
@@ -905,13 +976,14 @@ const sourceOverviewStats = computed(() => {
 })
 
 const resultInfoItems = computed(() => {
+  const generatedAt = props.job?.completedAt || props.job?.updatedAt || props.job?.createdAt || ''
+  const generatedText = generatedAt ? new Date(generatedAt).toLocaleString('zh-CN', { hour12: false }) : '--'
   return [
+    ['报告标题', props.title || props.job?.payload?.topic || '--'],
     ['报告类型', reportTypeLabel.value || '--'],
-    ['任务状态', taskStatusLabel.value || '--'],
-    ['JOB', props.job?.jobId ? props.job.jobId.slice(0, 8) : '--'],
-    ['报告引用', sourceOverviewStats.value.reportCitations ?? '--'],
-    ['结构化信源', sourceOverviewStats.value.structuredSources ?? '--'],
-    ['候选命中', sourceOverviewStats.value.candidateHits ?? '--'],
+    ['任务编号', props.job?.jobId ? props.job.jobId.slice(0, 8) : '--'],
+    ['生成时间', generatedText],
+    ['状态', props.phase === 'done' || props.job?.status === 'succeeded' ? '已完成' : taskStatusLabel.value || '--'],
   ]
 })
 
@@ -931,11 +1003,11 @@ const readableProgressSteps = computed(() => {
   const has = (...needles) => needles.some((needle) => logText.includes(String(needle).toLowerCase()))
   const steps = [
     { key: 'submitted', label: '任务已提交', done: Boolean(props.job?.jobId) },
-    { key: 'planned', label: '已生成执行计划', done: isDone || has('PLANNING', 'plan.json', '执行计划') },
-    { key: 'searched', label: '已完成信源检索', done: isDone || has('SEARCHING', 'RESEARCH_DONE', '信源', '检索') },
-    { key: 'extracted', label: '已完成正文抽取', done: isDone || has('EXTRACTING', '正文抽取', '正文') },
-    { key: 'written', label: '已完成综合写作', done: isDone || has('WRITING', 'ANALYZING', '撰写', '综合写作') },
-    { key: 'verified', label: '已完成质量校验', done: isDone || has('VERIFYING', '校验') },
+    { key: 'searched', label: '正在检索公开资料', done: isDone || has('SEARCHING', 'RESEARCH_DONE', '信源', '检索') },
+    { key: 'extracted', label: '正在提取重点网页正文', done: isDone || has('EXTRACTING', '正文抽取', '正文') },
+    { key: 'evidence', label: '正在整理证据材料', done: isDone || has('ANALYZING', '证据', '材料') },
+    { key: 'drafting', label: '正在生成报告初稿', done: isDone || has('WRITING', '撰写', '初稿', '报告') },
+    { key: 'verified', label: '正在进行质量校验', done: isDone || has('VERIFYING', '校验') },
     { key: 'done', label: '报告已生成', done: isDone },
   ]
   return steps.map((step, index) => ({
@@ -1066,7 +1138,11 @@ watch(isLiveLogVisible, (visible) => {
 onMounted(() => ensureReportDefaults())
 
 watch(() => props.phase, (phase) => {
-  if (phase === 'idle') ensureReportDefaults()
+  if (phase === 'idle') {
+    homeMode.value = 'report'
+    titleValidationError.value = ''
+    ensureReportDefaults()
+  }
 })
 
 onBeforeUnmount(() => {
@@ -1333,7 +1409,7 @@ function exportPdf() {
         <div class="h-12 border-b border-border-glow flex items-center justify-between px-4">
           <div>
             <div class="font-mono text-xs neon-text tracking-widest">任务进度</div>
-            <div class="font-mono text-[10px] text-[#374151]">OpenClaw 工具调用摘要</div>
+            <div class="font-mono text-[10px] text-[#374151]">任务执行摘要</div>
           </div>
           <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
         </div>
@@ -1389,13 +1465,13 @@ function exportPdf() {
       <section class="plan-modal-panel w-full max-w-4xl rounded-[24px] border overflow-hidden flex flex-col">
         <div class="flex-shrink-0 px-6 py-5 border-b border-neon-cyan/12 flex items-start justify-between gap-4">
           <div>
-            <div class="font-mono text-[11px] tracking-[0.28em] text-[#374151] mb-2">PLAN MODE</div>
+            <div class="font-mono text-[11px] tracking-[0.28em] text-[#374151] mb-2">编报规划</div>
             <h2 class="font-mono text-xl neon-text">编报规划确认</h2>
             <p class="mt-2 text-sm text-slate-300/60">
               先按主题生成检索方向和子任务，勾选需要纳入正式编报的内容后再提交。
             </p>
           </div>
-          <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">关闭</button>
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">取消</button>
         </div>
 
         <div v-if="isPlanning" class="plan-modal-scroll px-6 py-14 text-center">
@@ -1404,8 +1480,8 @@ function exportPdf() {
             <div class="loader-ring ring-b"></div>
             <div class="loader-core"></div>
           </div>
-          <div class="font-mono text-[#0f172a] mt-6">正在规划检索方向...</div>
-          <div class="font-mono text-[11px] text-[#374151] mt-2">预计 10-30 秒，请稍候</div>
+          <div class="font-mono text-[#0f172a] mt-6">正在生成编报规划</div>
+          <div class="font-mono text-[11px] text-[#374151] mt-2">系统正在识别主题、拆解任务并生成采集方向。</div>
         </div>
 
         <div v-else-if="planError" class="plan-modal-scroll px-6 py-8">
@@ -1414,8 +1490,8 @@ function exportPdf() {
           </div>
           <div class="mt-5 flex justify-end gap-2">
             <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">返回修改</button>
-            <button class="sci-btn text-[10px] px-3 py-2 border-neon-green text-neon-green" type="button" @click="emit('confirm-plan')">
-              跳过规划直接提交
+            <button class="sci-btn text-[10px] px-3 py-2 border-neon-cyan" style="color: #0369a1" type="button" @click="emit('generate')">
+              重新生成规划
             </button>
           </div>
         </div>
@@ -1441,9 +1517,7 @@ function exportPdf() {
 
           <div v-if="currentPlanStep" class="plan-modal-scroll px-6 pb-5">
             <div class="mb-4">
-              <div class="font-mono text-[11px] tracking-[0.24em] text-slate-700 mb-2">
-                STEP {{ planStepIndex + 1 }} / {{ reportPlan.steps.length }} · {{ planStepTypeLabel(currentPlanStep.type) }}
-              </div>
+              <div class="font-mono text-[11px] tracking-[0.24em] text-slate-700 mb-2">{{ currentPlanStep.sectionTitle || currentPlanStep.title }}</div>
               <h3 class="font-mono text-lg text-[#0f172a]">{{ currentPlanStep.sectionTitle || currentPlanStep.title }}</h3>
               <p class="text-sm text-[#374151] mt-1">{{ currentPlanStep.description }}</p>
             </div>
@@ -1525,7 +1599,7 @@ function exportPdf() {
               上一步
             </button>
             <div class="flex items-center gap-2">
-              <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">返回修改</button>
+              <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="emit('cancel-plan')">取消</button>
               <button
                 v-if="!isLastPlanStep"
                 class="sci-btn text-[10px] px-3 py-2 border-neon-cyan"
@@ -1541,7 +1615,7 @@ function exportPdf() {
                 type="button"
                 @click="emit('confirm-plan')"
               >
-                按所选方向提交编报
+                确认并开始编写
               </button>
             </div>
           </div>
@@ -1590,9 +1664,10 @@ function exportPdf() {
                 class="title-input w-full resize-y bg-transparent border-none outline-none font-mono text-[17px] leading-8 placeholder:text-slate-500/70"
                 :value="title"
                 maxlength="200"
-                @input="emit('update:title', $event.target.value)"
+                @input="updateTitle($event.target.value)"
                 :placeholder="selectedReportType?.placeholder"
               ></textarea>
+              <div v-if="titleValidationError" class="form-validation-message">{{ titleValidationError }}</div>
             </div>
 
             <div class="mt-5">
@@ -1624,8 +1699,20 @@ function exportPdf() {
                   class="soft-field p-3"
                 >
                   <span class="block font-mono text-[10px] tracking-widest text-[#111827] mb-2" style="font-size: 14px; font-weight: 700">{{ param }}</span>
+                  <div v-if="param === '关注方向'" class="focus-direction-grid">
+                    <button
+                      v-for="direction in focusDirectionOptions"
+                      :key="direction"
+                      class="focus-direction-chip"
+                      :class="{ active: isFocusDirectionSelected(direction) }"
+                      type="button"
+                      @click="toggleFocusDirection(direction)"
+                    >
+                      {{ direction }}
+                    </button>
+                  </div>
                   <input
-                    v-if="parameterInputType(param) === 'input'"
+                    v-else-if="parameterInputType(param) === 'input'"
                     class="sci-input text-sm"
                     :value="parameterValues[param] || ''"
                     :placeholder="parameterPlaceholder(param)"
@@ -1648,7 +1735,7 @@ function exportPdf() {
                   ref="contextTextRef"
                   :value="contextText"
                   @input="emit('update:contextText', $event.target.value)"
-                  placeholder="可补充事件背景、已知材料、特殊要求、口径限制或知识问答导入内容..."
+                  placeholder="请输入与报告相关的背景信息、关键事件或已有结论，AI 将据此生成更贴合需求的内容。"
                   rows="4"
                   class="sci-textarea text-sm"
                 ></textarea>
@@ -1660,7 +1747,7 @@ function exportPdf() {
               <button
                 class="generate-btn shrink-0 font-mono text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 type="button"
-                :disabled="!canGenerate"
+                :disabled="!canSubmitPlanning"
                 :title="isPlanning ? '正在生成编报规划' : !title?.trim() ? '请输入报告标题' : '生成编报规划'"
                 @click="submitReport"
               >
@@ -1681,12 +1768,15 @@ function exportPdf() {
                 class="qa-question-input"
                 rows="8"
                 placeholder="请输入您的问题，系统将检索数据库并整合相关信息……"
+                @input="qaValidationError = ''"
                 @keydown.ctrl.enter.prevent="startQa"
               ></textarea>
+              <div class="qa-input-hint">输入清晰、具体的问题，将获得更准确的回答。</div>
+              <div v-if="qaValidationError" class="qa-validation-message">{{ qaValidationError }}</div>
               <button
                 class="qa-submit-btn"
                 type="button"
-                :disabled="!qaQuestion.trim() || isQaRunning"
+                :disabled="isQaRunning"
                 @click="startQa"
               >
                 {{ isQaRunning ? '正在回答' : '开始提问' }}
@@ -1708,7 +1798,7 @@ function exportPdf() {
             <section class="qa-answer-panel">
               <div class="qa-panel-heading">
                 <span>实时回答</span>
-                <small>{{ qaStatusTitle }}</small>
+                <small class="qa-state-badge" :class="`qa-state-${qaStatus}`">{{ qaStatusTitle }}</small>
               </div>
               <div class="qa-status-steps" v-if="qaStatus !== 'idle' && qaStatus !== 'failed'">
                 <span
@@ -1724,11 +1814,15 @@ function exportPdf() {
                 <template v-if="qaAnswer">{{ qaAnswer }}</template>
                 <template v-else>等待提问</template>
               </div>
+              <div v-if="qaStatus === 'failed'" class="qa-error-actions">
+                <button type="button" @click="startQa">重新提问</button>
+              </div>
               <div v-if="qaStatus === 'done'" class="qa-answer-actions">
                 <button type="button" @click="copyQaAnswer">复制答案</button>
                 <button type="button" @click="importQaAsReportContext">作为编报背景</button>
                 <button type="button" @click="continueQa">继续追问</button>
               </div>
+              <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
               <details v-if="qaTechnicalEvents.length" class="source-technical-details qa-technical-details">
                 <summary>查看技术详情</summary>
                 <div class="source-technical-log">
@@ -1787,9 +1881,21 @@ function exportPdf() {
             <div class="source-status-orbit" :class="`source-status-${taskProgressView.tone}`">
               <span></span>
             </div>
-            <h1>{{ taskProgressView.title }}</h1>
-            <p>{{ taskProgressView.subtitle }}</p>
+            <h1>正在执行编报任务</h1>
+            <p>系统正在按计划执行任务，请稍候。您可以离开页面，任务将继续在后台运行。</p>
             <div class="source-task-pill">{{ taskSummaryText }}</div>
+          </div>
+
+          <div class="progress-timeline execution-progress-timeline">
+            <div
+              v-for="step in readableProgressSteps"
+              :key="step.key"
+              class="progress-step"
+              :class="{ done: step.done, current: step.current }"
+            >
+              <span class="progress-dot"></span>
+              <span>{{ step.label }}</span>
+            </div>
           </div>
 
           <div class="source-stats-grid">
@@ -1908,7 +2014,7 @@ function exportPdf() {
                   </div>
                 </div>
               </div>
-              <div v-else class="source-empty-state">等待 OpenClaw 返回执行日志...</div>
+              <div v-else class="source-empty-state">等待任务执行日志...</div>
             </div>
           </details>
         </section>

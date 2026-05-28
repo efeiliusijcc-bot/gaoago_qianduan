@@ -1299,6 +1299,38 @@ canvas {
   font-size: 12px;
 }
 
+.qa-state-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #64748b !important;
+  font-weight: 850;
+}
+
+.qa-state-searching,
+.qa-state-integrating,
+.qa-state-streaming {
+  border-color: rgba(37, 99, 235, 0.30);
+  background: #eff6ff;
+  color: #2563eb !important;
+}
+
+.qa-state-done {
+  border-color: rgba(22, 163, 74, 0.24);
+  background: #f0fdf4;
+  color: #15803d !important;
+}
+
+.qa-state-failed {
+  border-color: rgba(220, 38, 38, 0.22);
+  background: #fef2f2;
+  color: #b91c1c !important;
+}
+
 .qa-question-input {
   width: 100%;
   min-height: 210px;
@@ -1315,6 +1347,20 @@ canvas {
 .qa-question-input:focus {
   border-color: rgba(37, 99, 235, 0.55);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+}
+
+.qa-input-hint {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.qa-validation-message {
+  margin-top: 8px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .qa-submit-btn {
@@ -1426,6 +1472,27 @@ canvas {
   margin-top: 14px;
 }
 
+.qa-error-actions {
+  display: flex;
+  margin-top: 14px;
+}
+
+.qa-error-actions button {
+  padding: 10px 14px;
+  border: 1px solid rgba(37, 99, 235, 0.34);
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 850;
+}
+
+.qa-copy-notice {
+  margin-top: 10px;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .qa-answer-actions button {
   padding: 9px 13px;
   border: 1px solid rgba(148, 163, 184, 0.30);
@@ -1452,6 +1519,43 @@ canvas {
 
 .qa-technical-details {
   margin-top: 14px;
+}
+
+.form-validation-message {
+  margin-top: 10px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.focus-direction-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.focus-direction-chip {
+  padding: 8px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.30);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  transition: all .16s ease;
+}
+
+.focus-direction-chip:hover {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.focus-direction-chip.active {
+  border-color: rgba(37, 99, 235, 0.58);
+  background: #dbeafe;
+  color: #1d4ed8;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.10);
 }
 
 .generate-btn:hover:not(:disabled) {
@@ -1512,6 +1616,11 @@ canvas {
   border-radius: 24px;
   padding: 36px;
   backdrop-filter: blur(16px);
+}
+
+.execution-progress-timeline {
+  margin: 4px auto 22px;
+  max-width: 920px;
 }
 
 .source-workspace {
@@ -2257,7 +2366,7 @@ canvas {
   font-weight: 750;
 }
 
-.progress-step span {
+.progress-step .progress-dot {
   display: grid;
   place-items: center;
   width: 22px;
@@ -2271,12 +2380,12 @@ canvas {
   color: #166534;
 }
 
-.progress-step.done span {
+.progress-step.done .progress-dot {
   border-color: rgba(34, 197, 94, 0.42);
   background: #dcfce7;
 }
 
-.progress-step.done span::after {
+.progress-step.done .progress-dot::after {
   content: "✓";
   color: #16a34a;
   font-size: 12px;
@@ -2287,7 +2396,7 @@ canvas {
   color: var(--blue);
 }
 
-.progress-step.current span {
+.progress-step.current .progress-dot {
   border-color: rgba(37, 99, 235, 0.44);
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
 }
