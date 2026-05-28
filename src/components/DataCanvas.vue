@@ -632,6 +632,57 @@ const visibleSourceCards = computed(() => {
   return dbSourcesExpanded.value ? normalizedSources.value : normalizedSources.value.slice(0, 5)
 })
 
+function extractCitationNumbers() {
+  const text = extractReportPlainText()
+  if (!text) return []
+  const seen = new Set()
+  const numbers = []
+  const regex = /(?:\[|〔|【)(\d{1,3})(?:\]|〕|】)/g
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const number = Number(match[1])
+    if (!number || seen.has(number)) continue
+    seen.add(number)
+    numbers.push(number)
+  }
+  return numbers.sort((a, b) => a - b)
+}
+
+const reportCitationNumbers = computed(() => extractCitationNumbers())
+
+function cleanReferenceText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[，,。.；;\s]+|[，,。.；;\s]+$/g, '')
+    .trim()
+}
+
+const reportReferenceIndex = computed(() => {
+  const text = extractReportPlainText()
+  const marker = text.indexOf('参考资料索引')
+  if (marker < 0) return new Map()
+  const refText = text.slice(marker)
+  const refs = new Map()
+  const regex = /(?:\[|〔|【)(\d{1,3})(?:\]|〕|】)\s*([\s\S]*?)(?=(?:\[|〔|【)\d{1,3}(?:\]|〕|】)|$)/g
+  let match
+  while ((match = regex.exec(refText)) !== null) {
+    const number = Number(match[1])
+    if (!number || refs.has(number)) continue
+    const raw = cleanReferenceText(match[2])
+    if (!raw) continue
+    const withoutUrl = cleanReferenceText(raw.replace(/https?:\/\/\S+/g, ''))
+    const parts = withoutUrl.split(/[，,]/).map((part) => cleanReferenceText(part)).filter(Boolean)
+    const sourceName = parts[0] || '--'
+    const title = cleanReferenceText((parts[1] || withoutUrl).replace(/^["“”]+|["“”]+$/g, '')) || '--'
+    refs.set(number, {
+      sourceName,
+      title,
+      summary: withoutUrl || raw,
+    })
+  }
+  return refs
+})
+
 const sourceStats = computed(() => {
   const data = props.databaseSources
   const discovered = data?.totalHits || data?.vectorPlan?.returnedSources || data?.queryPlan?.returnedSources || normalizedSources.value.length || null
@@ -642,16 +693,20 @@ const sourceStats = computed(() => {
 })
 
 const sourceOverviewStats = computed(() => {
-  const total = props.databaseSources?.totalHits || normalizedSources.value.length || null
+  const candidateHits = props.databaseSources?.totalHits || props.databaseSources?.vectorPlan?.vectorHits || props.databaseSources?.queryPlan?.totalHits || null
+  const structuredSources = normalizedSources.value.length || null
+  const reportCitations = reportCitationNumbers.value.length || null
   const failed = normalizedSources.value.filter((item) => item.status === 'failed').length
   const extracted = props.databaseSources?.queryPlan?.contentRowsRead ||
     normalizedSources.value.filter((item) => item.status === 'extracted').length ||
     null
-  const snippetOnly = typeof total === 'number'
-    ? Math.max(total - (extracted || 0) - failed, 0)
+  const snippetOnly = typeof structuredSources === 'number'
+    ? Math.max(structuredSources - (extracted || 0) - failed, 0)
     : normalizedSources.value.filter((item) => item.status === 'snippet_only' || item.status === 'used').length
   return {
-    total,
+    reportCitations,
+    structuredSources,
+    candidateHits,
     extracted,
     snippetOnly: snippetOnly || null,
     failed: failed || null,
@@ -659,16 +714,13 @@ const sourceOverviewStats = computed(() => {
 })
 
 const resultInfoItems = computed(() => {
-  const sourceTotal = sourceOverviewStats.value.total
-  const bodyCount = sourceOverviewStats.value.extracted
-  const snippetCount = sourceOverviewStats.value.snippetOnly
   return [
     ['报告类型', reportTypeLabel.value || '--'],
     ['任务状态', taskStatusLabel.value || '--'],
     ['JOB', props.job?.jobId ? props.job.jobId.slice(0, 8) : '--'],
-    ['信源', sourceTotal ?? '--'],
-    ['正文', bodyCount ?? '--'],
-    ['摘要', snippetCount ?? '--'],
+    ['报告引用', sourceOverviewStats.value.reportCitations ?? '--'],
+    ['结构化信源', sourceOverviewStats.value.structuredSources ?? '--'],
+    ['候选命中', sourceOverviewStats.value.candidateHits ?? '--'],
   ]
 })
 
@@ -715,26 +767,20 @@ function chapterForCitation(text, matchIndex) {
 const citationItems = computed(() => {
   const text = extractReportPlainText()
   if (!text) return []
-  const seen = new Set()
-  const refs = []
-  const regex = /(?:\[|〔|【)(\d{1,3})(?:\]|〕|】)/g
-  let match
-  while ((match = regex.exec(text)) !== null) {
-    const number = Number(match[1])
-    if (!number || seen.has(number)) continue
-    seen.add(number)
+  return reportCitationNumbers.value.map((number) => {
+    const match = text.match(new RegExp(`(?:\\\\[|〔|【)${number}(?:\\\\]|〕|】)`))
     const source = normalizedSources.value[number - 1] || null
-    refs.push({
+    const reference = reportReferenceIndex.value.get(number) || null
+    return {
       number,
-      chapter: chapterForCitation(text, match.index),
-      title: source?.title || '--',
-      sourceName: source?.sourceName || '--',
-      method: source?.method || '--',
+      chapter: chapterForCitation(text, match?.index || 0),
+      title: source?.title || reference?.title || '--',
+      sourceName: source?.sourceName || reference?.sourceName || '--',
+      method: source?.method || (reference ? '报告参考资料索引' : '--'),
       credibility: source ? (source.relevance === '高相关' ? '高' : '中') : '--',
-      summary: source?.summary || '当前引用未匹配到结构化来源，可查看任务进度中的技术详情或原始来源。',
-    })
-  }
-  return refs
+      summary: source?.summary || reference?.summary || '当前引用未匹配到结构化来源，可查看任务进度中的技术详情或原始来源。',
+    }
+  })
 })
 
 function formatDbSourceTime(value) {
@@ -1660,22 +1706,22 @@ function exportPdf() {
             <div class="source-stat-card">
               <div class="source-stat-icon">◎</div>
               <div>
-                <div class="source-stat-title">信源总数</div>
-                <div class="source-stat-value">{{ sourceOverviewStats.total ?? '--' }}</div>
+                <div class="source-stat-title">报告引用</div>
+                <div class="source-stat-value">{{ sourceOverviewStats.reportCitations ?? '--' }}</div>
               </div>
             </div>
             <div class="source-stat-card">
               <div class="source-stat-icon">▤</div>
               <div>
-                <div class="source-stat-title">已抽取正文</div>
-                <div class="source-stat-value">{{ sourceOverviewStats.extracted ?? '--' }}</div>
+                <div class="source-stat-title">结构化信源</div>
+                <div class="source-stat-value">{{ sourceOverviewStats.structuredSources ?? '--' }}</div>
               </div>
             </div>
             <div class="source-stat-card">
               <div class="source-stat-icon source-stat-warning">≋</div>
               <div>
-                <div class="source-stat-title">仅摘要</div>
-                <div class="source-stat-value">{{ sourceOverviewStats.snippetOnly ?? '--' }}</div>
+                <div class="source-stat-title">候选命中</div>
+                <div class="source-stat-value">{{ sourceOverviewStats.candidateHits ?? '--' }}</div>
               </div>
             </div>
             <div class="source-stat-card">
@@ -1685,6 +1731,10 @@ function exportPdf() {
                 <div class="source-stat-value">{{ sourceOverviewStats.failed ?? '--' }}</div>
               </div>
             </div>
+          </div>
+
+          <div class="source-count-note">
+            口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示；候选命中是检索阶段命中的候选池，三者不混算。
           </div>
 
           <div v-if="!normalizedSources.length" class="source-empty-state">
