@@ -1087,6 +1087,9 @@ export function useReportJobs() {
     errorMessage.value = ''
     processLogs.value = []
     selectedReport.value = null
+    databaseSources.value = null
+    databaseSourcesLoading.value = false
+    databaseSourcesRequestId += 1
     job.value = null
     phase.value = 'loading'
     loadingStep.value = '预计 3-5 分钟生成，请耐心等待'

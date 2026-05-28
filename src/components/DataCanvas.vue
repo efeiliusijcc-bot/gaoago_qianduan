@@ -947,11 +947,11 @@ const reportReferenceIndex = computed(() => {
 
 const sourceStats = computed(() => {
   const data = props.databaseSources
-  const discovered = data?.totalHits || data?.vectorPlan?.returnedSources || data?.queryPlan?.returnedSources || normalizedSources.value.length || null
-  const highValue = data?.vectorPlan?.vectorHits || data?.queryPlan?.strictHits || normalizedSources.value.filter((item) => item.relevance === '高相关').length || null
-  const extracted = data?.queryPlan?.contentRowsRead || normalizedSources.value.filter((item) => item.status === 'extracted' || item.status === 'used').length || null
-  const pending = typeof discovered === 'number' && typeof extracted === 'number' ? Math.max(discovered - extracted, 0) : null
-  return { discovered, highValue, extracted, pending }
+  const candidateHits = data?.totalHits || data?.queryPlan?.totalHits || data?.vectorPlan?.vectorHits || null
+  const highValue = data?.vectorPlan?.vectorHits || data?.queryPlan?.strictHits || null
+  const visibleSources = normalizedSources.value.length || null
+  const extracted = data?.queryPlan?.contentRowsRead || null
+  return { candidateHits, highValue, visibleSources, extracted }
 })
 
 const sourceOverviewStats = computed(() => {
@@ -1902,29 +1902,29 @@ function exportPdf() {
             <div class="source-stat-card">
               <div class="source-stat-icon">◎</div>
               <div>
-                <div class="source-stat-title">已发现信源</div>
-                <div class="source-stat-value">{{ sourceStats.discovered ?? '--' }}</div>
+                <div class="source-stat-title">候选命中</div>
+                <div class="source-stat-value">{{ sourceStats.candidateHits ?? '--' }}</div>
               </div>
             </div>
             <div class="source-stat-card">
               <div class="source-stat-icon">◇</div>
               <div>
-                <div class="source-stat-title">高相关信源</div>
+                <div class="source-stat-title">高相关候选</div>
                 <div class="source-stat-value">{{ sourceStats.highValue ?? '--' }}</div>
               </div>
             </div>
             <div class="source-stat-card">
               <div class="source-stat-icon">▤</div>
               <div>
-                <div class="source-stat-title">已抽取正文</div>
-                <div class="source-stat-value">{{ sourceStats.extracted ?? '--' }}</div>
+                <div class="source-stat-title">已展示信源</div>
+                <div class="source-stat-value">{{ sourceStats.visibleSources ?? '--' }}</div>
               </div>
             </div>
             <div class="source-stat-card">
               <div class="source-stat-icon source-stat-warning">⌛</div>
               <div>
-                <div class="source-stat-title">待处理</div>
-                <div class="source-stat-value">{{ sourceStats.pending ?? '--' }}</div>
+                <div class="source-stat-title">正文抽取</div>
+                <div class="source-stat-value">{{ sourceStats.extracted ?? '--' }}</div>
               </div>
             </div>
           </div>
