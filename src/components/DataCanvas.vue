@@ -657,28 +657,54 @@ function cleanReferenceText(value) {
     .trim()
 }
 
+function parseReferenceEntry(number, value) {
+  const raw = cleanReferenceText(value)
+  if (!number || !raw) return null
+  const withoutLeadingNumber = cleanReferenceText(
+    raw.replace(new RegExp(`^(?:\\\\[|〔|【)${number}(?:\\\\]|〕|】)\\s*`), ''),
+  )
+  if (!withoutLeadingNumber) return null
+  const withoutUrl = cleanReferenceText(withoutLeadingNumber.replace(/https?:\/\/\S+/g, ''))
+  const parts = withoutUrl.split(/[，,]/).map((part) => cleanReferenceText(part)).filter(Boolean)
+  const sourceName = parts[0] || '--'
+  const title = cleanReferenceText((parts[1] || withoutUrl).replace(/^["“”]+|["“”]+$/g, '')) || '--'
+  return {
+    sourceName,
+    title,
+    summary: withoutUrl || withoutLeadingNumber,
+  }
+}
+
 const reportReferenceIndex = computed(() => {
+  const refs = new Map()
+  const html = props.generatedHtml || ''
+  if (html) {
+    const div = document.createElement('div')
+    div.innerHTML = html
+    const blocks = Array.from(div.querySelectorAll('p, li, div'))
+      .map((node) => cleanReferenceText(node.textContent || ''))
+      .filter(Boolean)
+    for (const block of blocks) {
+      const match = block.match(/^(?:\[|〔|【)(\d{1,3})(?:\]|〕|】)\s*(.+)$/)
+      if (!match) continue
+      const number = Number(match[1])
+      if (!number || refs.has(number)) continue
+      const parsed = parseReferenceEntry(number, block)
+      if (parsed) refs.set(number, parsed)
+    }
+  }
+
   const text = extractReportPlainText()
   const marker = text.indexOf('参考资料索引')
-  if (marker < 0) return new Map()
+  if (marker < 0) return refs
   const refText = text.slice(marker)
-  const refs = new Map()
   const regex = /(?:\[|〔|【)(\d{1,3})(?:\]|〕|】)\s*([\s\S]*?)(?=(?:\[|〔|【)\d{1,3}(?:\]|〕|】)|$)/g
   let match
   while ((match = regex.exec(refText)) !== null) {
     const number = Number(match[1])
     if (!number || refs.has(number)) continue
-    const raw = cleanReferenceText(match[2])
-    if (!raw) continue
-    const withoutUrl = cleanReferenceText(raw.replace(/https?:\/\/\S+/g, ''))
-    const parts = withoutUrl.split(/[，,]/).map((part) => cleanReferenceText(part)).filter(Boolean)
-    const sourceName = parts[0] || '--'
-    const title = cleanReferenceText((parts[1] || withoutUrl).replace(/^["“”]+|["“”]+$/g, '')) || '--'
-    refs.set(number, {
-      sourceName,
-      title,
-      summary: withoutUrl || raw,
-    })
+    const parsed = parseReferenceEntry(number, `${match[0]}`)
+    if (parsed) refs.set(number, parsed)
   }
   return refs
 })
@@ -774,11 +800,11 @@ const citationItems = computed(() => {
     return {
       number,
       chapter: chapterForCitation(text, match?.index || 0),
-      title: source?.title || reference?.title || '--',
-      sourceName: source?.sourceName || reference?.sourceName || '--',
+      title: reference?.title || source?.title || '--',
+      sourceName: reference?.sourceName || source?.sourceName || '--',
       method: source?.method || (reference ? '报告参考资料索引' : '--'),
       credibility: source ? (source.relevance === '高相关' ? '高' : '中') : '--',
-      summary: source?.summary || reference?.summary || '当前引用未匹配到结构化来源，可查看任务进度中的技术详情或原始来源。',
+      summary: reference?.summary || source?.summary || '当前引用未匹配到结构化来源，可查看任务进度中的技术详情或原始来源。',
     }
   })
 })
