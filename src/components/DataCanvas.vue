@@ -442,6 +442,11 @@ async function startQa() {
       }
     }
     qaEventSource.onerror = () => {
+      if (qaStatus.value === 'done' || (qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
+        qaStatus.value = 'done'
+        closeQaStream()
+        return
+      }
       if (qaStatus.value !== 'done') {
         qaStatus.value = 'failed'
         qaError.value = '回答连接中断，请稍后重试。'
