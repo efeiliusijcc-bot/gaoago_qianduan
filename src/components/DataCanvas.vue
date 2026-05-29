@@ -114,17 +114,17 @@ const qaInputRef = ref(null)
 const technicalLogOpenIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
 const expandedSourceId = ref('')
-const sourcePanelOpen = ref(false)
-const sourcePanelType = ref('')
-const sourcePanelLoading = ref(false)
-const sourcePanelError = ref('')
-const sourcePanelItems = ref([])
-const sourcePanelPage = ref(1)
-const sourcePanelPageSize = ref(10)
-const sourcePanelTotal = ref(null)
-const sourcePanelHasMore = ref(false)
-const expandedPanelSourceId = ref('')
-const sourcePanelNotice = ref('')
+const sourceListRef = ref(null)
+const activeSourceType = ref('引用')
+const sourceListLoading = ref(false)
+const sourceListError = ref('')
+const sourceListItems = ref([])
+const sourceListPage = ref(1)
+const sourceListPageSize = ref(10)
+const sourceListTotal = ref(null)
+const sourceListHasMore = ref(false)
+const expandedSourceListId = ref('')
+const sourceListNotice = ref('')
 const activeResultTab = ref('report')
 const homeMode = ref('report')
 const qaQuestion = ref('')
@@ -140,6 +140,7 @@ const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
 let liveLogScrollTimer = null
 let qaEventSource = null
+let sourceListRequestId = 0
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
 const isLiveLogVisible = computed(() => props.phase === 'loading')
@@ -1034,16 +1035,16 @@ const sourceOverviewStats = computed(() => {
   }
 })
 
-const sourcePanelTitle = computed(() => {
-  if (sourcePanelType.value === '引用') return '报告引用信源'
-  if (sourcePanelType.value === 'structured') return '结构化信源'
-  if (sourcePanelType.value === '候选') return '候选命中信源'
+const sourceListTitle = computed(() => {
+  if (activeSourceType.value === '引用') return '报告引用信源'
+  if (activeSourceType.value === 'structured') return '结构化信源'
+  if (activeSourceType.value === '候选') return '候选命中信源'
   return '信源列表'
 })
 
-const sourcePanelCountText = computed(() => {
-  if (typeof sourcePanelTotal.value === 'number') return `共 ${sourcePanelTotal.value} 条`
-  return sourcePanelItems.value.length ? `已加载 ${sourcePanelItems.value.length} 条` : ''
+const sourceListCountText = computed(() => {
+  if (typeof sourceListTotal.value === 'number') return `共 ${sourceListTotal.value} 条`
+  return sourceListItems.value.length ? `已加载 ${sourceListItems.value.length} 条` : ''
 })
 
 const resultInfoItems = computed(() => {
@@ -1136,15 +1137,15 @@ function firstText(source, keys, fallback = '') {
   return fallback
 }
 
-function normalizePanelSource(source, index) {
+function normalizeSourceListItem(source, index) {
   const title = firstText(source, ['title', 'ch_title', 'headline', 'name'], '未命名信源')
   const summary = firstText(source, ['summary', 'abstract', 'description', 'content_excerpt', 'excerpt'], '当前信源暂无摘要。')
   const detail = firstText(source, ['content', 'fullText', 'body', 'text', 'detail'], '')
   const url = firstText(source, ['url', 'sourceUrl', 'source_url', 'data_source_url'], '')
-  const sourceName = firstText(source, ['source', 'sourceName', 'websiteName', 'website_name', 'publisher'], '来源未知')
+  const sourceName = firstText(source, ['source_name', 'sourceName', 'source', 'website_name', 'websiteName', 'publisher'], '来源未知')
   const publishTime = firstText(source, ['publishTime', 'publish_time', 'publishedAt', 'published_at', 'time'], '')
   const score = source?.relevance ?? source?.relevanceScore ?? source?.score ?? source?.similarity ?? null
-  const id = firstText(source, ['id', 'sourceId', 'source_id', 'mysql_id'], `${sourcePanelType.value}-${url || title}-${index}`)
+  const id = firstText(source, ['id', 'sourceId', 'source_id', 'mysql_id'], `${activeSourceType.value}-${url || title}-${index}`)
   return {
     id: String(id),
     title,
@@ -1153,11 +1154,11 @@ function normalizePanelSource(source, index) {
     url,
     sourceName,
     publishTime: formatDbSourceTime(publishTime) || '时间未知',
-    relevance: formatPanelScore(score),
+    relevance: formatSourceListScore(score),
   }
 }
 
-function formatPanelScore(value) {
+function formatSourceListScore(value) {
   if (value === undefined || value === null || value === '') return ''
   const number = Number(value)
   if (Number.isFinite(number)) {
@@ -1167,7 +1168,7 @@ function formatPanelScore(value) {
   return String(value)
 }
 
-function normalizeSourcePanelResponse(response) {
+function normalizeSourceListResponse(response) {
   const list = Array.isArray(response)
     ? response
     : Array.isArray(response?.items)
@@ -1186,62 +1187,71 @@ function normalizeSourcePanelResponse(response) {
     ? Boolean(response.hasMore ?? response.has_more ?? false)
     : false
   return {
-    items: list.map((item, index) => normalizePanelSource(item, index)),
+    items: list.map((item, index) => normalizeSourceListItem(item, index)),
     total: typeof total === 'number' ? total : Number.isFinite(Number(total)) ? Number(total) : null,
     hasMore,
   }
 }
 
-async function loadSourcePanelPage(page = 1) {
+function resetSourceListState() {
+  sourceListRequestId += 1
+  sourceListItems.value = []
+  sourceListPage.value = 1
+  sourceListTotal.value = null
+  sourceListHasMore.value = false
+  sourceListError.value = ''
+  sourceListNotice.value = ''
+  expandedSourceListId.value = ''
+}
+
+function scrollSourceListToTop() {
+  nextTick(() => {
+    if (sourceListRef.value) sourceListRef.value.scrollTop = 0
+  })
+}
+
+async function loadSourceListPage(page = 1) {
   const jobId = props.job?.jobId
-  if (!jobId || !sourcePanelType.value || sourcePanelLoading.value) return
-  sourcePanelLoading.value = true
-  sourcePanelError.value = ''
-  sourcePanelNotice.value = ''
+  if (!jobId || !activeSourceType.value || (sourceListLoading.value && page > 1)) return
+  const requestId = sourceListRequestId + 1
+  sourceListRequestId = requestId
+  const requestType = activeSourceType.value
+  sourceListLoading.value = true
+  sourceListError.value = ''
+  sourceListNotice.value = ''
   try {
-    const response = await fetchReportSources(jobId, sourcePanelType.value, {
+    const response = await fetchReportSources(jobId, requestType, {
       page,
-      pageSize: sourcePanelPageSize.value,
+      pageSize: sourceListPageSize.value,
     })
-    const normalized = normalizeSourcePanelResponse(response)
-    sourcePanelItems.value = page === 1
+    if (requestId !== sourceListRequestId || requestType !== activeSourceType.value || jobId !== props.job?.jobId) return
+    const normalized = normalizeSourceListResponse(response)
+    sourceListItems.value = page === 1
       ? normalized.items
-      : [...sourcePanelItems.value, ...normalized.items]
-    sourcePanelPage.value = page
-    sourcePanelTotal.value = normalized.total
-    sourcePanelHasMore.value = normalized.hasMore ||
-      (typeof normalized.total === 'number' && sourcePanelItems.value.length < normalized.total)
+      : [...sourceListItems.value, ...normalized.items]
+    sourceListPage.value = page
+    sourceListTotal.value = normalized.total
+    sourceListHasMore.value = normalized.hasMore ||
+      (typeof normalized.total === 'number' && sourceListItems.value.length < normalized.total)
   } catch {
-    sourcePanelError.value = '信源加载失败，请稍后重试。'
-    sourcePanelHasMore.value = false
+    if (requestId !== sourceListRequestId || requestType !== activeSourceType.value || jobId !== props.job?.jobId) return
+    sourceListError.value = '信源加载失败，请稍后重试。'
+    sourceListHasMore.value = false
   } finally {
-    sourcePanelLoading.value = false
+    if (requestId === sourceListRequestId) sourceListLoading.value = false
   }
 }
 
-function openSourcePanel(type) {
+function selectSourceType(type) {
   if (!props.job?.jobId) return
-  sourcePanelType.value = type
-  sourcePanelOpen.value = true
-  sourcePanelItems.value = []
-  sourcePanelPage.value = 1
-  sourcePanelTotal.value = null
-  sourcePanelHasMore.value = false
-  sourcePanelError.value = ''
-  sourcePanelNotice.value = ''
-  expandedPanelSourceId.value = ''
-  loadSourcePanelPage(1)
+  activeSourceType.value = type
+  resetSourceListState()
+  scrollSourceListToTop()
+  loadSourceListPage(1)
 }
 
-function closeSourcePanel() {
-  sourcePanelOpen.value = false
-  sourcePanelError.value = ''
-  sourcePanelNotice.value = ''
-  expandedPanelSourceId.value = ''
-}
-
-function togglePanelSource(sourceId) {
-  expandedPanelSourceId.value = expandedPanelSourceId.value === sourceId ? '' : sourceId
+function toggleSourceListItem(sourceId) {
+  expandedSourceListId.value = expandedSourceListId.value === sourceId ? '' : sourceId
 }
 
 function sourceToBackgroundText(source) {
@@ -1255,18 +1265,17 @@ function sourceToBackgroundText(source) {
   ].filter(Boolean).join('\n')
 }
 
-async function copyPanelSource(source) {
+async function copySourceListItem(source) {
   const text = sourceToBackgroundText(source)
   await navigator.clipboard?.writeText(text)
-  sourcePanelNotice.value = '信源内容已复制'
+  sourceListNotice.value = '信源内容已复制'
   window.setTimeout(() => {
-    sourcePanelNotice.value = ''
+    sourceListNotice.value = ''
   }, 1800)
 }
 
-function importPanelSourceAsReportContext(source) {
+function importSourceListItemAsReportContext(source) {
   const context = sourceToBackgroundText(source)
-  closeSourcePanel()
   emit('new-report')
   nextTick(() => {
     homeMode.value = 'report'
@@ -1343,7 +1352,13 @@ watch(() => [props.phase, props.isHistoryMode], () => {
 })
 watch(() => [props.phase, props.job?.jobId], () => {
   if (props.phase === 'done') activeResultTab.value = 'report'
-  if (sourcePanelOpen.value) closeSourcePanel()
+  activeSourceType.value = '引用'
+  resetSourceListState()
+})
+watch(() => activeResultTab.value, (tab) => {
+  if (tab === 'sources' && props.job?.jobId && !sourceListItems.value.length && !sourceListLoading.value) {
+    selectSourceType(activeSourceType.value || '引用')
+  }
 })
 watch(() => props.processLogs, scrollToBottom, { deep: true })
 watch(() => props.processLogs?.length || 0, scrollLogsToBottom)
@@ -2299,109 +2314,153 @@ function exportPdf() {
         </section>
 
         <section v-else-if="activeResultTab === 'sources'" class="result-tab-panel">
-          <div class="source-stats-grid result-source-stats">
-            <div
-              class="source-stat-card source-stat-clickable"
-              role="button"
-              tabindex="0"
-              @click="openSourcePanel('引用')"
-              @keydown.enter.prevent="openSourcePanel('引用')"
-              @keydown.space.prevent="openSourcePanel('引用')"
-            >
-              <div class="source-stat-icon">◎</div>
-              <div>
-                <div class="source-stat-title">报告引用</div>
-                <div class="source-stat-value">{{ sourceOverviewStats.reportCitations ?? '--' }}</div>
+          <div class="source-fixed-layout">
+            <aside class="source-fixed-sidebar">
+              <div class="source-fixed-info">
+                <div v-for="item in resultInfoItems.slice(0, 4)" :key="item[0]">
+                  <span>{{ item[0] }}</span>
+                  <strong>{{ item[1] }}</strong>
+                </div>
               </div>
-            </div>
-            <div
-              class="source-stat-card source-stat-clickable"
-              role="button"
-              tabindex="0"
-              @click="openSourcePanel('structured')"
-              @keydown.enter.prevent="openSourcePanel('structured')"
-              @keydown.space.prevent="openSourcePanel('structured')"
-            >
-              <div class="source-stat-icon">▤</div>
-              <div>
-                <div class="source-stat-title">结构化信源</div>
-                <div class="source-stat-value">{{ sourceOverviewStats.structuredSources ?? '--' }}</div>
-              </div>
-            </div>
-            <div
-              class="source-stat-card source-stat-clickable"
-              role="button"
-              tabindex="0"
-              @click="openSourcePanel('候选')"
-              @keydown.enter.prevent="openSourcePanel('候选')"
-              @keydown.space.prevent="openSourcePanel('候选')"
-            >
-              <div class="source-stat-icon source-stat-warning">≋</div>
-              <div>
-                <div class="source-stat-title">候选命中</div>
-                <div class="source-stat-value">{{ sourceOverviewStats.candidateHits ?? '--' }}</div>
-              </div>
-            </div>
-            <div class="source-stat-card">
-              <div class="source-stat-icon source-stat-danger">!</div>
-              <div>
-                <div class="source-stat-title">抽取失败</div>
-                <div class="source-stat-value">{{ sourceOverviewStats.failed ?? '--' }}</div>
-              </div>
-            </div>
-          </div>
 
-          <div class="source-count-note">
-            口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示；候选命中是检索阶段命中的候选池，三者不混算。
-          </div>
+              <div class="source-count-note">
+                口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示；候选命中是检索阶段命中的候选池，三者不混算。
+              </div>
 
-          <div v-if="!normalizedSources.length" class="source-empty-state">
-            当前报告未返回结构化信源数据。
-          </div>
-          <div v-else class="source-card-list">
-            <article
-              v-for="source in visibleSourceCards"
-              :key="source.id"
-              class="source-result-card"
-              :class="{ active: expandedSourceId === source.id }"
-              @click="expandedSourceId = expandedSourceId === source.id ? '' : source.id"
-            >
-              <div class="source-result-icon">{{ source.sourceType.slice(0, 1) }}</div>
-              <div class="source-result-body">
-                <div class="source-result-main">
+              <div class="source-stats-grid result-source-stats source-fixed-stats">
+                <div
+                  class="source-stat-card source-stat-clickable"
+                  :class="{ active: activeSourceType === '引用' }"
+                  role="button"
+                  tabindex="0"
+                  @click="selectSourceType('引用')"
+                  @keydown.enter.prevent="selectSourceType('引用')"
+                  @keydown.space.prevent="selectSourceType('引用')"
+                >
+                  <div class="source-stat-icon">◎</div>
                   <div>
-                    <h3>{{ source.title }}</h3>
-                    <div class="source-result-meta">
-                      <span>{{ source.sourceType }}</span>
-                      <span>{{ source.sourceName }}</span>
-                      <span>{{ source.publishTime }}</span>
-                    </div>
-                  </div>
-                  <div class="source-result-tags">
-                    <span class="source-status-tag" :class="`source-status-tag-${source.status}`">{{ sourceStatusLabel(source.status) }}</span>
-                    <span class="source-relevance-tag">{{ source.relevance }}</span>
+                    <div class="source-stat-title">报告引用</div>
+                    <div class="source-stat-value">{{ sourceOverviewStats.reportCitations ?? '--' }}</div>
                   </div>
                 </div>
-                <p :class="expandedSourceId === source.id ? 'source-summary-full' : 'source-summary-clamp'">{{ source.summary }}</p>
-                <div v-if="expandedSourceId === source.id" class="source-detail-box">
-                  <div>采集方式：{{ source.method }}</div>
-                  <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer" @click.stop>打开原始来源</a>
-                  <p v-if="source.note">{{ source.note }}</p>
+                <div
+                  class="source-stat-card source-stat-clickable"
+                  :class="{ active: activeSourceType === 'structured' }"
+                  role="button"
+                  tabindex="0"
+                  @click="selectSourceType('structured')"
+                  @keydown.enter.prevent="selectSourceType('structured')"
+                  @keydown.space.prevent="selectSourceType('structured')"
+                >
+                  <div class="source-stat-icon">▤</div>
+                  <div>
+                    <div class="source-stat-title">结构化信源</div>
+                    <div class="source-stat-value">{{ sourceOverviewStats.structuredSources ?? '--' }}</div>
+                  </div>
+                </div>
+                <div
+                  class="source-stat-card source-stat-clickable"
+                  :class="{ active: activeSourceType === '候选' }"
+                  role="button"
+                  tabindex="0"
+                  @click="selectSourceType('候选')"
+                  @keydown.enter.prevent="selectSourceType('候选')"
+                  @keydown.space.prevent="selectSourceType('候选')"
+                >
+                  <div class="source-stat-icon source-stat-warning">≋</div>
+                  <div>
+                    <div class="source-stat-title">候选命中</div>
+                    <div class="source-stat-value">{{ sourceOverviewStats.candidateHits ?? '--' }}</div>
+                  </div>
+                </div>
+                <div class="source-stat-card">
+                  <div class="source-stat-icon source-stat-danger">!</div>
+                  <div>
+                    <div class="source-stat-title">抽取失败</div>
+                    <div class="source-stat-value">{{ sourceOverviewStats.failed ?? '--' }}</div>
+                  </div>
                 </div>
               </div>
-              <button class="source-result-arrow" type="button" aria-label="展开信源详情">
-                {{ expandedSourceId === source.id ? '⌃' : '›' }}
-              </button>
-            </article>
+            </aside>
 
-            <button
-              v-if="normalizedSources.length > 5"
-              class="source-expand-button"
-              type="button"
-              @click="dbSourcesExpanded = !dbSourcesExpanded"
-            >
-              {{ dbSourcesExpanded ? '收起' : `展开全部信源（共 ${normalizedSources.length} 条）` }}
-            </button>
+            <section class="source-fixed-panel" aria-live="polite">
+              <header class="source-fixed-header">
+                <div>
+                  <h2>{{ sourceListTitle }}</h2>
+                  <p>{{ sourceListCountText || '按当前报告任务读取对应信源' }}</p>
+                </div>
+                <button
+                  class="source-fixed-refresh"
+                  type="button"
+                  :disabled="sourceListLoading"
+                  @click="loadSourceListPage(1)"
+                >
+                  {{ sourceListLoading ? '加载中...' : '刷新' }}
+                </button>
+              </header>
+
+              <div ref="sourceListRef" class="source-fixed-scroll">
+                <div v-if="sourceListLoading && !sourceListItems.length" class="source-empty-state">
+                  正在加载信源...
+                </div>
+                <div v-else-if="sourceListError" class="source-panel-error">
+                  <strong>信源加载失败</strong>
+                  <p>{{ sourceListError }}</p>
+                  <button type="button" @click="loadSourceListPage(1)">重新加载</button>
+                </div>
+                <div v-else-if="!sourceListItems.length" class="source-empty-state">
+                  当前无可用信源
+                </div>
+                <div v-else class="source-panel-list">
+                  <article
+                    v-for="source in sourceListItems"
+                    :key="source.id"
+                    class="source-panel-item"
+                    :class="{ active: expandedSourceListId === source.id }"
+                  >
+                    <div class="source-panel-item-main" @click="toggleSourceListItem(source.id)">
+                      <div class="source-panel-item-head">
+                        <div>
+                          <h3>{{ source.title }}</h3>
+                          <div class="source-panel-meta">
+                            <span>{{ source.sourceName }}</span>
+                            <span>{{ source.publishTime }}</span>
+                            <span v-if="source.relevance">相关性 {{ source.relevance }}</span>
+                          </div>
+                        </div>
+                        <button class="source-panel-expand" type="button" @click.stop="toggleSourceListItem(source.id)">
+                          {{ expandedSourceListId === source.id ? '收起' : '展开详情' }}
+                        </button>
+                      </div>
+                      <p>{{ source.summary }}</p>
+                    </div>
+
+                    <div v-if="expandedSourceListId === source.id" class="source-panel-detail">
+                      <p v-if="source.detail">{{ source.detail }}</p>
+                      <p v-else>当前信源暂无更多详情。</p>
+                      <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">查看来源 URL</a>
+                    </div>
+
+                    <div class="source-panel-actions">
+                      <button type="button" @click="copySourceListItem(source)">复制引用</button>
+                      <button type="button" @click="importSourceListItemAsReportContext(source)">作为编报背景</button>
+                    </div>
+                  </article>
+
+                  <button
+                    v-if="sourceListHasMore"
+                    class="source-fixed-load-more"
+                    type="button"
+                    :disabled="sourceListLoading"
+                    @click="loadSourceListPage(sourceListPage + 1)"
+                  >
+                    {{ sourceListLoading ? '加载中...' : '加载更多' }}
+                  </button>
+                </div>
+              </div>
+
+              <footer v-if="sourceListNotice" class="source-fixed-notice">{{ sourceListNotice }}</footer>
+            </section>
           </div>
         </section>
 
@@ -2472,78 +2531,5 @@ function exportPdf() {
       </div>
     </div>
 
-    <div v-if="sourcePanelOpen" class="source-panel-backdrop" @click.self="closeSourcePanel">
-      <section class="source-panel-dialog" role="dialog" aria-modal="true" :aria-label="sourcePanelTitle">
-        <header class="source-panel-header">
-          <div>
-            <h2>{{ sourcePanelTitle }}</h2>
-            <p>{{ sourcePanelCountText || '按当前报告任务读取对应信源' }}</p>
-          </div>
-          <button class="source-panel-close" type="button" aria-label="关闭信源列表" @click="closeSourcePanel">×</button>
-        </header>
-
-        <div class="source-panel-body">
-          <div v-if="sourcePanelLoading && !sourcePanelItems.length" class="source-empty-state">
-            正在加载信源...
-          </div>
-          <div v-else-if="sourcePanelError" class="source-panel-error">
-            <strong>信源加载失败</strong>
-            <p>{{ sourcePanelError }}</p>
-            <button type="button" @click="loadSourcePanelPage(1)">重新加载</button>
-          </div>
-          <div v-else-if="!sourcePanelItems.length" class="source-empty-state">
-            当前无可用信源
-          </div>
-          <div v-else class="source-panel-list">
-            <article
-              v-for="source in sourcePanelItems"
-              :key="source.id"
-              class="source-panel-item"
-              :class="{ active: expandedPanelSourceId === source.id }"
-            >
-              <div class="source-panel-item-main" @click="togglePanelSource(source.id)">
-                <div class="source-panel-item-head">
-                  <div>
-                    <h3>{{ source.title }}</h3>
-                    <div class="source-panel-meta">
-                      <span>{{ source.sourceName }}</span>
-                      <span>{{ source.publishTime }}</span>
-                      <span v-if="source.relevance">相关性 {{ source.relevance }}</span>
-                    </div>
-                  </div>
-                  <button class="source-panel-expand" type="button" @click.stop="togglePanelSource(source.id)">
-                    {{ expandedPanelSourceId === source.id ? '收起' : '展开详情' }}
-                  </button>
-                </div>
-                <p>{{ source.summary }}</p>
-              </div>
-
-              <div v-if="expandedPanelSourceId === source.id" class="source-panel-detail">
-                <p v-if="source.detail">{{ source.detail }}</p>
-                <p v-else>当前信源暂无更多详情。</p>
-                <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">查看来源 URL</a>
-              </div>
-
-              <div class="source-panel-actions">
-                <button type="button" @click="copyPanelSource(source)">复制</button>
-                <button type="button" @click="importPanelSourceAsReportContext(source)">作为编报背景</button>
-              </div>
-            </article>
-          </div>
-        </div>
-
-        <footer class="source-panel-footer">
-          <span>{{ sourcePanelNotice }}</span>
-          <button
-            v-if="sourcePanelHasMore"
-            type="button"
-            :disabled="sourcePanelLoading"
-            @click="loadSourcePanelPage(sourcePanelPage + 1)"
-          >
-            {{ sourcePanelLoading ? '加载中...' : '加载更多' }}
-          </button>
-        </footer>
-      </section>
-    </div>
   </main>
 </template>
