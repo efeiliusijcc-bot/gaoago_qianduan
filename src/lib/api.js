@@ -81,6 +81,16 @@ export function fetchReportDatabaseSources(jobId) {
   return request(`/report-jobs/${jobId}/database-sources`)
 }
 
+export function fetchReportSources(jobId, type, params = {}) {
+  const query = new URLSearchParams()
+  if (type) query.set('type', type)
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value))
+  })
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return request(`/report-jobs/${jobId}/sources${suffix}`)
+}
+
 export function getDownloadUrl(jobId, format = 'md') {
   return `${API_BASE}/report-jobs/${jobId}/download?format=${format}`
 }
