@@ -1460,6 +1460,14 @@ function sourceRequestType(type = activeSourceType.value) {
   return type || 'report_refs'
 }
 
+function firstArray(source, keys) {
+  for (const key of keys) {
+    const value = source?.[key]
+    if (Array.isArray(value)) return value
+  }
+  return []
+}
+
 function localSourcePool(type = activeSourceType.value) {
   const citationSources = citationItems.value.map((item, index) => normalizeSourceListItem({
     id: `citation-${item.number}`,
@@ -1488,19 +1496,20 @@ function localSourcePool(type = activeSourceType.value) {
     failedReason: item.status === 'failed' ? item.note : '',
   }, index))
 
-  const candidateSources = normalizedSources.value.map((item, index) => normalizeSourceListItem({
-    id: `candidate-${item.id}`,
+  const rawCandidateSources = firstArray(props.databaseSources, [
+    'candidateSources',
+    'candidate_sources',
+    'candidateHits',
+    'candidate_hits',
+    'candidates',
+    'hits',
+    'retrievalHits',
+    'retrieval_hits',
+  ])
+  const candidateSources = rawCandidateSources.map((item, index) => normalizeSourceListItem({
+    ...item,
+    id: firstText(item, ['id', 'sourceId', 'source_id', 'mysql_id'], `candidate-${index}`),
     sourceGroup: 'candidate_hits',
-    title: item.title,
-    source_name: item.sourceName,
-    publish_time: item.publishTime,
-    summary: item.summary,
-    excerpt: item.note,
-    url: item.url,
-    source_type: item.sourceType,
-    relevance_score: item.relevance === '高相关' ? 88 : 66,
-    status: item.status,
-    method: item.method,
   }, index))
 
   const logFailures = technicalLogs.value
@@ -1613,7 +1622,10 @@ async function loadSourceListPage(page = 1) {
       })
     }
     if (requestId !== sourceListRequestId || requestType !== activeSourceType.value || jobId !== props.job?.jobId) return
-    const normalized = normalizeSourceListResponse(response, usedUntypedFallback ? 'all' : requestType)
+    const fallbackGroup = usedUntypedFallback || requestType === 'candidate_hits'
+      ? 'all'
+      : requestType
+    const normalized = normalizeSourceListResponse(response, fallbackGroup)
     const typedItems = requestType === 'all'
       ? normalized.items
       : normalized.items.filter((item) => item.sourceGroup === requestType)
