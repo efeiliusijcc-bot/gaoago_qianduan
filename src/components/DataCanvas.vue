@@ -82,6 +82,14 @@ const props = defineProps({
   },
   isLogDrawerOpen: Boolean,
   hasReturnableWorkspace: Boolean,
+  homeMode: {
+    type: String,
+    default: 'report',
+  },
+  selectedQaSession: {
+    type: Object,
+    default: null,
+  },
 })
 
 const emit = defineEmits([
@@ -98,6 +106,9 @@ const emit = defineEmits([
   'update:planSourceInput',
   'update:planSupplement',
   'update:databaseSourceEnabled',
+  'update:homeMode',
+  'qa-session-upsert',
+  'qa-session-clear-selection',
   'generate',
   'confirm-plan',
   'cancel-plan',
@@ -110,6 +121,7 @@ const reportRef = ref(null)
 const drawerLogListRef = ref(null)
 const liveLogListRef = ref(null)
 const contextTextRef = ref(null)
+const titleInputRef = ref(null)
 const qaInputRef = ref(null)
 const qaThreadRef = ref(null)
 const technicalLogOpenIds = ref(new Set())
@@ -132,8 +144,13 @@ const sourceCurrentPage = ref(1)
 const expandedSourceListId = ref('')
 const sourceListNotice = ref('')
 const activeResultTab = ref('report')
-const homeMode = ref('report')
+const homeMode = computed({
+  get: () => props.homeMode || 'report',
+  set: (value) => emit('update:homeMode', value === 'qa' ? 'qa' : 'report'),
+})
 const qaQuestion = ref('')
+const currentQaSessionId = ref('')
+const qaSessionCreatedAt = ref('')
 const qaCurrentQuestion = ref('')
 const qaQuestionTime = ref('')
 const qaAnswer = ref('')
@@ -422,6 +439,73 @@ function selectHomeMode(mode) {
   qaImportNotice.value = ''
   qaValidationError.value = ''
   if (mode === 'report') ensureReportDefaults()
+  nextTick(() => {
+    if (mode === 'qa') qaInputRef.value?.focus()
+    if (mode === 'report') titleInputRef.value?.focus()
+  })
+}
+
+function qaSessionSnapshot(status = qaStatus.value) {
+  const id = currentQaSessionId.value
+  if (!id || !qaCurrentQuestion.value) return null
+  return {
+    id,
+    question: qaCurrentQuestion.value,
+    answer: qaAnswer.value,
+    sourcesCount: qaReferenceItems.value.length,
+    status,
+    createdAt: qaSessionCreatedAt.value || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    referencePayloads: qaReferencePayloads.value,
+  }
+}
+
+function emitQaSession(status = qaStatus.value) {
+  const session = qaSessionSnapshot(status)
+  if (session) emit('qa-session-upsert', session)
+}
+
+function restoreQaSession(session) {
+  if (!session?.id) return
+  closeQaStream()
+  currentQaSessionId.value = session.id
+  qaSessionCreatedAt.value = session.createdAt || new Date().toISOString()
+  qaCurrentQuestion.value = session.question || ''
+  qaQuestionTime.value = session.createdAt
+    ? new Date(session.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : ''
+  qaAnswer.value = session.answer || ''
+  qaStatus.value = session.status || (session.answer ? 'done' : 'idle')
+  qaError.value = session.status === 'failed' ? '回答生成失败，请稍后重试。' : ''
+  qaReferencePayloads.value = Array.isArray(session.referencePayloads) ? session.referencePayloads : []
+  qaCopyNotice.value = ''
+  qaValidationError.value = ''
+  qaThreadShouldStick.value = true
+  qaThreadHasNewContent.value = false
+  nextTick(() => {
+    scrollQaThreadToBottom()
+    resizeQaInput()
+    qaInputRef.value?.focus()
+  })
+}
+
+function clearQaWorkspace() {
+  closeQaStream()
+  currentQaSessionId.value = ''
+  qaSessionCreatedAt.value = ''
+  qaQuestion.value = ''
+  qaCurrentQuestion.value = ''
+  qaQuestionTime.value = ''
+  qaAnswer.value = ''
+  qaStatus.value = 'idle'
+  qaError.value = ''
+  qaReferencePayloads.value = []
+  qaTechnicalEvents.value = []
+  qaCopyNotice.value = ''
+  qaValidationError.value = ''
+  qaThreadHasNewContent.value = false
+  emit('qa-session-clear-selection')
+  nextTick(() => qaInputRef.value?.focus())
 }
 
 function fillRecommendedQuestion(question) {
@@ -561,16 +645,19 @@ function handleQaEvent(event) {
   if (event.type === 'text_delta') {
     qaStatus.value = 'streaming'
     qaAnswer.value += sanitizeQaAnswerDelta(event.content || '')
+    emitQaSession('streaming')
     return
   }
   if (event.type === 'token') return
   if (event.type === 'tool_start' || event.type === 'tool_delta' || event.type === 'tool_end' || event.type === 'stage' || event.type === 'status') {
     if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
     pushQaTechnical(event)
+    emitQaSession(qaStatus.value)
     return
   }
   if (event.type === 'done') {
     qaStatus.value = 'done'
+    emitQaSession('done')
     closeQaStream()
     return
   }
@@ -578,6 +665,7 @@ function handleQaEvent(event) {
     qaStatus.value = 'failed'
     qaError.value = '回答生成失败，请稍后重试。'
     pushQaTechnical(event)
+    emitQaSession('failed')
     closeQaStream()
   }
 }
@@ -599,6 +687,8 @@ async function startQa(questionOverride = '') {
   qaCopyNotice.value = ''
   qaTechnicalEvents.value = []
   qaReferencePayloads.value = []
+  currentQaSessionId.value = overrideText ? (currentQaSessionId.value || `qa_${Date.now()}`) : `qa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  qaSessionCreatedAt.value = new Date().toISOString()
   qaCurrentQuestion.value = question
   qaQuestionTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   qaQuestion.value = ''
@@ -606,6 +696,7 @@ async function startQa(questionOverride = '') {
   qaThreadShouldStick.value = true
   qaThreadHasNewContent.value = false
   qaStatus.value = 'searching'
+  emitQaSession('streaming')
   scrollQaThreadToBottom()
 
   try {
@@ -632,6 +723,7 @@ async function startQa(questionOverride = '') {
     qaEventSource.onerror = () => {
       if (qaStatus.value === 'done' || (qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
         qaStatus.value = 'done'
+        emitQaSession('done')
         closeQaStream()
         return
       }
@@ -639,6 +731,7 @@ async function startQa(questionOverride = '') {
         qaStatus.value = 'failed'
         qaError.value = '连接中断，可重新提问。'
         pushQaTechnical({ type: 'error', message: qaError.value })
+        emitQaSession('failed')
       }
       closeQaStream()
     }
@@ -646,6 +739,7 @@ async function startQa(questionOverride = '') {
     qaStatus.value = 'failed'
     qaError.value = '回答生成失败，请稍后重试。'
     pushQaTechnical({ type: 'error', message: error instanceof Error ? error.message : String(error) })
+    emitQaSession('failed')
     closeQaStream()
   }
 }
@@ -1833,6 +1927,15 @@ watch(() => qaAnswer.value, () => {
 watch(() => qaStatus.value, () => {
   if (homeMode.value === 'qa') maybeScrollQaThreadToBottom()
 })
+watch(() => props.selectedQaSession?.id, () => {
+  if (props.selectedQaSession) restoreQaSession(props.selectedQaSession)
+})
+watch(() => props.homeMode, (mode) => {
+  nextTick(() => {
+    if (mode === 'qa') qaInputRef.value?.focus()
+    if (mode === 'report' && props.phase === 'idle') titleInputRef.value?.focus()
+  })
+})
 
 onMounted(() => ensureReportDefaults())
 
@@ -2068,7 +2171,24 @@ function exportPdf() {
         >
           返回生成编报
         </button>
-        <template v-if="phase !== 'done' && !isHistoryDetailLoading && !isHistoryDetailError">
+        <template v-if="phase === 'idle' && homeMode === 'qa'">
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" title="在输入框中输入问题后发送">
+            使用指南
+          </button>
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="clearQaWorkspace">
+            清空问答
+          </button>
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="selectHomeMode('report')">
+            返回编写
+          </button>
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" disabled title="知识问答内容不支持直接导出，请先作为编报背景生成报告。">
+            导出 Word
+          </button>
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" disabled title="知识问答内容不支持直接导出，请先作为编报背景生成报告。">
+            导出 PDF
+          </button>
+        </template>
+        <template v-else-if="phase !== 'done' && !isHistoryDetailLoading && !isHistoryDetailError">
           <button
             @click="toggleLogDrawer"
             :disabled="!canOpenLogDrawer"
@@ -2367,6 +2487,7 @@ function exportPdf() {
                 <span class="font-mono text-[10px] text-slate-500">{{ titleLength }}/200</span>
               </div>
               <textarea
+                ref="titleInputRef"
                 class="title-input w-full resize-y bg-transparent border-none outline-none font-mono text-[17px] leading-8 placeholder:text-slate-500/70"
                 :value="title"
                 maxlength="200"

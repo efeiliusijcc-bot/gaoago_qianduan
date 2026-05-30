@@ -3,7 +3,7 @@ import NexusHeader from './components/NexusHeader.vue'
 import ControlPanel from './components/ControlPanel.vue'
 import DataCanvas from './components/DataCanvas.vue'
 import { useReportJobs } from './composables/useReportJobs.js'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const {
   currentView,
@@ -94,6 +94,15 @@ const reportTypeOptions = [
   { value: 'risk-assessment-reports', label: '风险报' },
 ]
 
+const QA_HISTORY_KEY = 'nexus-qa-history'
+const homeMode = ref('report')
+const selectedQaSessionId = ref('')
+const qaSessions = ref(loadStoredQaSessions())
+
+const selectedQaSession = computed(() => {
+  return qaSessions.value.find((session) => session.id === selectedQaSessionId.value) || null
+})
+
 const hasGeneratingWorkspace = computed(() => {
   return Boolean(activeWorkspaceJobId.value) && (
     phase.value === 'loading' ||
@@ -110,6 +119,78 @@ const hasReturnableWorkspace = computed(() => {
 const sidebarCurrentJobId = computed(() => {
   return openedHistoryJobId.value || job.value?.jobId || activeWorkspaceJobId.value
 })
+
+function loadStoredQaSessions() {
+  try {
+    const raw = localStorage.getItem(QA_HISTORY_KEY)
+    const parsed = JSON.parse(raw || '[]')
+    return Array.isArray(parsed) ? parsed.slice(0, 30) : []
+  } catch {
+    return []
+  }
+}
+
+function persistQaSessions() {
+  try {
+    localStorage.setItem(QA_HISTORY_KEY, JSON.stringify(qaSessions.value.slice(0, 30)))
+  } catch {
+    // Local storage is best-effort; the current in-memory session still works.
+  }
+}
+
+function setHomeMode(mode) {
+  homeMode.value = mode === 'qa' ? 'qa' : 'report'
+  if (homeMode.value === 'report') selectedQaSessionId.value = ''
+}
+
+function upsertQaSession(session) {
+  if (!session?.id) return
+  const current = qaSessions.value.find((item) => item.id === session.id)
+  const next = {
+    ...current,
+    ...session,
+    updatedAt: session.updatedAt || new Date().toISOString(),
+  }
+  qaSessions.value = [
+    next,
+    ...qaSessions.value.filter((item) => item.id !== session.id),
+  ].slice(0, 30)
+  selectedQaSessionId.value = session.id
+}
+
+function openQaSession(session) {
+  if (!session?.id) return
+  homeMode.value = 'qa'
+  selectedQaSessionId.value = session.id
+}
+
+function openReportJob(item) {
+  homeMode.value = 'report'
+  selectedQaSessionId.value = ''
+  monitorJobFromList(item)
+}
+
+function startQaFromSidebar() {
+  homeMode.value = 'qa'
+  selectedQaSessionId.value = ''
+}
+
+function clearSelectedQaSession() {
+  selectedQaSessionId.value = ''
+}
+
+function startReportFromSidebar() {
+  homeMode.value = 'report'
+  selectedQaSessionId.value = ''
+}
+
+function resetForNewReportFromCanvas() {
+  homeMode.value = 'report'
+  selectedQaSessionId.value = ''
+  resetForNewReport()
+}
+
+watch(qaSessions, persistQaSessions, { deep: true })
 
 function skillLabel(item) {
   if (item.skill === 'write-hb' && item.payload?.report_type) return item.payload.report_type
@@ -156,13 +237,19 @@ function jobActionLabel(status) {
     <div v-if="currentView === 'generator'" class="app-body">
       <ControlPanel
         :health="health"
+        :mode="homeMode"
         :jobs="filteredJobs"
         :recentJobs="recentJobs"
+        :qaSessions="qaSessions"
         :recentLoadingMore="recentLoadingMore"
         :recentHasMore="recentHasMore"
         :recentLoadError="recentLoadError"
         :currentJobId="sidebarCurrentJobId"
-        @open-job="monitorJobFromList"
+        :currentQaSessionId="selectedQaSessionId"
+        @open-job="openReportJob"
+        @open-qa-session="openQaSession"
+        @start-qa="startQaFromSidebar"
+        @start-report="startReportFromSidebar"
         @refresh-health="refreshHealth"
         @refresh-list="refreshRecentReports"
         @load-more-recent="loadMoreRecentReports"
@@ -174,6 +261,8 @@ function jobActionLabel(status) {
         v-model:contextText="contextText"
         v-model:parameterValues="parameterValues"
         v-model:activeParameters="activeParameters"
+        :homeMode="homeMode"
+        :selectedQaSession="selectedQaSession"
         :phase="phase"
         :loadingStep="loadingStep"
         :processLogs="processLogs"
@@ -209,8 +298,11 @@ function jobActionLabel(status) {
         @toggle-plan-search-query="togglePlanSearchQuery"
         @next-plan-step="nextPlanStep"
         @prev-plan-step="prevPlanStep"
+        @update:homeMode="setHomeMode"
+        @qa-session-upsert="upsertQaSession"
+        @qa-session-clear-selection="clearSelectedQaSession"
         @list="loadJobList"
-        @new-report="resetForNewReport"
+        @new-report="resetForNewReportFromCanvas"
         @retry-history-report="retryOpenCurrentHistoryReport"
         @show-active-workspace="showGenerator"
         @toggle-log-drawer="toggleLogDrawer"

@@ -1023,6 +1023,27 @@ canvas {
   color: #64748b;
 }
 
+.qa-history-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.5;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.history-empty-state,
+.history-empty-copy {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.history-empty-state {
+  max-width: 210px;
+}
+
 .recent-load-state {
   padding: 12px 0;
   text-align: center;
