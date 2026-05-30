@@ -115,7 +115,11 @@ const technicalLogOpenIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
 const expandedSourceId = ref('')
 const sourceListRef = ref(null)
-const activeSourceType = ref('引用')
+const activeSourceType = ref('report_refs')
+const sourceSearchQuery = ref('')
+const sourceKindFilter = ref('全部')
+const sourceTimeFilter = ref('all')
+const sourceSortMode = ref('relevance')
 const sourceListLoading = ref(false)
 const sourceListError = ref('')
 const sourceListItems = ref([])
@@ -123,6 +127,7 @@ const sourceListPage = ref(1)
 const sourceListPageSize = ref(10)
 const sourceListTotal = ref(null)
 const sourceListHasMore = ref(false)
+const sourceCurrentPage = ref(1)
 const expandedSourceListId = ref('')
 const sourceListNotice = ref('')
 const activeResultTab = ref('report')
@@ -1035,11 +1040,82 @@ const sourceOverviewStats = computed(() => {
   }
 })
 
-const sourceListTitle = computed(() => {
-  if (activeSourceType.value === '引用') return '报告引用信源'
-  if (activeSourceType.value === 'structured') return '结构化信源'
-  if (activeSourceType.value === '候选') return '候选命中信源'
-  return '信源列表'
+const sourceTypeOptions = [
+  { key: 'all', label: '全部' },
+  { key: 'report_refs', label: '报告引用' },
+  { key: 'structured_sources', label: '结构化信源' },
+  { key: 'candidate_hits', label: '候选命中' },
+  { key: 'extract_failed', label: '抽取失败' },
+]
+
+const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', '其他']
+const sourceTimeOptions = [
+  { key: 'all', label: '全部时间' },
+  { key: '7d', label: '近 7 天', days: 7 },
+  { key: '30d', label: '近 30 天', days: 30 },
+  { key: '6m', label: '近 6 个月', days: 183 },
+  { key: '1y', label: '近 1 年', days: 365 },
+]
+const sourceSortOptions = [
+  { key: 'relevance', label: '按相关性排序' },
+  { key: 'time', label: '按发布时间排序' },
+  { key: 'authority', label: '按来源权威性排序' },
+]
+
+const sourceCardConfigs = computed(() => [
+  {
+    key: 'report_refs',
+    title: '报告引用',
+    value: sourceOverviewStats.value.reportCitations ?? '--',
+    desc: '来自正文参考编号',
+    icon: '◎',
+    tone: 'blue',
+  },
+  {
+    key: 'structured_sources',
+    title: '结构化信源',
+    value: sourceOverviewStats.value.structuredSources ?? '--',
+    desc: '来自数据库 / 向量召回',
+    icon: '▤',
+    tone: 'cyan',
+  },
+  {
+    key: 'candidate_hits',
+    title: '候选命中',
+    value: sourceOverviewStats.value.candidateHits ?? '--',
+    desc: '检索阶段命中的候选池',
+    icon: '≋',
+    tone: 'orange',
+  },
+  {
+    key: 'extract_failed',
+    title: '抽取失败',
+    value: sourceOverviewStats.value.failed ?? '--',
+    desc: '正文抽取失败或不可用',
+    icon: '!',
+    tone: 'red',
+  },
+])
+
+const activeSourceConfig = computed(() => {
+  if (activeSourceType.value === 'all') {
+    return {
+      key: 'all',
+      title: '全部信源',
+      desc: '以下为当前报告可展示的全部信源记录。',
+      emptyTitle: '暂无对应信源',
+      emptyDesc: '当前报告暂无可展示的信源记录。',
+    }
+  }
+  const base = sourceCardConfigs.value.find((item) => item.key === activeSourceType.value) || sourceCardConfigs.value[0]
+  const descriptions = {
+    report_refs: ['报告引用信源', '以下信源来自报告正文中的参考编号和引用依据。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
+    structured_sources: ['结构化信源', '以下信源来自数据库或向量召回结果，已完成结构化整理。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
+    candidate_hits: ['候选命中信源', '以下内容为检索阶段命中的候选信源，尚未全部进入正文引用。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
+    extract_failed: ['抽取失败记录', '以下来源在正文抽取阶段失败，可能仅保留标题、摘要或 URL。', '暂无抽取失败记录', '本次任务未发现正文抽取失败的信源。'],
+  }
+  const [title, desc, emptyTitle, emptyDesc] = descriptions[base.key] || descriptions.report_refs
+  return { ...base, title, desc, emptyTitle, emptyDesc }
 })
 
 const sourceListCountText = computed(() => {
@@ -1137,25 +1213,80 @@ function firstText(source, keys, fallback = '') {
   return fallback
 }
 
-function normalizeSourceListItem(source, index) {
-  const title = firstText(source, ['title', 'ch_title', 'headline', 'name'], '未命名信源')
-  const summary = firstText(source, ['summary', 'abstract', 'description', 'content_excerpt', 'excerpt'], '当前信源暂无摘要。')
-  const detail = firstText(source, ['content', 'fullText', 'body', 'text', 'detail'], '')
-  const url = firstText(source, ['url', 'sourceUrl', 'source_url', 'data_source_url'], '')
-  const sourceName = firstText(source, ['source_name', 'sourceName', 'source', 'website_name', 'websiteName', 'publisher'], '来源未知')
-  const publishTime = firstText(source, ['publishTime', 'publish_time', 'publishedAt', 'published_at', 'time'], '')
-  const score = source?.relevance ?? source?.relevanceScore ?? source?.score ?? source?.similarity ?? null
-  const id = firstText(source, ['id', 'sourceId', 'source_id', 'mysql_id'], `${activeSourceType.value}-${url || title}-${index}`)
+function scrubSourceDisplayText(value) {
+  return String(value || '')
+    .replace(/OpenClaw|Agent|MCP|tool_call|command|rawPayload/gi, '技术信息')
+    .replace(/\bSQL\b/gi, '查询信息')
+    .trim()
+}
+
+function inferSourceGroup(source, fallbackGroup = activeSourceType.value) {
+  const explicit = source?.sourceGroup || source?.source_group || source?.group || source?.category
+  const text = `${explicit || ''} ${source?.type || ''} ${source?.source_type || ''} ${source?.tag || ''} ${source?.designated_tag || ''} ${source?.status || ''} ${source?.extract_status || ''}`.toLowerCase()
+  if (/report_refs|report_ref|citation|reference|引用|参考/.test(text)) return 'report_refs'
+  if (/candidate_hits|candidate|hit|候选|命中/.test(text)) return 'candidate_hits'
+  if (/extract_failed|failed|failure|error|失败|不可用/.test(text)) return 'extract_failed'
+  if (/structured_sources|structured|database|vector|结构化|数据库|向量/.test(text)) return 'structured_sources'
+  return fallbackGroup === 'all' ? 'structured_sources' : fallbackGroup
+}
+
+function normalizeSourceListItem(source, index, fallbackGroup = activeSourceType.value) {
+  const title = scrubSourceDisplayText(firstText(source, ['title', 'ch_title', 'headline', 'sourceTitle', 'name'], '未命名信源'))
+  const summary = scrubSourceDisplayText(firstText(source, ['summary', 'abstract', 'description'], '当前信源暂无摘要。'))
+  const detail = scrubSourceDisplayText(firstText(source, ['excerpt', 'content_excerpt', 'chunk_text', 'content_chunk', 'body', 'content', 'fullText', 'text', 'detail'], ''))
+  const url = firstText(source, ['url', 'source_url', 'data_source_url', 'sourceUrl'], '')
+  const sourceName = scrubSourceDisplayText(firstText(source, ['publisher', 'website_name', 'source_name', 'site_name', 'sourceName', 'source', 'websiteName'], '来源未知'))
+  const publishRaw = firstText(source, ['published_at', 'publish_time', 'pub_time', 'source_time', 'publishTime', 'publishedAt', 'time'], '')
+  const sourceType = normalizeSourceKind(firstText(source, ['source_type', 'type', 'tag', 'designated_tag', 'sourceType'], '其他'))
+  const status = scrubSourceDisplayText(firstText(source, ['status', 'extract_status', 'source_status'], ''))
+  const method = scrubSourceDisplayText(firstText(source, ['method', 'retrievalMode', 'collection_method'], ''))
+  const failedReason = scrubSourceDisplayText(firstText(source, ['failedReason', 'failure_reason', 'error', 'message', 'note'], ''))
+  const score = source?.relevance_score ?? source?.relevanceScore ?? source?.score ?? source?.similarity ?? source?.rank_score ?? source?.relevance ?? null
+  const sourceGroup = inferSourceGroup(source, fallbackGroup)
+  const id = firstText(source, ['id', 'sourceId', 'source_id', 'mysql_id'], `${sourceGroup}-${url || title}-${index}`)
   return {
     id: String(id),
+    sourceGroup,
     title,
     summary,
     detail,
     url,
     sourceName,
-    publishTime: formatDbSourceTime(publishTime) || '时间未知',
+    publishRaw,
+    publishTime: formatDbSourceTime(publishRaw) || '时间未知',
+    sourceType,
+    status,
+    method,
+    failedReason,
+    authorityScore: inferAuthorityScore(sourceName, sourceType),
+    numericScore: normalizeNumericScore(score),
     relevance: formatSourceListScore(score),
   }
+}
+
+function normalizeSourceKind(value) {
+  const text = String(value || '').trim()
+  if (!text) return '其他'
+  if (/官方|政府|公告|声明|文件|policy|gov/i.test(text)) return '官方文件'
+  if (/媒体|新闻|报道|news|media/i.test(text)) return '媒体报道'
+  if (/研究|报告|智库|analysis|report|think/i.test(text)) return '研究报告'
+  if (/数据库|向量|记录|database|vector|db/i.test(text)) return '数据库记录'
+  return text.length > 8 ? '其他' : text
+}
+
+function normalizeNumericScore(value) {
+  if (value === undefined || value === null || value === '') return 0
+  const number = Number(value)
+  if (!Number.isFinite(number)) return 0
+  return number <= 1 ? number * 100 : number
+}
+
+function inferAuthorityScore(sourceName, sourceType) {
+  const text = `${sourceName || ''} ${sourceType || ''}`
+  if (/官方|政府|部|署|局|委员会|office|department|commission|gov/i.test(text)) return 100
+  if (/研究|智库|院|所|institute|research|think/i.test(text)) return 82
+  if (/新闻|报|社|media|news|reuters|bloomberg/i.test(text)) return 68
+  return 50
 }
 
 function formatSourceListScore(value) {
@@ -1168,7 +1299,7 @@ function formatSourceListScore(value) {
   return String(value)
 }
 
-function normalizeSourceListResponse(response) {
+function normalizeSourceListResponse(response, fallbackGroup = activeSourceType.value) {
   const list = Array.isArray(response)
     ? response
     : Array.isArray(response?.items)
@@ -1187,11 +1318,126 @@ function normalizeSourceListResponse(response) {
     ? Boolean(response.hasMore ?? response.has_more ?? false)
     : false
   return {
-    items: list.map((item, index) => normalizeSourceListItem(item, index)),
+    items: list.map((item, index) => normalizeSourceListItem(item, index, fallbackGroup)),
     total: typeof total === 'number' ? total : Number.isFinite(Number(total)) ? Number(total) : null,
     hasMore,
   }
 }
+
+function sourceRequestType(type = activeSourceType.value) {
+  if (type === 'all') return ''
+  return type || 'report_refs'
+}
+
+function localSourcePool(type = activeSourceType.value) {
+  const citationSources = citationItems.value.map((item, index) => normalizeSourceListItem({
+    id: `citation-${item.number}`,
+    sourceGroup: 'report_refs',
+    title: item.title,
+    source_name: item.sourceName,
+    summary: item.summary,
+    source_type: '报告引用',
+    relevance_score: item.credibility === '高' ? 95 : 78,
+    method: item.method,
+  }, index))
+
+  const structuredSources = normalizedSources.value.map((item, index) => normalizeSourceListItem({
+    id: item.id,
+    sourceGroup: item.status === 'failed' ? 'extract_failed' : 'structured_sources',
+    title: item.title,
+    source_name: item.sourceName,
+    publish_time: item.publishTime,
+    summary: item.summary,
+    excerpt: item.note,
+    url: item.url,
+    source_type: item.sourceType,
+    relevance_score: item.relevance === '高相关' ? 92 : 72,
+    status: item.status,
+    method: item.method,
+    failedReason: item.status === 'failed' ? item.note : '',
+  }, index))
+
+  const candidateSources = normalizedSources.value.map((item, index) => normalizeSourceListItem({
+    id: `candidate-${item.id}`,
+    sourceGroup: 'candidate_hits',
+    title: item.title,
+    source_name: item.sourceName,
+    publish_time: item.publishTime,
+    summary: item.summary,
+    excerpt: item.note,
+    url: item.url,
+    source_type: item.sourceType,
+    relevance_score: item.relevance === '高相关' ? 88 : 66,
+    status: item.status,
+    method: item.method,
+  }, index))
+
+  const logFailures = technicalLogs.value
+    .filter((log) => /fail|error|失败|错误/i.test(`${log.status || ''} ${log.summary || ''} ${log.message || ''}`))
+    .map((log, index) => normalizeSourceListItem({
+      id: `log-failed-${log.id || index}`,
+      sourceGroup: 'extract_failed',
+      title: log.label || log.stage || '抽取失败记录',
+      summary: log.summary || log.message || '该来源在处理阶段未能完成正文抽取。',
+      source_type: '其他',
+      status: 'failed',
+      failedReason: log.summary || log.message || '',
+      method: log.phase || '',
+    }, index))
+
+  const grouped = {
+    report_refs: citationSources,
+    structured_sources: structuredSources.filter((item) => item.sourceGroup !== 'extract_failed'),
+    candidate_hits: candidateSources,
+    extract_failed: [
+      ...structuredSources.filter((item) => item.sourceGroup === 'extract_failed'),
+      ...logFailures,
+    ],
+  }
+
+  if (type === 'all') return Object.values(grouped).flat()
+  return grouped[type] || []
+}
+
+function mergeLocalFallback(items, type = activeSourceType.value) {
+  if (items.length) return items
+  return localSourcePool(type)
+}
+
+function sourceMatchesTime(source) {
+  const option = sourceTimeOptions.find((item) => item.key === sourceTimeFilter.value)
+  if (!option?.days || !source.publishRaw) return true
+  const time = new Date(source.publishRaw).getTime()
+  if (!Number.isFinite(time)) return true
+  return Date.now() - time <= option.days * 24 * 60 * 60 * 1000
+}
+
+const filteredSourceRows = computed(() => {
+  const query = sourceSearchQuery.value.trim().toLowerCase()
+  const rows = sourceListItems.value.filter((source) => {
+    const searchable = `${source.title} ${source.sourceName} ${source.summary} ${source.detail} ${source.sourceType}`.toLowerCase()
+    if (query && !searchable.includes(query)) return false
+    if (sourceKindFilter.value !== '全部' && source.sourceType !== sourceKindFilter.value) return false
+    if (!sourceMatchesTime(source)) return false
+    return true
+  })
+
+  return [...rows].sort((a, b) => {
+    if (sourceSortMode.value === 'time') {
+      return new Date(b.publishRaw || 0).getTime() - new Date(a.publishRaw || 0).getTime()
+    }
+    if (sourceSortMode.value === 'authority') return b.authorityScore - a.authorityScore
+    return b.numericScore - a.numericScore
+  })
+})
+
+const sourceTotalPages = computed(() => Math.max(1, Math.ceil(filteredSourceRows.value.length / sourceListPageSize.value)))
+const paginatedSourceRows = computed(() => {
+  const start = (sourceCurrentPage.value - 1) * sourceListPageSize.value
+  return filteredSourceRows.value.slice(start, start + sourceListPageSize.value)
+})
+const currentSourceEmptyTitle = computed(() => activeSourceConfig.value.emptyTitle || '暂无对应信源')
+const currentSourceEmptyDesc = computed(() => activeSourceConfig.value.emptyDesc || '当前报告没有该类型的信源记录，您可以切换其他类型查看。')
 
 function resetSourceListState() {
   sourceListRequestId += 1
@@ -1199,6 +1445,7 @@ function resetSourceListState() {
   sourceListPage.value = 1
   sourceListTotal.value = null
   sourceListHasMore.value = false
+  sourceCurrentPage.value = 1
   sourceListError.value = ''
   sourceListNotice.value = ''
   expandedSourceListId.value = ''
@@ -1220,26 +1467,80 @@ async function loadSourceListPage(page = 1) {
   sourceListError.value = ''
   sourceListNotice.value = ''
   try {
-    const response = await fetchReportSources(jobId, requestType, {
-      page,
-      pageSize: sourceListPageSize.value,
-    })
+    let response
+    let usedUntypedFallback = false
+    try {
+      response = await fetchReportSources(jobId, sourceRequestType(requestType), {
+        page,
+        pageSize: sourceListPageSize.value,
+      })
+    } catch {
+      usedUntypedFallback = true
+      response = await fetchReportSources(jobId, '', {
+        page,
+        pageSize: sourceListPageSize.value,
+      })
+    }
     if (requestId !== sourceListRequestId || requestType !== activeSourceType.value || jobId !== props.job?.jobId) return
-    const normalized = normalizeSourceListResponse(response)
-    sourceListItems.value = page === 1
+    const normalized = normalizeSourceListResponse(response, usedUntypedFallback ? 'all' : requestType)
+    const typedItems = requestType === 'all'
       ? normalized.items
-      : [...sourceListItems.value, ...normalized.items]
+      : normalized.items.filter((item) => item.sourceGroup === requestType)
+    const nextItems = mergeLocalFallback(typedItems, requestType)
+    sourceListItems.value = page === 1
+      ? nextItems
+      : [...sourceListItems.value, ...nextItems]
     sourceListPage.value = page
-    sourceListTotal.value = normalized.total
+    sourceCurrentPage.value = 1
+    sourceListTotal.value = normalized.total ?? sourceListItems.value.length
     sourceListHasMore.value = normalized.hasMore ||
       (typeof normalized.total === 'number' && sourceListItems.value.length < normalized.total)
   } catch {
     if (requestId !== sourceListRequestId || requestType !== activeSourceType.value || jobId !== props.job?.jobId) return
-    sourceListError.value = '信源加载失败，请稍后重试。'
-    sourceListHasMore.value = false
+    const fallback = localSourcePool(requestType)
+    if (fallback.length) {
+      sourceListItems.value = page === 1 ? fallback : [...sourceListItems.value, ...fallback]
+      sourceListPage.value = page
+      sourceCurrentPage.value = 1
+      sourceListTotal.value = sourceListItems.value.length
+      sourceListHasMore.value = false
+    } else {
+      sourceListError.value = '信源加载失败，请稍后重试。'
+      sourceListHasMore.value = false
+    }
   } finally {
     if (requestId === sourceListRequestId) sourceListLoading.value = false
   }
+}
+
+async function loadMoreSourceRows() {
+  await loadSourceListPage(sourceListPage.value + 1)
+}
+
+function reloadSourceRows() {
+  resetSourceListState()
+  scrollSourceListToTop()
+  loadSourceListPage(1)
+}
+
+function setSourcePage(page) {
+  sourceCurrentPage.value = Math.min(Math.max(page, 1), sourceTotalPages.value)
+  scrollSourceListToTop()
+}
+
+function visibleSourcePages() {
+  const total = sourceTotalPages.value
+  const current = sourceCurrentPage.value
+  const pages = new Set([1, total, current, current - 1, current + 1])
+  return Array.from(pages)
+    .filter((page) => page >= 1 && page <= total)
+    .sort((a, b) => a - b)
+}
+
+function handleSourceFiltersChanged() {
+  sourceCurrentPage.value = 1
+  expandedSourceListId.value = ''
+  scrollSourceListToTop()
 }
 
 function selectSourceType(type) {
@@ -1352,14 +1653,15 @@ watch(() => [props.phase, props.isHistoryMode], () => {
 })
 watch(() => [props.phase, props.job?.jobId], () => {
   if (props.phase === 'done') activeResultTab.value = 'report'
-  activeSourceType.value = '引用'
+  activeSourceType.value = 'report_refs'
   resetSourceListState()
 })
 watch(() => activeResultTab.value, (tab) => {
   if (tab === 'sources' && props.job?.jobId && !sourceListItems.value.length && !sourceListLoading.value) {
-    selectSourceType(activeSourceType.value || '引用')
+    selectSourceType(activeSourceType.value || 'report_refs')
   }
 })
+watch([sourceSearchQuery, sourceKindFilter, sourceTimeFilter, sourceSortMode], handleSourceFiltersChanged)
 watch(() => props.processLogs, scrollToBottom, { deep: true })
 watch(() => props.processLogs?.length || 0, scrollLogsToBottom)
 watch(() => props.executionLogs.length, scrollLogsToBottom)
@@ -2314,153 +2616,186 @@ function exportPdf() {
         </section>
 
         <section v-else-if="activeResultTab === 'sources'" class="result-tab-panel">
-          <div class="source-fixed-layout">
-            <aside class="source-fixed-sidebar">
-              <div class="source-fixed-info">
-                <div v-for="item in resultInfoItems.slice(0, 4)" :key="item[0]">
-                  <span>{{ item[0] }}</span>
-                  <strong>{{ item[1] }}</strong>
-                </div>
+          <div class="source-search-page">
+            <div class="source-task-strip">
+              <div v-for="item in resultInfoItems" :key="item[0]" class="source-task-strip-item">
+                <span>{{ item[0] }}</span>
+                <strong>{{ item[1] }}</strong>
               </div>
+            </div>
 
-              <div class="source-count-note">
-                口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示；候选命中是检索阶段命中的候选池，三者不混算。
-              </div>
+            <div class="source-stat-row">
+              <button
+                v-for="card in sourceCardConfigs"
+                :key="card.key"
+                class="source-stat-card source-stat-clickable source-metric-card"
+                :class="[{ active: activeSourceType === card.key }, `source-metric-${card.tone}`]"
+                type="button"
+                @click="selectSourceType(card.key)"
+              >
+                <span class="source-stat-icon">{{ card.icon }}</span>
+                <span class="source-metric-body">
+                  <span class="source-stat-title">{{ card.title }}</span>
+                  <strong class="source-stat-value">{{ card.value }}</strong>
+                  <span class="source-metric-desc">{{ card.desc }}</span>
+                </span>
+              </button>
+            </div>
 
-              <div class="source-stats-grid result-source-stats source-fixed-stats">
-                <div
-                  class="source-stat-card source-stat-clickable"
-                  :class="{ active: activeSourceType === '引用' }"
-                  role="button"
-                  tabindex="0"
-                  @click="selectSourceType('引用')"
-                  @keydown.enter.prevent="selectSourceType('引用')"
-                  @keydown.space.prevent="selectSourceType('引用')"
-                >
-                  <div class="source-stat-icon">◎</div>
-                  <div>
-                    <div class="source-stat-title">报告引用</div>
-                    <div class="source-stat-value">{{ sourceOverviewStats.reportCitations ?? '--' }}</div>
-                  </div>
-                </div>
-                <div
-                  class="source-stat-card source-stat-clickable"
-                  :class="{ active: activeSourceType === 'structured' }"
-                  role="button"
-                  tabindex="0"
-                  @click="selectSourceType('structured')"
-                  @keydown.enter.prevent="selectSourceType('structured')"
-                  @keydown.space.prevent="selectSourceType('structured')"
-                >
-                  <div class="source-stat-icon">▤</div>
-                  <div>
-                    <div class="source-stat-title">结构化信源</div>
-                    <div class="source-stat-value">{{ sourceOverviewStats.structuredSources ?? '--' }}</div>
-                  </div>
-                </div>
-                <div
-                  class="source-stat-card source-stat-clickable"
-                  :class="{ active: activeSourceType === '候选' }"
-                  role="button"
-                  tabindex="0"
-                  @click="selectSourceType('候选')"
-                  @keydown.enter.prevent="selectSourceType('候选')"
-                  @keydown.space.prevent="selectSourceType('候选')"
-                >
-                  <div class="source-stat-icon source-stat-warning">≋</div>
-                  <div>
-                    <div class="source-stat-title">候选命中</div>
-                    <div class="source-stat-value">{{ sourceOverviewStats.candidateHits ?? '--' }}</div>
-                  </div>
-                </div>
-                <div class="source-stat-card">
-                  <div class="source-stat-icon source-stat-danger">!</div>
-                  <div>
-                    <div class="source-stat-title">抽取失败</div>
-                    <div class="source-stat-value">{{ sourceOverviewStats.failed ?? '--' }}</div>
-                  </div>
-                </div>
-              </div>
-            </aside>
+            <div class="source-count-note">
+              口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示；候选命中是检索阶段命中的候选池，三者不混算。
+            </div>
 
-            <section class="source-fixed-panel" aria-live="polite">
-              <header class="source-fixed-header">
+            <div class="source-sub-filter" aria-label="信源类型筛选">
+              <button
+                v-for="item in sourceTypeOptions"
+                :key="item.key"
+                type="button"
+                :class="{ active: activeSourceType === item.key }"
+                @click="selectSourceType(item.key)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+
+            <div class="source-table-panel">
+              <header class="source-table-heading">
                 <div>
-                  <h2>{{ sourceListTitle }}</h2>
-                  <p>{{ sourceListCountText || '按当前报告任务读取对应信源' }}</p>
+                  <h2>{{ activeSourceConfig.title }}</h2>
+                  <p>{{ activeSourceConfig.desc }}</p>
                 </div>
-                <button
-                  class="source-fixed-refresh"
-                  type="button"
-                  :disabled="sourceListLoading"
-                  @click="loadSourceListPage(1)"
-                >
+                <button class="source-fixed-refresh" type="button" :disabled="sourceListLoading" @click="reloadSourceRows">
                   {{ sourceListLoading ? '加载中...' : '刷新' }}
                 </button>
               </header>
 
-              <div ref="sourceListRef" class="source-fixed-scroll">
-                <div v-if="sourceListLoading && !sourceListItems.length" class="source-empty-state">
-                  正在加载信源...
+              <div class="source-toolbar">
+                <label class="source-search-box">
+                  <span>⌕</span>
+                  <input
+                    v-model="sourceSearchQuery"
+                    type="search"
+                    placeholder="搜索标题 / 来源 / 关键词"
+                  />
+                </label>
+                <select v-model="sourceKindFilter" aria-label="来源类型筛选">
+                  <option v-for="item in sourceKindOptions" :key="item" :value="item">{{ item }}</option>
+                </select>
+                <select v-model="sourceTimeFilter" aria-label="时间范围筛选">
+                  <option v-for="item in sourceTimeOptions" :key="item.key" :value="item.key">{{ item.label }}</option>
+                </select>
+                <select v-model="sourceSortMode" aria-label="排序">
+                  <option v-for="item in sourceSortOptions" :key="item.key" :value="item.key">{{ item.label }}</option>
+                </select>
+              </div>
+
+              <div ref="sourceListRef" class="source-table-scroll">
+                <div v-if="sourceListLoading && !sourceListItems.length" class="source-table-skeleton">
+                  <i v-for="item in 5" :key="item"></i>
                 </div>
                 <div v-else-if="sourceListError" class="source-panel-error">
                   <strong>信源加载失败</strong>
                   <p>{{ sourceListError }}</p>
-                  <button type="button" @click="loadSourceListPage(1)">重新加载</button>
+                  <button type="button" @click="reloadSourceRows">重新加载</button>
                 </div>
-                <div v-else-if="!sourceListItems.length" class="source-empty-state">
-                  当前无可用信源
+                <div v-else-if="!filteredSourceRows.length" class="source-empty-state">
+                  <strong>{{ currentSourceEmptyTitle }}</strong>
+                  <p>{{ currentSourceEmptyDesc }}</p>
                 </div>
-                <div v-else class="source-panel-list">
-                  <article
-                    v-for="source in sourceListItems"
-                    :key="source.id"
-                    class="source-panel-item"
-                    :class="{ active: expandedSourceListId === source.id }"
-                  >
-                    <div class="source-panel-item-main" @click="toggleSourceListItem(source.id)">
-                      <div class="source-panel-item-head">
-                        <div>
-                          <h3>{{ source.title }}</h3>
-                          <div class="source-panel-meta">
-                            <span>{{ source.sourceName }}</span>
-                            <span>{{ source.publishTime }}</span>
-                            <span v-if="source.relevance">相关性 {{ source.relevance }}</span>
+                <table v-else class="source-data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>信源标题</th>
+                      <th>来源类型</th>
+                      <th>发布机构</th>
+                      <th>发布时间</th>
+                      <th>相关性</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="(source, index) in paginatedSourceRows" :key="source.id">
+                      <tr :class="{ expanded: expandedSourceListId === source.id }">
+                        <td class="source-index-cell">
+                          <button type="button" @click="toggleSourceListItem(source.id)">
+                            {{ expandedSourceListId === source.id ? '⌄' : '›' }}
+                          </button>
+                          <span>{{ String((sourceCurrentPage - 1) * sourceListPageSize + index + 1).padStart(2, '0') }}</span>
+                        </td>
+                        <td class="source-title-cell">
+                          <strong>{{ source.title }}</strong>
+                          <p>{{ source.summary }}</p>
+                        </td>
+                        <td><span class="source-type-pill">{{ source.sourceType || '--' }}</span></td>
+                        <td>{{ source.sourceName || '--' }}</td>
+                        <td>{{ source.publishTime || '--' }}</td>
+                        <td><span class="source-score">{{ source.relevance || '--' }}</span></td>
+                        <td>
+                          <div class="source-row-actions">
+                            <button type="button" @click="toggleSourceListItem(source.id)">查看详情</button>
+                            <button type="button" @click="copySourceListItem(source)">复制引用</button>
                           </div>
-                        </div>
-                        <button class="source-panel-expand" type="button" @click.stop="toggleSourceListItem(source.id)">
-                          {{ expandedSourceListId === source.id ? '收起' : '展开详情' }}
-                        </button>
-                      </div>
-                      <p>{{ source.summary }}</p>
-                    </div>
-
-                    <div v-if="expandedSourceListId === source.id" class="source-panel-detail">
-                      <p v-if="source.detail">{{ source.detail }}</p>
-                      <p v-else>当前信源暂无更多详情。</p>
-                      <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">查看来源 URL</a>
-                    </div>
-
-                    <div class="source-panel-actions">
-                      <button type="button" @click="copySourceListItem(source)">复制引用</button>
-                      <button type="button" @click="importSourceListItemAsReportContext(source)">作为编报背景</button>
-                    </div>
-                  </article>
-
-                  <button
-                    v-if="sourceListHasMore"
-                    class="source-fixed-load-more"
-                    type="button"
-                    :disabled="sourceListLoading"
-                    @click="loadSourceListPage(sourceListPage + 1)"
-                  >
-                    {{ sourceListLoading ? '加载中...' : '加载更多' }}
-                  </button>
-                </div>
+                        </td>
+                      </tr>
+                      <tr v-if="expandedSourceListId === source.id" class="source-detail-row">
+                        <td colspan="7">
+                          <div class="source-detail-grid">
+                            <div>
+                              <span>完整摘要</span>
+                              <p>{{ source.summary || '暂无摘要。' }}</p>
+                            </div>
+                            <div>
+                              <span>正文片段</span>
+                              <p>{{ source.detail || '暂无正文片段。' }}</p>
+                            </div>
+                            <div>
+                              <span>来源 URL</span>
+                              <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.url }}</a>
+                              <p v-else>暂无 URL。</p>
+                            </div>
+                            <div>
+                              <span>采集方式 / 失败原因</span>
+                              <p>{{ source.failedReason || source.method || source.status || '暂无补充信息。' }}</p>
+                            </div>
+                          </div>
+                          <div class="source-detail-actions">
+                            <button type="button" @click="copySourceListItem(source)">复制引用</button>
+                            <button type="button" @click="importSourceListItemAsReportContext(source)">作为编报背景</button>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
               </div>
 
+              <footer class="source-pagination">
+                <span>共 {{ filteredSourceRows.length }} 条</span>
+                <button type="button" :disabled="sourceCurrentPage <= 1" @click="setSourcePage(sourceCurrentPage - 1)">上一页</button>
+                <button
+                  v-for="page in visibleSourcePages()"
+                  :key="page"
+                  type="button"
+                  :class="{ active: sourceCurrentPage === page }"
+                  @click="setSourcePage(page)"
+                >
+                  {{ page }}
+                </button>
+                <button type="button" :disabled="sourceCurrentPage >= sourceTotalPages" @click="setSourcePage(sourceCurrentPage + 1)">下一页</button>
+                <button
+                  v-if="sourceListHasMore"
+                  type="button"
+                  :disabled="sourceListLoading"
+                  @click="loadMoreSourceRows"
+                >
+                  {{ sourceListLoading ? '加载中...' : '加载更多' }}
+                </button>
+                <span>每页 {{ sourceListPageSize }} 条</span>
+              </footer>
+
               <footer v-if="sourceListNotice" class="source-fixed-notice">{{ sourceListNotice }}</footer>
-            </section>
+            </div>
           </div>
         </section>
 
