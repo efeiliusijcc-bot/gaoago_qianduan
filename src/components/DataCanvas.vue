@@ -111,6 +111,7 @@ const drawerLogListRef = ref(null)
 const liveLogListRef = ref(null)
 const contextTextRef = ref(null)
 const qaInputRef = ref(null)
+const qaThreadRef = ref(null)
 const technicalLogOpenIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
 const expandedSourceId = ref('')
@@ -133,17 +134,24 @@ const sourceListNotice = ref('')
 const activeResultTab = ref('report')
 const homeMode = ref('report')
 const qaQuestion = ref('')
+const qaCurrentQuestion = ref('')
+const qaQuestionTime = ref('')
 const qaAnswer = ref('')
 const qaStatus = ref('idle')
 const qaError = ref('')
 const qaTechnicalEvents = ref([])
+const qaReferencePayloads = ref([])
 const qaImportNotice = ref('')
 const qaValidationError = ref('')
 const qaCopyNotice = ref('')
+const qaRecommendedBatch = ref(0)
+const qaThreadShouldStick = ref(true)
+const qaThreadHasNewContent = ref(false)
 const titleValidationError = ref('')
 const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
-let liveLogScrollTimer = null
+const liveLogHasNewItems = ref(false)
+const drawerLogHasNewItems = ref(false)
 let qaEventSource = null
 let sourceListRequestId = 0
 
@@ -243,9 +251,20 @@ const recommendedQuestions = [
   '欧盟贸易限制措施对我国产业链有何影响？',
   '当前全球供应链风险有哪些？',
   '中美科技竞争的最新态势如何？',
+  '我国重点产业链面临哪些外部限制风险？',
+  '近期国际能源市场变化会带来哪些影响？',
+  '人工智能产业监管趋势有哪些值得关注？',
+  '周边安全形势对经贸合作有什么影响？',
+  '跨境数据流动政策有哪些最新变化？',
 ]
 
 const isQaRunning = computed(() => ['searching', 'integrating', 'streaming'].includes(qaStatus.value))
+const visibleRecommendedQuestions = computed(() => {
+  const batchSize = 5
+  const start = (qaRecommendedBatch.value * batchSize) % recommendedQuestions.length
+  return [...recommendedQuestions, ...recommendedQuestions].slice(start, start + batchSize)
+})
+const canSendQa = computed(() => Boolean(qaQuestion.value.trim()) && !isQaRunning.value)
 const qaStepItems = computed(() => [
   { key: 'searching', label: '检索中', done: ['integrating', 'streaming', 'done'].includes(qaStatus.value), active: qaStatus.value === 'searching' },
   { key: 'integrating', label: '整合中', done: ['streaming', 'done'].includes(qaStatus.value), active: qaStatus.value === 'integrating' },
@@ -262,6 +281,18 @@ const qaStatusDescription = computed(() => {
   if (qaStatus.value === 'done') return '回答已完成。'
   if (isQaRunning.value) return '正在检索数据库并整合相关信息。'
   return '请输入问题后，系统将检索数据库并生成回答。'
+})
+const qaReferenceItems = computed(() => {
+  const seen = new Set()
+  return qaReferencePayloads.value
+    .map((item, index) => normalizeSourceListItem(item, index, 'structured_sources'))
+    .filter((item) => {
+      const key = item.url || `${item.title}-${item.sourceName}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, 8)
 })
 
 const qaTechnicalLabels = {
@@ -396,7 +427,74 @@ function selectHomeMode(mode) {
 function fillRecommendedQuestion(question) {
   qaQuestion.value = question
   qaValidationError.value = ''
-  nextTick(() => qaInputRef.value?.focus())
+  nextTick(() => {
+    resizeQaInput()
+    qaInputRef.value?.focus()
+  })
+}
+
+function rotateRecommendedQuestions() {
+  qaRecommendedBatch.value = (qaRecommendedBatch.value + 1) % Math.ceil(recommendedQuestions.length / 5)
+}
+
+function resizeQaInput() {
+  const target = qaInputRef.value
+  if (!target) return
+  target.style.height = 'auto'
+  target.style.height = `${Math.min(target.scrollHeight, 136)}px`
+}
+
+function handleQaInput() {
+  qaValidationError.value = ''
+  resizeQaInput()
+}
+
+function handleQaInputKeydown(event) {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  if (canSendQa.value) startQa()
+}
+
+function isQaThreadNearBottom() {
+  const target = qaThreadRef.value
+  if (!target) return true
+  return target.scrollHeight - target.scrollTop - target.clientHeight < 80
+}
+
+function scrollQaThreadToBottom() {
+  nextTick(() => {
+    const target = qaThreadRef.value
+    if (!target) return
+    requestAnimationFrame(() => {
+      target.scrollTop = target.scrollHeight
+      qaThreadShouldStick.value = true
+      qaThreadHasNewContent.value = false
+    })
+  })
+}
+
+function maybeScrollQaThreadToBottom() {
+  nextTick(() => {
+    const target = qaThreadRef.value
+    if (!target) return
+    if (qaThreadShouldStick.value || isQaThreadNearBottom()) {
+      requestAnimationFrame(() => {
+        target.scrollTop = target.scrollHeight
+        qaThreadShouldStick.value = true
+        qaThreadHasNewContent.value = false
+      })
+    } else {
+      qaThreadHasNewContent.value = true
+    }
+  })
+}
+
+function handleQaThreadScroll(event) {
+  const target = event.currentTarget
+  if (!target) return
+  const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 80
+  qaThreadShouldStick.value = nearBottom
+  if (nearBottom) qaThreadHasNewContent.value = false
 }
 
 function closeQaStream() {
@@ -437,8 +535,29 @@ function pushQaTechnical(event) {
   if (qaTechnicalEvents.value.length > 80) qaTechnicalEvents.value = qaTechnicalEvents.value.slice(-80)
 }
 
+function collectQaReferences(event) {
+  const candidates = [
+    event?.sources,
+    event?.source,
+    event?.evidence,
+    event?.references,
+    event?.reference,
+    event?.data?.sources,
+    event?.data?.evidence,
+    event?.data?.references,
+  ]
+  const nextItems = []
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) nextItems.push(...candidate)
+    else if (candidate && typeof candidate === 'object') nextItems.push(candidate)
+  }
+  if (!nextItems.length) return
+  qaReferencePayloads.value = [...qaReferencePayloads.value, ...nextItems].slice(-40)
+}
+
 function handleQaEvent(event) {
   if (!event || typeof event !== 'object') return
+  collectQaReferences(event)
   if (event.type === 'text_delta') {
     qaStatus.value = 'streaming'
     qaAnswer.value += sanitizeQaAnswerDelta(event.content || '')
@@ -463,8 +582,9 @@ function handleQaEvent(event) {
   }
 }
 
-async function startQa() {
-  const question = qaQuestion.value.trim()
+async function startQa(questionOverride = '') {
+  const overrideText = typeof questionOverride === 'string' ? questionOverride : ''
+  const question = String(overrideText || qaQuestion.value).trim()
   if (isQaRunning.value) return
   if (!question) {
     qaValidationError.value = '请先输入需要咨询的问题。'
@@ -478,7 +598,15 @@ async function startQa() {
   qaValidationError.value = ''
   qaCopyNotice.value = ''
   qaTechnicalEvents.value = []
+  qaReferencePayloads.value = []
+  qaCurrentQuestion.value = question
+  qaQuestionTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  qaQuestion.value = ''
+  nextTick(resizeQaInput)
+  qaThreadShouldStick.value = true
+  qaThreadHasNewContent.value = false
   qaStatus.value = 'searching'
+  scrollQaThreadToBottom()
 
   try {
     const response = await createChatCompletion({
@@ -533,7 +661,10 @@ async function copyQaAnswer() {
 
 function continueQa() {
   qaValidationError.value = ''
-  nextTick(() => qaInputRef.value?.focus())
+  nextTick(() => {
+    resizeQaInput()
+    qaInputRef.value?.focus()
+  })
 }
 
 function buildQaReportTitle(question) {
@@ -549,7 +680,7 @@ function buildQaReportTitle(question) {
 function importQaAsReportContext() {
   if (!qaAnswer.value.trim()) return
   selectHomeMode('report')
-  const titleCandidate = buildQaReportTitle(qaQuestion.value)
+  const titleCandidate = buildQaReportTitle(qaCurrentQuestion.value)
   if (!props.title?.trim() && titleCandidate) emit('update:title', titleCandidate)
   const nextContext = [props.contextText, qaAnswer.value.trim()]
     .filter(Boolean)
@@ -1586,14 +1717,6 @@ function importSourceListItemAsReportContext(source) {
   })
 }
 
-function scrollToBottom() {
-  nextTick(() => {
-    if (reportRef.value) {
-      reportRef.value.scrollTop = reportRef.value.scrollHeight
-    }
-  })
-}
-
 function scrollToTop() {
   nextTick(() => {
     if (reportRef.value) {
@@ -1602,41 +1725,59 @@ function scrollToTop() {
   })
 }
 
-function scrollLogsToBottom() {
+function getLogTarget(kind) {
+  return kind === 'drawer' ? drawerLogListRef.value : liveLogListRef.value
+}
+
+function getLogStickRef(kind) {
+  return kind === 'drawer' ? drawerLogShouldStick : liveLogShouldStick
+}
+
+function getLogNewItemsRef(kind) {
+  return kind === 'drawer' ? drawerLogHasNewItems : liveLogHasNewItems
+}
+
+function isLogNearBottom(target) {
+  if (!target) return false
+  return target.scrollHeight - target.scrollTop - target.clientHeight < 80
+}
+
+function scrollLogToBottom(kind) {
   nextTick(() => {
-    const target = isLiveLogVisible.value ? liveLogListRef.value : drawerLogListRef.value
-    const shouldStick = isLiveLogVisible.value ? liveLogShouldStick.value : drawerLogShouldStick.value
-    if (target && shouldStick) {
+    const target = getLogTarget(kind)
+    if (!target) return
+    requestAnimationFrame(() => {
       target.scrollTop = target.scrollHeight
-    }
+      getLogStickRef(kind).value = true
+      getLogNewItemsRef(kind).value = false
+    })
   })
 }
 
-function scrollLiveLogsToBottom() {
+function maybeScrollLogToBottom(kind) {
   nextTick(() => {
-    if (liveLogListRef.value && liveLogShouldStick.value) {
-      liveLogListRef.value.scrollTop = liveLogListRef.value.scrollHeight
+    const target = getLogTarget(kind)
+    if (!target) return
+    const shouldStick = getLogStickRef(kind)
+    const hasNewItems = getLogNewItemsRef(kind)
+    if (shouldStick.value || isLogNearBottom(target)) {
+      requestAnimationFrame(() => {
+        target.scrollTop = target.scrollHeight
+        shouldStick.value = true
+        hasNewItems.value = false
+      })
+    } else {
+      hasNewItems.value = true
     }
   })
-}
-
-function setLiveLogAutoScroll(enabled) {
-  if (liveLogScrollTimer) {
-    clearInterval(liveLogScrollTimer)
-    liveLogScrollTimer = null
-  }
-  if (enabled) {
-    scrollLiveLogsToBottom()
-    liveLogScrollTimer = setInterval(scrollLiveLogsToBottom, 700)
-  }
 }
 
 function handleLogScroll(kind, event) {
   const target = event.currentTarget
   if (!target) return
-  const nearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 80
-  if (kind === 'live') liveLogShouldStick.value = nearBottom
-  else drawerLogShouldStick.value = nearBottom
+  const nearBottom = isLogNearBottom(target)
+  getLogStickRef(kind).value = nearBottom
+  if (nearBottom) getLogNewItemsRef(kind).value = false
 }
 
 function handleGeneratedHtmlChange() {
@@ -1644,7 +1785,6 @@ function handleGeneratedHtmlChange() {
     scrollToTop()
     return
   }
-  scrollToBottom()
 }
 
 watch(() => props.generatedHtml, handleGeneratedHtmlChange)
@@ -1662,15 +1802,25 @@ watch(() => activeResultTab.value, (tab) => {
   }
 })
 watch([sourceSearchQuery, sourceKindFilter, sourceTimeFilter, sourceSortMode], handleSourceFiltersChanged)
-watch(() => props.processLogs, scrollToBottom, { deep: true })
-watch(() => props.processLogs?.length || 0, scrollLogsToBottom)
-watch(() => props.executionLogs.length, scrollLogsToBottom)
+watch(() => props.processLogs?.length || 0, () => {
+  if (isLiveLogVisible.value) maybeScrollLogToBottom('live')
+})
+watch(() => props.executionLogs.length, () => {
+  if (isLiveLogVisible.value) maybeScrollLogToBottom('live')
+  if (showLogDrawer.value) maybeScrollLogToBottom('drawer')
+})
 watch(() => props.isLogDrawerOpen, (open) => {
-  if (open) scrollLogsToBottom()
+  if (open) maybeScrollLogToBottom('drawer')
 })
 watch(isLiveLogVisible, (visible) => {
-  setLiveLogAutoScroll(visible)
+  if (visible) maybeScrollLogToBottom('live')
 }, { immediate: true })
+watch(() => qaAnswer.value, () => {
+  if (homeMode.value === 'qa') maybeScrollQaThreadToBottom()
+})
+watch(() => qaStatus.value, () => {
+  if (homeMode.value === 'qa') maybeScrollQaThreadToBottom()
+})
 
 onMounted(() => ensureReportDefaults())
 
@@ -1683,7 +1833,6 @@ watch(() => props.phase, (phase) => {
 })
 
 onBeforeUnmount(() => {
-  setLiveLogAutoScroll(false)
   closeQaStream()
 })
 
@@ -1951,7 +2100,7 @@ function exportPdf() {
           <button @click="emit('toggle-log-drawer')" class="sci-btn text-[10px] px-2 py-1">关闭</button>
         </div>
 
-        <div ref="drawerLogListRef" class="flex-1 overflow-auto p-4 space-y-3" @scroll="handleLogScroll('drawer', $event)">
+        <div ref="drawerLogListRef" class="log-scroll-container flex-1 overflow-auto p-4 space-y-3" @scroll="handleLogScroll('drawer', $event)">
           <div v-if="!executionLogs.length" class="h-full flex items-center justify-center text-center">
             <div>
               <div class="font-mono text-3xl mb-3" style="color: #94a3b8">LOGS</div>
@@ -1991,6 +2140,14 @@ function exportPdf() {
               </div>
             </div>
           </div>
+          <button
+            v-if="drawerLogHasNewItems"
+            class="log-new-items-button"
+            type="button"
+            @click="scrollLogToBottom('drawer')"
+          >
+            有新日志，点击查看最新
+          </button>
         </div>
 
       </aside>
@@ -2294,35 +2451,22 @@ function exportPdf() {
           </div>
 
           <div v-else class="qa-workspace">
-            <section class="qa-question-panel">
-              <div class="qa-panel-heading">
-                <span>提问</span>
-                <small>基于知识库检索与整合</small>
+            <section class="qa-hero">
+              <div class="qa-hero-icon">⌕</div>
+              <div>
+                <h2>知识问答</h2>
+                <p>基于知识库检索与信息整合，快速获取专业、可追溯的回答。</p>
               </div>
-              <textarea
-                ref="qaInputRef"
-                v-model="qaQuestion"
-                class="qa-question-input"
-                rows="8"
-                placeholder="请输入您的问题，系统将检索数据库并整合相关信息……"
-                @input="qaValidationError = ''"
-                @keydown.ctrl.enter.prevent="startQa"
-              ></textarea>
-              <div class="qa-input-hint">输入清晰、具体的问题，将获得更准确的回答。</div>
-              <div v-if="qaValidationError" class="qa-validation-message">{{ qaValidationError }}</div>
-              <button
-                class="qa-submit-btn"
-                type="button"
-                :disabled="isQaRunning"
-                @click="startQa"
-              >
-                {{ isQaRunning ? '正在回答' : '开始提问' }}
-              </button>
+            </section>
 
-              <div class="qa-recommendations">
-                <div class="qa-recommend-title">推荐问题</div>
+            <section class="qa-recommendations">
+              <div class="qa-recommend-heading">
+                <span>推荐问题</span>
+                <button type="button" @click="rotateRecommendedQuestions">换一批</button>
+              </div>
+              <div class="qa-recommend-list">
                 <button
-                  v-for="question in recommendedQuestions"
+                  v-for="question in visibleRecommendedQuestions"
                   :key="question"
                   type="button"
                   @click="fillRecommendedQuestion(question)"
@@ -2332,46 +2476,124 @@ function exportPdf() {
               </div>
             </section>
 
-            <section class="qa-answer-panel">
-              <div class="qa-panel-heading">
-                <span>实时回答</span>
-                <small class="qa-state-badge" :class="`qa-state-${qaStatus}`">{{ qaStatusTitle }}</small>
+            <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
+              <div v-if="qaStatus === 'idle' && !qaCurrentQuestion" class="qa-empty-card">
+                <div class="qa-empty-icon">?</div>
+                <h3>您可以尝试提问</h3>
+                <p>系统将检索知识库中的信源资料，并整合生成回答。</p>
               </div>
-              <div class="qa-status-steps" v-if="qaStatus !== 'idle' && qaStatus !== 'failed'">
-                <span
-                  v-for="step in qaStepItems"
-                  :key="step.key"
-                  :class="{ active: step.active, done: step.done }"
-                >
-                  {{ step.label }}
-                </span>
+
+              <div v-if="qaCurrentQuestion" class="qa-message-row user">
+                <article class="qa-user-bubble">
+                  <p>{{ qaCurrentQuestion }}</p>
+                  <time>{{ qaQuestionTime }}</time>
+                </article>
               </div>
-              <p class="qa-status-desc">{{ qaStatusDescription }}</p>
-              <div class="qa-answer-box" :class="{ empty: !qaAnswer }">
-                <template v-if="qaAnswer">{{ qaAnswer }}</template>
-                <template v-else>等待提问</template>
-              </div>
-              <div v-if="qaStatus === 'failed'" class="qa-error-actions">
-                <button type="button" @click="startQa">重新提问</button>
-              </div>
-              <div v-if="qaStatus === 'done'" class="qa-answer-actions">
-                <button type="button" @click="copyQaAnswer">复制答案</button>
-                <button type="button" @click="importQaAsReportContext">作为编报背景</button>
-                <button type="button" @click="continueQa">继续追问</button>
-              </div>
-              <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
-              <details v-if="qaTechnicalEvents.length" class="source-technical-details qa-technical-details">
-                <summary>查看技术详情</summary>
-                <div class="source-technical-log">
-                  <div v-for="event in qaTechnicalEvents" :key="event.id" class="friendly-log-card">
-                    <div class="friendly-log-title">
-                      <span>{{ event.time }}</span>
-                      <strong>{{ event.type }}</strong>
-                    </div>
-                    <p>{{ event.summary }}</p>
+
+              <article v-if="qaCurrentQuestion || qaStatus !== 'idle'" class="qa-ai-card">
+                <header class="qa-ai-header">
+                  <div>
+                    <span>AI 回答</span>
+                    <p>{{ qaStatusDescription }}</p>
                   </div>
+                  <small class="qa-state-badge" :class="`qa-state-${qaStatus}`">{{ qaStatusTitle }}</small>
+                </header>
+
+                <div v-if="qaStatus !== 'idle' && qaStatus !== 'failed'" class="qa-status-steps">
+                  <span
+                    v-for="step in qaStepItems"
+                    :key="step.key"
+                    :class="{ active: step.active, done: step.done }"
+                  >
+                    {{ step.done ? '✓ ' : '' }}{{ step.label }}
+                  </span>
                 </div>
-              </details>
+
+                <div v-if="qaStatus === 'failed'" class="qa-failure-card">
+                  <strong>回答生成失败</strong>
+                  <p>系统暂时无法完成检索与整合，请稍后重试。</p>
+                  <button type="button" @click="startQa(qaCurrentQuestion)">重新提问</button>
+                </div>
+                <div v-else class="qa-answer-box" :class="{ empty: !qaAnswer }">
+                  <template v-if="qaAnswer">{{ qaAnswer }}</template>
+                  <template v-else>正在准备回答...</template>
+                </div>
+
+                <div v-if="qaStatus === 'done'" class="qa-answer-actions">
+                  <button type="button" @click="copyQaAnswer">复制答案</button>
+                  <button class="primary" type="button" @click="importQaAsReportContext">作为编报背景</button>
+                  <button type="button" @click="continueQa">继续追问</button>
+                </div>
+                <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
+
+                <section v-if="qaStatus === 'done'" class="qa-reference-section">
+                  <div class="qa-reference-heading">参考来源</div>
+                  <div v-if="qaReferenceItems.length" class="qa-reference-list">
+                    <article v-for="(source, index) in qaReferenceItems" :key="source.id" class="qa-reference-card">
+                      <div class="qa-reference-number">[{{ index + 1 }}]</div>
+                      <div class="qa-reference-body">
+                        <strong>{{ source.title }}</strong>
+                        <p>{{ source.sourceName }} · {{ source.publishTime }} · {{ source.sourceType }}</p>
+                        <details>
+                          <summary>展开摘要</summary>
+                          <p>{{ source.summary }}</p>
+                          <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">打开来源</a>
+                        </details>
+                      </div>
+                    </article>
+                  </div>
+                  <p v-else class="qa-reference-empty">暂无结构化来源信息。</p>
+                </section>
+
+                <details v-if="qaTechnicalEvents.length" class="source-technical-details qa-technical-details">
+                  <summary>查看处理详情</summary>
+                  <div class="source-technical-log">
+                    <div v-for="event in qaTechnicalEvents" :key="event.id" class="friendly-log-card">
+                      <div class="friendly-log-title">
+                        <span>{{ event.time }}</span>
+                        <strong>{{ event.type }}</strong>
+                      </div>
+                      <p>{{ event.summary }}</p>
+                    </div>
+                  </div>
+                </details>
+              </article>
+
+              <button
+                v-if="qaThreadHasNewContent"
+                class="qa-new-content-button"
+                type="button"
+                @click="scrollQaThreadToBottom"
+              >
+                有新内容，点击查看
+              </button>
+            </section>
+
+            <section class="qa-composer-wrap">
+              <div class="qa-composer">
+                <button class="qa-scope-button" type="button">默认知识库</button>
+                <textarea
+                  ref="qaInputRef"
+                  v-model="qaQuestion"
+                  class="qa-question-input"
+                  rows="1"
+                  placeholder="请输入您的问题，系统将检索数据库并整合相关信息……"
+                  @input="handleQaInput"
+                  @keydown="handleQaInputKeydown"
+                ></textarea>
+                <button
+                  class="qa-submit-btn"
+                  type="button"
+                  :disabled="!canSendQa"
+                  @click="startQa"
+                >
+                  {{ isQaRunning ? '生成中' : '发送' }}
+                </button>
+              </div>
+              <div class="qa-composer-footer">
+                <span v-if="qaValidationError" class="qa-validation-message">{{ qaValidationError }}</span>
+                <span v-else>Enter 发送，Shift + Enter 换行。</span>
+              </div>
             </section>
           </div>
         </section>
@@ -2552,6 +2774,14 @@ function exportPdf() {
                 </div>
               </div>
               <div v-else class="source-empty-state">等待任务执行日志...</div>
+              <button
+                v-if="liveLogHasNewItems"
+                class="log-new-items-button"
+                type="button"
+                @click="scrollLogToBottom('live')"
+              >
+                有新日志，点击查看最新
+              </button>
             </div>
           </details>
         </section>
@@ -2860,6 +3090,14 @@ function exportPdf() {
                 </div>
               </div>
               <div v-else class="source-empty-state">当前任务暂无可展示进度日志。</div>
+              <button
+                v-if="liveLogHasNewItems"
+                class="log-new-items-button"
+                type="button"
+                @click="scrollLogToBottom('live')"
+              >
+                有新日志，点击查看最新
+              </button>
             </div>
           </details>
         </section>
