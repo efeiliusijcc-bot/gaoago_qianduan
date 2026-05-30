@@ -154,6 +154,9 @@ const qaSessionCreatedAt = ref('')
 const qaCurrentQuestion = ref('')
 const qaQuestionTime = ref('')
 const qaAnswer = ref('')
+const qaTurns = ref([])
+const qaMessages = ref([])
+const activeQaTurnId = ref('')
 const qaStatus = ref('idle')
 const qaError = ref('')
 const qaTechnicalEvents = ref([])
@@ -274,6 +277,11 @@ const recommendedQuestions = [
   '周边安全形势对经贸合作有什么影响？',
   '跨境数据流动政策有哪些最新变化？',
 ]
+
+const QA_SYSTEM_MESSAGE = {
+  role: 'system',
+  content: '你是知识问答助手。请优先围绕知识库和数据库信源进行检索、归纳和交叉核验，用中文直接回答用户问题。不要在回答中提及底层系统、工具调用、网关、SSE、命令或技术日志。',
+}
 
 const isQaRunning = computed(() => ['searching', 'integrating', 'streaming'].includes(qaStatus.value))
 const visibleRecommendedQuestions = computed(() => {
@@ -450,8 +458,11 @@ function qaSessionSnapshot(status = qaStatus.value) {
   if (!id || !qaCurrentQuestion.value) return null
   return {
     id,
+    sessionId: id,
     question: qaCurrentQuestion.value,
     answer: qaAnswer.value,
+    messages: qaMessages.value,
+    turns: qaTurns.value,
     sourcesCount: qaReferenceItems.value.length,
     status,
     createdAt: qaSessionCreatedAt.value || new Date().toISOString(),
@@ -465,16 +476,73 @@ function emitQaSession(status = qaStatus.value) {
   if (session) emit('qa-session-upsert', session)
 }
 
+function normalizeQaMessages(session) {
+  if (Array.isArray(session?.messages) && session.messages.length) {
+    const sanitized = session.messages
+      .filter((item) => ['system', 'user', 'assistant'].includes(item?.role) && String(item?.content || '').trim())
+      .map((item) => ({ role: item.role, content: String(item.content).trim() }))
+    return sanitized.some((item) => item.role === 'system') ? sanitized : [QA_SYSTEM_MESSAGE, ...sanitized]
+  }
+  const messages = [QA_SYSTEM_MESSAGE]
+  if (session?.question) messages.push({ role: 'user', content: String(session.question) })
+  if (session?.answer) messages.push({ role: 'assistant', content: String(session.answer) })
+  return messages
+}
+
+function normalizeQaTurns(session) {
+  if (Array.isArray(session?.turns) && session.turns.length) {
+    return session.turns.map((turn, index) => ({
+      id: turn.id || `turn-${index}`,
+      question: turn.question || session.question || '',
+      answer: turn.answer || '',
+      createdAt: turn.createdAt || session.createdAt || new Date().toISOString(),
+      status: turn.status || session.status || (turn.answer ? 'done' : 'idle'),
+    }))
+  }
+  if (!session?.question && !session?.answer) return []
+  return [{
+    id: `${session?.id || 'qa'}-turn-0`,
+    question: session.question || '',
+    answer: session.answer || '',
+    createdAt: session.createdAt || new Date().toISOString(),
+    status: session.status || (session.answer ? 'done' : 'idle'),
+  }]
+}
+
+function syncCurrentQaFromTurns() {
+  const last = qaTurns.value[qaTurns.value.length - 1] || null
+  activeQaTurnId.value = last?.id || ''
+  qaCurrentQuestion.value = last?.question || ''
+  qaQuestionTime.value = last?.createdAt
+    ? new Date(last.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : ''
+  qaAnswer.value = last?.answer || ''
+}
+
+function updateActiveQaTurn(patch) {
+  if (!activeQaTurnId.value) return
+  qaTurns.value = qaTurns.value.map((turn) => (
+    turn.id === activeQaTurnId.value ? { ...turn, ...patch } : turn
+  ))
+  syncCurrentQaFromTurns()
+}
+
+function appendQaAssistantMessage() {
+  const answer = qaAnswer.value.trim()
+  if (!answer) return
+  const last = qaMessages.value[qaMessages.value.length - 1]
+  if (last?.role === 'assistant' && last.content === answer) return
+  qaMessages.value = [...qaMessages.value, { role: 'assistant', content: answer }]
+}
+
 function restoreQaSession(session) {
   if (!session?.id) return
   closeQaStream()
-  currentQaSessionId.value = session.id
+  currentQaSessionId.value = session.sessionId || session.id
   qaSessionCreatedAt.value = session.createdAt || new Date().toISOString()
-  qaCurrentQuestion.value = session.question || ''
-  qaQuestionTime.value = session.createdAt
-    ? new Date(session.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-    : ''
-  qaAnswer.value = session.answer || ''
+  qaMessages.value = normalizeQaMessages(session)
+  qaTurns.value = normalizeQaTurns(session)
+  syncCurrentQaFromTurns()
   qaStatus.value = session.status || (session.answer ? 'done' : 'idle')
   qaError.value = session.status === 'failed' ? '回答生成失败，请稍后重试。' : ''
   qaReferencePayloads.value = Array.isArray(session.referencePayloads) ? session.referencePayloads : []
@@ -497,6 +565,9 @@ function clearQaWorkspace() {
   qaCurrentQuestion.value = ''
   qaQuestionTime.value = ''
   qaAnswer.value = ''
+  qaTurns.value = []
+  qaMessages.value = []
+  activeQaTurnId.value = ''
   qaStatus.value = 'idle'
   qaError.value = ''
   qaReferencePayloads.value = []
@@ -644,7 +715,10 @@ function handleQaEvent(event) {
   collectQaReferences(event)
   if (event.type === 'text_delta') {
     qaStatus.value = 'streaming'
-    qaAnswer.value += sanitizeQaAnswerDelta(event.content || '')
+    updateActiveQaTurn({
+      answer: `${qaAnswer.value}${sanitizeQaAnswerDelta(event.content || '')}`,
+      status: 'streaming',
+    })
     emitQaSession('streaming')
     return
   }
@@ -657,6 +731,8 @@ function handleQaEvent(event) {
   }
   if (event.type === 'done') {
     qaStatus.value = 'done'
+    updateActiveQaTurn({ status: 'done' })
+    appendQaAssistantMessage()
     emitQaSession('done')
     closeQaStream()
     return
@@ -665,6 +741,7 @@ function handleQaEvent(event) {
     qaStatus.value = 'failed'
     qaError.value = '回答生成失败，请稍后重试。'
     pushQaTechnical(event)
+    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     closeQaStream()
   }
@@ -680,17 +757,27 @@ async function startQa(questionOverride = '') {
     return
   }
   closeQaStream()
-  qaAnswer.value = ''
   qaError.value = ''
   qaImportNotice.value = ''
   qaValidationError.value = ''
   qaCopyNotice.value = ''
   qaTechnicalEvents.value = []
-  qaReferencePayloads.value = []
-  currentQaSessionId.value = overrideText ? (currentQaSessionId.value || `qa_${Date.now()}`) : `qa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  qaSessionCreatedAt.value = new Date().toISOString()
-  qaCurrentQuestion.value = question
-  qaQuestionTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const isContinuingSession = Boolean(currentQaSessionId.value && qaTurns.value.length)
+  if (!currentQaSessionId.value) currentQaSessionId.value = `qa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  if (!qaSessionCreatedAt.value) qaSessionCreatedAt.value = new Date().toISOString()
+  if (!isContinuingSession) qaReferencePayloads.value = []
+  const createdAt = new Date().toISOString()
+  const turnId = `${currentQaSessionId.value}-turn-${Date.now()}`
+  qaMessages.value = [
+    ...(qaMessages.value.length ? qaMessages.value : [QA_SYSTEM_MESSAGE]),
+    { role: 'user', content: question },
+  ]
+  qaTurns.value = [
+    ...qaTurns.value,
+    { id: turnId, question, answer: '', createdAt, status: 'streaming' },
+  ]
+  activeQaTurnId.value = turnId
+  syncCurrentQaFromTurns()
   qaQuestion.value = ''
   nextTick(resizeQaInput)
   qaThreadShouldStick.value = true
@@ -702,13 +789,8 @@ async function startQa(questionOverride = '') {
   try {
     const response = await createChatCompletion({
       stream: true,
-      messages: [
-        {
-          role: 'system',
-          content: '你是知识问答助手。请优先围绕知识库和数据库信源进行检索、归纳和交叉核验，用中文直接回答用户问题。不要在回答中提及底层系统、工具调用、网关、SSE、命令或技术日志。',
-        },
-        { role: 'user', content: question },
-      ],
+      sessionId: currentQaSessionId.value,
+      messages: qaMessages.value,
     })
     const url = getChatStreamUrl(response?.eventsUrl)
     if (!url) throw new Error('未获得回答通道')
@@ -723,6 +805,8 @@ async function startQa(questionOverride = '') {
     qaEventSource.onerror = () => {
       if (qaStatus.value === 'done' || (qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
         qaStatus.value = 'done'
+        updateActiveQaTurn({ status: 'done' })
+        appendQaAssistantMessage()
         emitQaSession('done')
         closeQaStream()
         return
@@ -731,6 +815,7 @@ async function startQa(questionOverride = '') {
         qaStatus.value = 'failed'
         qaError.value = '连接中断，可重新提问。'
         pushQaTechnical({ type: 'error', message: qaError.value })
+        updateActiveQaTurn({ status: 'failed' })
         emitQaSession('failed')
       }
       closeQaStream()
@@ -739,6 +824,7 @@ async function startQa(questionOverride = '') {
     qaStatus.value = 'failed'
     qaError.value = '回答生成失败，请稍后重试。'
     pushQaTechnical({ type: 'error', message: error instanceof Error ? error.message : String(error) })
+    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     closeQaStream()
   }
@@ -2610,87 +2696,91 @@ function exportPdf() {
             </section>
 
             <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
-              <div v-if="qaStatus === 'idle' && !qaCurrentQuestion" class="qa-empty-card">
+              <div v-if="qaStatus === 'idle' && !qaTurns.length" class="qa-empty-card">
                 <div class="qa-empty-icon">?</div>
                 <h3>您可以尝试提问</h3>
                 <p>系统将检索知识库中的信源资料，并整合生成回答。</p>
               </div>
 
-              <div v-if="qaCurrentQuestion" class="qa-message-row user">
-                <article class="qa-user-bubble">
-                  <p>{{ qaCurrentQuestion }}</p>
-                  <time>{{ qaQuestionTime }}</time>
-                </article>
-              </div>
-
-              <article v-if="qaCurrentQuestion || qaStatus !== 'idle'" class="qa-ai-card">
-                <header class="qa-ai-header">
-                  <div>
-                    <span>AI 回答</span>
-                    <p>{{ qaStatusDescription }}</p>
-                  </div>
-                  <small class="qa-state-badge" :class="`qa-state-${qaStatus}`">{{ qaStatusTitle }}</small>
-                </header>
-
-                <div v-if="qaStatus !== 'idle' && qaStatus !== 'failed'" class="qa-status-steps">
-                  <span
-                    v-for="step in qaStepItems"
-                    :key="step.key"
-                    :class="{ active: step.active, done: step.done }"
-                  >
-                    {{ step.done ? '✓ ' : '' }}{{ step.label }}
-                  </span>
+              <template v-for="turn in qaTurns" :key="turn.id">
+                <div class="qa-message-row user">
+                  <article class="qa-user-bubble">
+                    <p>{{ turn.question }}</p>
+                    <time>{{ new Date(turn.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) }}</time>
+                  </article>
                 </div>
 
-                <div v-if="qaStatus === 'failed'" class="qa-failure-card">
-                  <strong>回答生成失败</strong>
-                  <p>系统暂时无法完成检索与整合，请稍后重试。</p>
-                  <button type="button" @click="startQa(qaCurrentQuestion)">重新提问</button>
-                </div>
-                <div v-else class="qa-answer-box" :class="{ empty: !qaAnswer }">
-                  <template v-if="qaAnswer">{{ qaAnswer }}</template>
-                  <template v-else>正在准备回答...</template>
-                </div>
-
-                <div v-if="qaStatus === 'done'" class="qa-answer-actions">
-                  <button type="button" @click="copyQaAnswer">复制答案</button>
-                  <button class="primary" type="button" @click="importQaAsReportContext">作为编报背景</button>
-                  <button type="button" @click="continueQa">继续追问</button>
-                </div>
-                <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
-
-                <section v-if="qaStatus === 'done'" class="qa-reference-section">
-                  <div class="qa-reference-heading">参考来源</div>
-                  <div v-if="qaReferenceItems.length" class="qa-reference-list">
-                    <article v-for="(source, index) in qaReferenceItems" :key="source.id" class="qa-reference-card">
-                      <div class="qa-reference-number">[{{ index + 1 }}]</div>
-                      <div class="qa-reference-body">
-                        <strong>{{ source.title }}</strong>
-                        <p>{{ source.sourceName }} · {{ source.publishTime }} · {{ source.sourceType }}</p>
-                        <details>
-                          <summary>展开摘要</summary>
-                          <p>{{ source.summary }}</p>
-                          <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">打开来源</a>
-                        </details>
-                      </div>
-                    </article>
-                  </div>
-                  <p v-else class="qa-reference-empty">暂无结构化来源信息。</p>
-                </section>
-
-                <details v-if="qaTechnicalEvents.length" class="source-technical-details qa-technical-details">
-                  <summary>查看处理详情</summary>
-                  <div class="source-technical-log">
-                    <div v-for="event in qaTechnicalEvents" :key="event.id" class="friendly-log-card">
-                      <div class="friendly-log-title">
-                        <span>{{ event.time }}</span>
-                        <strong>{{ event.type }}</strong>
-                      </div>
-                      <p>{{ event.summary }}</p>
+                <article class="qa-ai-card">
+                  <header class="qa-ai-header">
+                    <div>
+                      <span>AI 回答</span>
+                      <p>{{ turn.id === activeQaTurnId ? qaStatusDescription : '回答已完成。' }}</p>
                     </div>
+                    <small class="qa-state-badge" :class="`qa-state-${turn.id === activeQaTurnId ? qaStatus : turn.status}`">
+                      {{ turn.id === activeQaTurnId ? qaStatusTitle : turn.status === 'failed' ? '回答生成失败' : '回答已完成' }}
+                    </small>
+                  </header>
+
+                  <div v-if="turn.id === activeQaTurnId && qaStatus !== 'idle' && qaStatus !== 'failed'" class="qa-status-steps">
+                    <span
+                      v-for="step in qaStepItems"
+                      :key="step.key"
+                      :class="{ active: step.active, done: step.done }"
+                    >
+                      {{ step.done ? '✓ ' : '' }}{{ step.label }}
+                    </span>
                   </div>
-                </details>
-              </article>
+
+                  <div v-if="turn.id === activeQaTurnId && qaStatus === 'failed'" class="qa-failure-card">
+                    <strong>回答生成失败</strong>
+                    <p>系统暂时无法完成检索与整合，请稍后重试。</p>
+                    <button type="button" @click="startQa(turn.question)">重新提问</button>
+                  </div>
+                  <div v-else class="qa-answer-box" :class="{ empty: !turn.answer }">
+                    <template v-if="turn.answer">{{ turn.answer }}</template>
+                    <template v-else>正在准备回答...</template>
+                  </div>
+                </article>
+              </template>
+
+              <div v-if="qaStatus === 'done'" class="qa-answer-actions">
+                <button type="button" @click="copyQaAnswer">复制答案</button>
+                <button class="primary" type="button" @click="importQaAsReportContext">作为编报背景</button>
+                <button type="button" @click="continueQa">继续追问</button>
+              </div>
+              <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
+
+              <section v-if="qaStatus === 'done'" class="qa-reference-section">
+                <div class="qa-reference-heading">参考来源</div>
+                <div v-if="qaReferenceItems.length" class="qa-reference-list">
+                  <article v-for="(source, index) in qaReferenceItems" :key="source.id" class="qa-reference-card">
+                    <div class="qa-reference-number">[{{ index + 1 }}]</div>
+                    <div class="qa-reference-body">
+                      <strong>{{ source.title }}</strong>
+                      <p>{{ source.sourceName }} · {{ source.publishTime }} · {{ source.sourceType }}</p>
+                      <details>
+                        <summary>展开摘要</summary>
+                        <p>{{ source.summary }}</p>
+                        <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">打开来源</a>
+                      </details>
+                    </div>
+                  </article>
+                </div>
+                <p v-else class="qa-reference-empty">暂无结构化来源信息。</p>
+              </section>
+
+              <details v-if="qaTechnicalEvents.length" class="source-technical-details qa-technical-details">
+                <summary>查看处理详情</summary>
+                <div class="source-technical-log">
+                  <div v-for="event in qaTechnicalEvents" :key="event.id" class="friendly-log-card">
+                    <div class="friendly-log-title">
+                      <span>{{ event.time }}</span>
+                      <strong>{{ event.type }}</strong>
+                    </div>
+                    <p>{{ event.summary }}</p>
+                  </div>
+                </div>
+              </details>
 
               <button
                 v-if="qaThreadHasNewContent"
