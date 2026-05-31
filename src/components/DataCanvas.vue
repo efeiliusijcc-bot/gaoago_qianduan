@@ -1698,27 +1698,6 @@ function sourceRequestType(type = activeSourceType.value) {
   return type || 'report_refs'
 }
 
-function firstArray(source, keys) {
-  for (const key of keys) {
-    const value = source?.[key]
-    if (Array.isArray(value)) return value
-  }
-  return []
-}
-
-const candidateArrayKeys = [
-  'candidateSources',
-  'candidate_sources',
-  'candidateHits',
-  'candidate_hits',
-  'candidates',
-  'hits',
-  'retrievalHits',
-  'retrieval_hits',
-  'results',
-  'items',
-]
-
 function sourceCandidateHitTotal() {
   const data = props.databaseSources || {}
   const values = [
@@ -1735,25 +1714,10 @@ function sourceCandidateHitTotal() {
   return found ? Number(found) : 0
 }
 
-function rawCandidateSourceItems() {
-  const containers = [
-    props.databaseSources,
-    props.databaseSources?.queryPlan,
-    props.databaseSources?.vectorPlan,
-    props.databaseSources?.retrievalPlan,
-  ]
-  for (const container of containers) {
-    const items = firstArray(container, candidateArrayKeys)
-    if (items.length) return items
-  }
-  return []
-}
-
-function candidateFallbackNotice(items) {
+function candidateDetailNotice(items) {
   const total = sourceCandidateHitTotal()
-  if (!items.length || rawCandidateSourceItems().length) return ''
-  if (total > items.length) return `候选池共 ${total} 条，当前接口仅返回 ${items.length} 条可展示候选明细。`
-  return '当前候选命中明细来自已返回的检索信源。'
+  if (items.length) return total > items.length ? `候选池共 ${total} 条，当前展示 ${items.length} 条真实候选明细。` : ''
+  return total ? `候选池共 ${total} 条，当前历史任务未保存候选明细。` : ''
 }
 
 function localSourcePool(type = activeSourceType.value) {
@@ -1784,28 +1748,7 @@ function localSourcePool(type = activeSourceType.value) {
     failedReason: item.status === 'failed' ? item.note : '',
   }, index))
 
-  const rawCandidateSources = rawCandidateSourceItems()
-  let candidateSources = rawCandidateSources.map((item, index) => normalizeSourceListItem({
-    ...item,
-    id: firstText(item, ['id', 'sourceId', 'source_id', 'mysql_id'], `candidate-${index}`),
-    sourceGroup: 'candidate_hits',
-  }, index))
-  if (!candidateSources.length && sourceCandidateHitTotal() > 0) {
-    candidateSources = normalizedSources.value.map((item, index) => normalizeSourceListItem({
-      id: `candidate-visible-${item.id || index}`,
-      sourceGroup: 'candidate_hits',
-      title: item.title,
-      source_name: item.sourceName,
-      publish_time: item.publishTime,
-      summary: item.summary,
-      excerpt: item.note,
-      url: item.url,
-      source_type: item.sourceType,
-      relevance_score: item.relevance === '高相关' ? 90 : 70,
-      status: 'discovered',
-      method: item.method || '检索阶段候选池',
-    }, index, 'candidate_hits'))
-  }
+  const candidateSources = []
 
   const logFailures = technicalLogs.value
     .filter((log) => /fail|error|失败|错误/i.test(`${log.status || ''} ${log.summary || ''} ${log.message || ''}`))
@@ -1872,7 +1815,10 @@ const paginatedSourceRows = computed(() => {
   return filteredSourceRows.value.slice(start, start + sourceListPageSize.value)
 })
 const currentSourceEmptyTitle = computed(() => activeSourceConfig.value.emptyTitle || '暂无对应信源')
-const currentSourceEmptyDesc = computed(() => activeSourceConfig.value.emptyDesc || '当前报告没有该类型的信源记录，您可以切换其他类型查看。')
+const currentSourceEmptyDesc = computed(() => {
+  if (activeSourceType.value === 'candidate_hits' && sourceListNotice.value) return sourceListNotice.value
+  return activeSourceConfig.value.emptyDesc || '当前报告没有该类型的信源记录，您可以切换其他类型查看。'
+})
 
 function resetSourceListState() {
   sourceListRequestId += 1
@@ -1917,7 +1863,7 @@ async function loadSourceListPage(page = 1) {
       })
     }
     if (requestId !== sourceListRequestId || requestType !== activeSourceType.value || jobId !== props.job?.jobId) return
-    const fallbackGroup = usedUntypedFallback || requestType === 'candidate_hits'
+    const fallbackGroup = usedUntypedFallback
       ? 'all'
       : requestType
     const normalized = normalizeSourceListResponse(response, fallbackGroup)
@@ -1929,12 +1875,12 @@ async function loadSourceListPage(page = 1) {
       ? nextItems
       : [...sourceListItems.value, ...nextItems]
     if (requestType === 'candidate_hits' && page === 1) {
-      sourceListNotice.value = candidateFallbackNotice(nextItems)
+      sourceListNotice.value = response?.meta?.message || candidateDetailNotice(nextItems)
     }
     sourceListPage.value = page
     sourceCurrentPage.value = 1
     sourceListTotal.value = requestType === 'candidate_hits'
-      ? (normalized.total ?? (sourceCandidateHitTotal() || sourceListItems.value.length))
+      ? (!usedUntypedFallback && normalized.total !== null ? normalized.total : (sourceCandidateHitTotal() || sourceListItems.value.length))
       : (normalized.total ?? sourceListItems.value.length)
     sourceListHasMore.value = normalized.hasMore ||
       (typeof normalized.total === 'number' && sourceListItems.value.length < normalized.total)
@@ -1946,7 +1892,7 @@ async function loadSourceListPage(page = 1) {
       sourceListPage.value = page
       sourceCurrentPage.value = 1
       if (requestType === 'candidate_hits' && page === 1) {
-        sourceListNotice.value = candidateFallbackNotice(fallback)
+        sourceListNotice.value = candidateDetailNotice(fallback)
       }
       sourceListTotal.value = requestType === 'candidate_hits'
         ? (sourceCandidateHitTotal() || sourceListItems.value.length)
@@ -1957,7 +1903,7 @@ async function loadSourceListPage(page = 1) {
       sourceListPage.value = page
       sourceCurrentPage.value = 1
       sourceListTotal.value = sourceCandidateHitTotal()
-      sourceListNotice.value = `候选池共 ${sourceCandidateHitTotal()} 条，当前接口未返回可展示的候选明细。`
+      sourceListNotice.value = `候选池共 ${sourceCandidateHitTotal()} 条，当前历史任务未保存候选明细。`
       sourceListHasMore.value = false
     } else {
       sourceListError.value = '信源加载失败，请稍后重试。'
