@@ -2888,11 +2888,13 @@ function exportPdf() {
               </div>
               <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
 
-              <section v-if="qaStatus === 'done'" class="qa-reference-section qa-source-section">
+              <section class="qa-reference-section qa-source-section">
                 <div class="qa-reference-header">
                   <div>
                     <div class="qa-reference-heading">参考来源</div>
-                    <p>共 {{ qaReferenceItems.length }} 条结构化来源，支持搜索、筛选和展开查看。</p>
+                    <p v-if="qaReferenceItems.length">共 {{ qaReferenceItems.length }} 条结构化来源，支持搜索、筛选和展开查看。</p>
+                    <p v-else-if="isQaRunning">正在检索和整理可追溯来源，收到结构化来源后会在这里展示。</p>
+                    <p v-else>完成一次知识问答后，系统会在这里展示可追溯信源。</p>
                   </div>
                   <span v-if="qaReferenceItems.length" class="qa-reference-count">{{ filteredQaReferenceItems.length }} / {{ qaReferenceItems.length }}</span>
                 </div>
@@ -2993,7 +2995,8 @@ function exportPdf() {
 
                   <p v-else class="qa-reference-empty">未找到匹配的信源，请调整搜索或筛选条件。</p>
                 </div>
-                <p v-else class="qa-reference-empty">暂无结构化来源信息。</p>
+                <p v-else-if="qaStatus === 'done'" class="qa-reference-empty">暂无结构化来源信息。</p>
+                <p v-else class="qa-reference-empty">暂无信源记录，请先完成一次知识问答。</p>
               </section>
 
               <section v-if="false && qaStatus === 'done'" class="qa-reference-section">
