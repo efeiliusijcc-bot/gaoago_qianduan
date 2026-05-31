@@ -177,6 +177,7 @@ const drawerLogShouldStick = ref(true)
 const liveLogHasNewItems = ref(false)
 const drawerLogHasNewItems = ref(false)
 let qaEventSource = null
+let qaStreamRecoveryTimer = null
 let sourceListRequestId = 0
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
@@ -711,10 +712,40 @@ function handleQaThreadScroll(event) {
 }
 
 function closeQaStream() {
+  clearQaStreamRecoveryTimer()
   if (qaEventSource) {
     qaEventSource.close()
     qaEventSource = null
   }
+}
+
+function clearQaStreamRecoveryTimer() {
+  if (qaStreamRecoveryTimer) {
+    window.clearTimeout(qaStreamRecoveryTimer)
+    qaStreamRecoveryTimer = null
+  }
+}
+
+function scheduleQaStreamRecoveryFailure() {
+  if (qaStreamRecoveryTimer) return
+  qaStreamRecoveryTimer = window.setTimeout(() => {
+    qaStreamRecoveryTimer = null
+    if (qaStatus.value === 'done') return
+    if (qaAnswer.value.trim()) {
+      qaStatus.value = 'done'
+      updateActiveQaTurn({ status: 'done' })
+      appendQaAssistantMessage()
+      emitQaSession('done')
+      closeQaStream()
+      return
+    }
+    qaStatus.value = 'failed'
+    qaError.value = '连接中断，可重新提问。'
+    pushQaTechnical({ type: 'error', message: qaError.value })
+    updateActiveQaTurn({ status: 'failed' })
+    emitQaSession('failed')
+    closeQaStream()
+  }, 90000)
 }
 
 function sanitizeQaText(value, maxLength = 240) {
@@ -854,6 +885,7 @@ async function startQa(questionOverride = '') {
     if (!url) throw new Error('未获得回答通道')
     qaEventSource = new EventSource(url)
     qaEventSource.onmessage = (message) => {
+      clearQaStreamRecoveryTimer()
       try {
         handleQaEvent(JSON.parse(message.data))
       } catch {
@@ -861,6 +893,13 @@ async function startQa(questionOverride = '') {
       }
     }
     qaEventSource.onerror = () => {
+      if (qaStatus.value !== 'done' && !(qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
+        if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
+        pushQaTechnical({ type: 'status', message: '连接不稳定，正在尝试恢复回答。' })
+        emitQaSession(qaStatus.value)
+        scheduleQaStreamRecoveryFailure()
+        return
+      }
       if (qaStatus.value === 'done' || (qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
         qaStatus.value = 'done'
         updateActiveQaTurn({ status: 'done' })
