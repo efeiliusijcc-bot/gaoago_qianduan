@@ -1648,6 +1648,56 @@ function firstArray(source, keys) {
   return []
 }
 
+const candidateArrayKeys = [
+  'candidateSources',
+  'candidate_sources',
+  'candidateHits',
+  'candidate_hits',
+  'candidates',
+  'hits',
+  'retrievalHits',
+  'retrieval_hits',
+  'results',
+  'items',
+]
+
+function sourceCandidateHitTotal() {
+  const data = props.databaseSources || {}
+  const values = [
+    data.totalHits,
+    data.total_hits,
+    data.queryPlan?.totalHits,
+    data.queryPlan?.total_hits,
+    data.queryPlan?.relevantHits,
+    data.queryPlan?.relevant_hits,
+    data.vectorPlan?.vectorHits,
+    data.vectorPlan?.totalHits,
+  ]
+  const found = values.find((value) => Number.isFinite(Number(value)) && Number(value) > 0)
+  return found ? Number(found) : 0
+}
+
+function rawCandidateSourceItems() {
+  const containers = [
+    props.databaseSources,
+    props.databaseSources?.queryPlan,
+    props.databaseSources?.vectorPlan,
+    props.databaseSources?.retrievalPlan,
+  ]
+  for (const container of containers) {
+    const items = firstArray(container, candidateArrayKeys)
+    if (items.length) return items
+  }
+  return []
+}
+
+function candidateFallbackNotice(items) {
+  const total = sourceCandidateHitTotal()
+  if (!items.length || rawCandidateSourceItems().length) return ''
+  if (total > items.length) return `候选池共 ${total} 条，当前接口仅返回 ${items.length} 条可展示候选明细。`
+  return '当前候选命中明细来自已返回的检索信源。'
+}
+
 function localSourcePool(type = activeSourceType.value) {
   const citationSources = citationItems.value.map((item, index) => normalizeSourceListItem({
     id: `citation-${item.number}`,
@@ -1676,21 +1726,28 @@ function localSourcePool(type = activeSourceType.value) {
     failedReason: item.status === 'failed' ? item.note : '',
   }, index))
 
-  const rawCandidateSources = firstArray(props.databaseSources, [
-    'candidateSources',
-    'candidate_sources',
-    'candidateHits',
-    'candidate_hits',
-    'candidates',
-    'hits',
-    'retrievalHits',
-    'retrieval_hits',
-  ])
-  const candidateSources = rawCandidateSources.map((item, index) => normalizeSourceListItem({
+  const rawCandidateSources = rawCandidateSourceItems()
+  let candidateSources = rawCandidateSources.map((item, index) => normalizeSourceListItem({
     ...item,
     id: firstText(item, ['id', 'sourceId', 'source_id', 'mysql_id'], `candidate-${index}`),
     sourceGroup: 'candidate_hits',
   }, index))
+  if (!candidateSources.length && sourceCandidateHitTotal() > 0) {
+    candidateSources = normalizedSources.value.map((item, index) => normalizeSourceListItem({
+      id: `candidate-visible-${item.id || index}`,
+      sourceGroup: 'candidate_hits',
+      title: item.title,
+      source_name: item.sourceName,
+      publish_time: item.publishTime,
+      summary: item.summary,
+      excerpt: item.note,
+      url: item.url,
+      source_type: item.sourceType,
+      relevance_score: item.relevance === '高相关' ? 90 : 70,
+      status: 'discovered',
+      method: item.method || '检索阶段候选池',
+    }, index, 'candidate_hits'))
+  }
 
   const logFailures = technicalLogs.value
     .filter((log) => /fail|error|失败|错误/i.test(`${log.status || ''} ${log.summary || ''} ${log.message || ''}`))
@@ -1813,9 +1870,14 @@ async function loadSourceListPage(page = 1) {
     sourceListItems.value = page === 1
       ? nextItems
       : [...sourceListItems.value, ...nextItems]
+    if (requestType === 'candidate_hits' && page === 1) {
+      sourceListNotice.value = candidateFallbackNotice(nextItems)
+    }
     sourceListPage.value = page
     sourceCurrentPage.value = 1
-    sourceListTotal.value = normalized.total ?? sourceListItems.value.length
+    sourceListTotal.value = requestType === 'candidate_hits'
+      ? (normalized.total ?? (sourceCandidateHitTotal() || sourceListItems.value.length))
+      : (normalized.total ?? sourceListItems.value.length)
     sourceListHasMore.value = normalized.hasMore ||
       (typeof normalized.total === 'number' && sourceListItems.value.length < normalized.total)
   } catch {
@@ -1825,7 +1887,19 @@ async function loadSourceListPage(page = 1) {
       sourceListItems.value = page === 1 ? fallback : [...sourceListItems.value, ...fallback]
       sourceListPage.value = page
       sourceCurrentPage.value = 1
-      sourceListTotal.value = sourceListItems.value.length
+      if (requestType === 'candidate_hits' && page === 1) {
+        sourceListNotice.value = candidateFallbackNotice(fallback)
+      }
+      sourceListTotal.value = requestType === 'candidate_hits'
+        ? (sourceCandidateHitTotal() || sourceListItems.value.length)
+        : sourceListItems.value.length
+      sourceListHasMore.value = false
+    } else if (requestType === 'candidate_hits' && sourceCandidateHitTotal() > 0) {
+      sourceListItems.value = page === 1 ? [] : sourceListItems.value
+      sourceListPage.value = page
+      sourceCurrentPage.value = 1
+      sourceListTotal.value = sourceCandidateHitTotal()
+      sourceListNotice.value = `候选池共 ${sourceCandidateHitTotal()} 条，当前接口未返回可展示的候选明细。`
       sourceListHasMore.value = false
     } else {
       sourceListError.value = '信源加载失败，请稍后重试。'
