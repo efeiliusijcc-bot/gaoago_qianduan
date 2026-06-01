@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import DOMPurify from 'dompurify'
-import { createChatCompletion, fetchReportSources, getChatStreamUrl } from '../lib/api.js'
+import { createChatCompletion, fetchQaSessionSources, fetchReportSources, getChatStreamUrl } from '../lib/api.js'
 
 const purifyConfig = {
   ALLOWED_TAGS: [
@@ -630,6 +630,23 @@ function restoreQaSession(session) {
     resizeQaInput()
     qaInputRef.value?.focus()
   })
+  loadQaSessionSources(currentQaSessionId.value)
+}
+
+async function loadQaSessionSources(sessionId) {
+  if (!sessionId) return
+  try {
+    const result = await fetchQaSessionSources(sessionId)
+    const sources = Array.isArray(result?.sources) ? result.sources : []
+    if (!sources.length) return
+    qaReferencePayloads.value = sources
+    qaSourceSidebarDismissed.value = false
+    qaSourceSidebarOpen.value = true
+    resetQaSourceView()
+    emitQaSession(qaStatus.value)
+  } catch {
+    // Backend source persistence is best-effort; local QA history remains usable.
+  }
 }
 
 function clearQaWorkspace() {

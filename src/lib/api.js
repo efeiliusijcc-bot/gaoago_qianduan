@@ -56,6 +56,17 @@ export function createChatCompletion(body) {
   })
 }
 
+export function fetchQaSessionSources(sessionId) {
+  return request(`/chat/sessions/${encodeURIComponent(sessionId)}/sources`)
+}
+
+export function upsertQaSessionSources(sessionId, body) {
+  return request(`/chat/sessions/${encodeURIComponent(sessionId)}/sources`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
 export function fetchReportJobs(params = {}) {
   const query = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {
