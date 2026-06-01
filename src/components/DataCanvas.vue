@@ -165,6 +165,8 @@ const qaSourceSearch = ref('')
 const qaSourceTypeFilter = ref('all')
 const qaSourceExpandedIds = ref(new Set())
 const qaSourcePage = ref(1)
+const qaSourceSidebarOpen = ref(false)
+const qaSourceSidebarDismissed = ref(false)
 const qaImportNotice = ref('')
 const qaValidationError = ref('')
 const qaCopyNotice = ref('')
@@ -354,6 +356,9 @@ const filteredQaReferenceItems = computed(() => {
 const qaSourcePageSize = 10
 const pagedQaReferenceItems = computed(() => filteredQaReferenceItems.value.slice(0, qaSourcePage.value * qaSourcePageSize))
 const qaSourceHasMore = computed(() => pagedQaReferenceItems.value.length < filteredQaReferenceItems.value.length)
+const canShowQaSourceSidebar = computed(() => {
+  return homeMode.value === 'qa' && (qaReferenceItems.value.length > 0 || isQaRunning.value || qaStatus.value === 'done')
+})
 
 const qaTechnicalLabels = {
   stage: '流程状态',
@@ -577,6 +582,16 @@ function resetQaSourceView() {
   qaSourcePage.value = 1
 }
 
+function openQaSourceSidebar() {
+  qaSourceSidebarOpen.value = true
+  qaSourceSidebarDismissed.value = false
+}
+
+function closeQaSourceSidebar() {
+  qaSourceSidebarOpen.value = false
+  qaSourceSidebarDismissed.value = true
+}
+
 function toggleQaSourceExpanded(id) {
   const next = new Set(qaSourceExpandedIds.value)
   if (next.has(id)) next.delete(id)
@@ -603,6 +618,8 @@ function restoreQaSession(session) {
   qaStatus.value = session.status || (session.answer ? 'done' : 'idle')
   qaError.value = session.status === 'failed' ? '回答生成失败，请稍后重试。' : ''
   qaReferencePayloads.value = Array.isArray(session.referencePayloads) ? session.referencePayloads : []
+  qaSourceSidebarDismissed.value = false
+  qaSourceSidebarOpen.value = qaReferencePayloads.value.length > 0
   resetQaSourceView()
   qaCopyNotice.value = ''
   qaValidationError.value = ''
@@ -629,6 +646,8 @@ function clearQaWorkspace() {
   qaStatus.value = 'idle'
   qaError.value = ''
   qaReferencePayloads.value = []
+  qaSourceSidebarOpen.value = false
+  qaSourceSidebarDismissed.value = false
   resetQaSourceView()
   qaTechnicalEvents.value = []
   qaCopyNotice.value = ''
@@ -857,6 +876,8 @@ async function startQa(questionOverride = '') {
   if (!isContinuingSession) qaReferencePayloads.value = []
   const createdAt = new Date().toISOString()
   const turnId = `${currentQaSessionId.value}-turn-${Date.now()}`
+  qaSourceSidebarDismissed.value = false
+  if (!isContinuingSession) qaSourceSidebarOpen.value = false
   qaMessages.value = [
     ...(qaMessages.value.length ? qaMessages.value : [QA_SYSTEM_MESSAGE]),
     { role: 'user', content: question },
@@ -2135,11 +2156,17 @@ watch([qaSourceSearch, qaSourceTypeFilter], () => {
 })
 watch(() => qaReferencePayloads.value.length, () => {
   qaSourcePage.value = 1
+  if (homeMode.value === 'qa' && qaReferenceItems.value.length > 0 && !qaSourceSidebarDismissed.value) {
+    qaSourceSidebarOpen.value = true
+  }
 })
 watch(() => props.selectedQaSession?.id, () => {
   if (props.selectedQaSession) restoreQaSession(props.selectedQaSession)
 })
 watch(() => props.homeMode, (mode) => {
+  if (mode === 'qa' && qaReferenceItems.value.length > 0 && !qaSourceSidebarDismissed.value) {
+    qaSourceSidebarOpen.value = true
+  }
   nextTick(() => {
     if (mode === 'qa') qaInputRef.value?.focus()
     if (mode === 'report' && props.phase === 'idle') titleInputRef.value?.focus()
@@ -2818,7 +2845,19 @@ function exportPdf() {
               </div>
             </section>
 
-            <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
+            <div class="qa-body-grid" :class="{ 'sidebar-open': qaSourceSidebarOpen && canShowQaSourceSidebar }">
+              <div class="qa-main-pane">
+                <button
+                  v-if="canShowQaSourceSidebar && !qaSourceSidebarOpen"
+                  class="qa-source-sidebar-tab"
+                  type="button"
+                  @click="openQaSourceSidebar"
+                >
+                  <span>参考来源</span>
+                  <strong>{{ qaReferenceItems.length }}</strong>
+                </button>
+
+                <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
               <div v-if="qaStatus === 'idle' && !qaTurns.length" class="qa-empty-card">
                 <div class="qa-empty-icon">?</div>
                 <h3>您可以尝试提问</h3>
@@ -2873,7 +2912,7 @@ function exportPdf() {
               </div>
               <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
 
-              <section class="qa-reference-section qa-source-section">
+              <section v-if="false" class="qa-reference-section qa-source-section">
                 <div class="qa-reference-header">
                   <div>
                     <div class="qa-reference-heading">参考来源</div>
@@ -3052,6 +3091,129 @@ function exportPdf() {
                 <span v-else>Enter 发送，Shift + Enter 换行。</span>
               </div>
             </section>
+              </div>
+
+              <aside
+                v-if="canShowQaSourceSidebar"
+                class="qa-source-sidebar"
+                :class="{ open: qaSourceSidebarOpen }"
+                aria-label="参考来源"
+              >
+                <section class="qa-reference-section qa-source-section">
+                  <div class="qa-reference-header">
+                    <div>
+                      <div class="qa-reference-heading">参考来源</div>
+                      <p v-if="qaReferenceItems.length">共 {{ qaReferenceItems.length }} 条结构化来源，支持搜索、筛选和展开查看。</p>
+                      <p v-else-if="isQaRunning">正在检索和整理可追溯来源，收到结构化来源后会在这里展示。</p>
+                      <p v-else>完成一次知识问答后，系统会在这里展示可追溯信源。</p>
+                    </div>
+                    <div class="qa-source-sidebar-actions">
+                      <span v-if="qaReferenceItems.length" class="qa-reference-count">{{ filteredQaReferenceItems.length }} / {{ qaReferenceItems.length }}</span>
+                      <button type="button" @click="closeQaSourceSidebar" aria-label="收起参考来源">收起</button>
+                    </div>
+                  </div>
+
+                  <div v-if="qaReferenceItems.length" class="qa-source-workbench">
+                    <div class="qa-source-toolbar">
+                      <label class="qa-source-search">
+                        <span>搜索</span>
+                        <input
+                          v-model="qaSourceSearch"
+                          type="search"
+                          placeholder="搜索标题 / 来源 / 关键词"
+                        />
+                      </label>
+                      <div class="qa-source-type-filter" aria-label="来源类型筛选">
+                        <button
+                          type="button"
+                          :class="{ active: qaSourceTypeFilter === 'all' }"
+                          @click="qaSourceTypeFilter = 'all'"
+                        >
+                          全部
+                        </button>
+                        <button
+                          v-for="type in qaSourceTypeOptions"
+                          :key="type"
+                          type="button"
+                          :class="{ active: qaSourceTypeFilter === type }"
+                          @click="qaSourceTypeFilter = type"
+                        >
+                          {{ type }}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div v-if="filteredQaReferenceItems.length" class="qa-source-list">
+                      <article
+                        v-for="(source, index) in pagedQaReferenceItems"
+                        :key="source.id"
+                        class="qa-source-card"
+                        :class="{ expanded: isQaSourceExpanded(source.id) }"
+                      >
+                        <div class="qa-source-index">[{{ index + 1 }}]</div>
+                        <div class="qa-source-main">
+                          <div class="qa-source-title-row">
+                            <strong>{{ qaSourceField(source.title, '未命名信源') }}</strong>
+                            <span>{{ qaSourceField(source.relevance, '--') }}</span>
+                          </div>
+                          <p class="qa-source-summary">{{ qaSourceField(source.summary, '当前信源暂无摘要。') }}</p>
+                          <div class="qa-source-meta">
+                            <span>{{ qaSourceField(source.sourceType, '其他') }}</span>
+                            <span>{{ qaSourceField(source.sourceName, '来源未知') }}</span>
+                            <span>{{ qaSourceField(source.publishTime, '时间未知') }}</span>
+                          </div>
+                          <div class="qa-source-actions">
+                            <button type="button" @click="toggleQaSourceExpanded(source.id)">
+                              {{ isQaSourceExpanded(source.id) ? '收起详情' : '查看详情' }}
+                            </button>
+                            <a
+                              v-if="source.url"
+                              :href="source.url"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              打开来源
+                            </a>
+                          </div>
+                          <div v-if="isQaSourceExpanded(source.id)" class="qa-source-detail">
+                            <div>
+                              <span>完整摘要</span>
+                              <p>{{ qaSourceField(source.summary, '暂无摘要。') }}</p>
+                            </div>
+                            <div>
+                              <span>正文片段</span>
+                              <p>{{ qaSourceField(source.detail, '暂无正文片段。') }}</p>
+                            </div>
+                            <div>
+                              <span>来源 URL</span>
+                              <a v-if="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.url }}</a>
+                              <p v-else>--</p>
+                            </div>
+                            <div class="qa-source-detail-grid">
+                              <p><span>采集方式</span>{{ qaSourceField(source.method, '--') }}</p>
+                              <p><span>采集状态</span>{{ qaSourceField(source.status, '--') }}</p>
+                              <p><span>失败原因</span>{{ qaSourceField(source.failedReason, '--') }}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                      <button
+                        v-if="qaSourceHasMore"
+                        class="qa-source-load-more"
+                        type="button"
+                        @click="qaSourcePage += 1"
+                      >
+                        查看更多信源
+                      </button>
+                    </div>
+
+                    <p v-else class="qa-reference-empty">未找到匹配的信源，请调整搜索或筛选条件。</p>
+                  </div>
+                  <p v-else-if="qaStatus === 'done'" class="qa-reference-empty">暂无结构化来源信息。</p>
+                  <p v-else class="qa-reference-empty">暂无信源记录，请先完成一次知识问答。</p>
+                </section>
+              </aside>
+            </div>
           </div>
         </section>
       </div>
