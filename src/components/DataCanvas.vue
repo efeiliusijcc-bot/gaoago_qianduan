@@ -217,6 +217,143 @@ const taskStatusClass = computed(() => {
   return 'text-cyber-yellow'
 })
 const sanitizedHtml = computed(() => DOMPurify.sanitize(props.generatedHtml || '', purifyConfig))
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function normalizeMarkdownStrongMarkers(markdown) {
+  const lines = String(markdown || '').split(/\r?\n/)
+  let inFence = false
+
+  return lines
+    .map((line) => {
+      if (/^\s*```/.test(line)) {
+        inFence = !inFence
+        return line
+      }
+      if (inFence || !line.includes('**')) return line
+
+      const inlineCode = []
+      const masked = line.replace(/(`+)([^`]*?)\1/g, (match) => {
+        inlineCode.push(match)
+        return `\u0000CODE${inlineCode.length - 1}\u0000`
+      })
+      const normalized = masked.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
+      return normalized.replace(/\u0000CODE(\d+)\u0000/g, (_match, index) => inlineCode[Number(index)] || '')
+    })
+    .join('\n')
+}
+
+function renderInlineMarkdown(value) {
+  const codeSegments = []
+  const masked = String(value || '').replace(/(`+)([^`]*?)\1/g, (_match, _ticks, code) => {
+    codeSegments.push(`<code>${escapeHtml(code)}</code>`)
+    return `\u0000CODE${codeSegments.length - 1}\u0000`
+  })
+
+  return escapeHtml(masked)
+    .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/&lt;strong&gt;([\s\S]*?)&lt;\/strong&gt;/g, '<strong>$1</strong>')
+    .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/\u0000CODE(\d+)\u0000/g, (_match, index) => codeSegments[Number(index)] || '')
+}
+
+function renderMarkdownHtml(markdown) {
+  const normalized = normalizeMarkdownStrongMarkers(markdown)
+  const lines = normalized.split(/\r?\n/)
+  const html = []
+  let paragraph = []
+  let listType = ''
+  let inFence = false
+  let fenceLines = []
+
+  function closeParagraph() {
+    if (!paragraph.length) return
+    html.push(`<p>${renderInlineMarkdown(paragraph.join(' '))}</p>`)
+    paragraph = []
+  }
+
+  function closeList() {
+    if (!listType) return
+    html.push(`</${listType}>`)
+    listType = ''
+  }
+
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      if (inFence) {
+        html.push(`<pre><code>${escapeHtml(fenceLines.join('\n'))}</code></pre>`)
+        fenceLines = []
+        inFence = false
+      } else {
+        closeParagraph()
+        closeList()
+        inFence = true
+      }
+      continue
+    }
+    if (inFence) {
+      fenceLines.push(line)
+      continue
+    }
+
+    if (!line.trim()) {
+      closeParagraph()
+      closeList()
+      continue
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/)
+    if (heading) {
+      closeParagraph()
+      closeList()
+      const level = Math.min(heading[1].length, 6)
+      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`)
+      continue
+    }
+
+    const quote = line.match(/^>\s?(.+)$/)
+    if (quote) {
+      closeParagraph()
+      closeList()
+      html.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`)
+      continue
+    }
+
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/)
+    const unordered = line.match(/^\s*[-*+]\s+(.+)$/)
+    if (ordered || unordered) {
+      closeParagraph()
+      const nextType = ordered ? 'ol' : 'ul'
+      if (listType && listType !== nextType) closeList()
+      if (!listType) {
+        listType = nextType
+        html.push(`<${listType}>`)
+      }
+      html.push(`<li>${renderInlineMarkdown((ordered || unordered)[1])}</li>`)
+      continue
+    }
+
+    closeList()
+    paragraph.push(line.trim())
+  }
+
+  closeParagraph()
+  closeList()
+  if (inFence) html.push(`<pre><code>${escapeHtml(fenceLines.join('\n'))}</code></pre>`)
+
+  return DOMPurify.sanitize(html.join('\n'), purifyConfig)
+}
+
+function qaAnswerHtml(answer) {
+  return renderMarkdownHtml(answer)
+}
 const resultTabs = [
   { key: 'report', label: '报告正文' },
   { key: 'sources', label: '信源概览' },
@@ -3050,7 +3187,7 @@ function exportPdf() {
                     <button type="button" @click="startQa(turn.question)">重新提问</button>
                   </div>
                   <div v-else class="qa-answer-box" :class="{ empty: !turn.answer }">
-                    <template v-if="turn.answer">{{ turn.answer }}</template>
+                    <div v-if="turn.answer" class="qa-answer-markdown" v-html="qaAnswerHtml(turn.answer)"></div>
                     <template v-else>正在准备回答...</template>
                   </div>
                 </article>
