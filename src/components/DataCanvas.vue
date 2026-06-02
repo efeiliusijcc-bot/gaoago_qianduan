@@ -190,15 +190,16 @@ const isHistoryDetailLoading = computed(() => props.detailLoading || props.phase
 const isHistoryDetailError = computed(() => props.phase === 'history-error' || Boolean(props.detailLoadError))
 const showLogDrawer = computed(() => props.isLogDrawerOpen && canOpenLogDrawer.value && !isHistoryDetailLoading.value && !isHistoryDetailError.value)
 const showNewReportButton = computed(() => props.isHistoryMode || props.phase === 'done' || props.phase === 'error')
-const canSubmitPlanning = computed(() => Boolean(props.reportType) && !props.isGenerating && !props.isPlanning)
+const effectiveReportType = computed(() => props.reportType || 'write-hb-k')
+const canSubmitPlanning = computed(() => Boolean(props.title?.trim()) && Boolean(effectiveReportType.value) && !props.isGenerating && !props.isPlanning)
 const titleLength = computed(() => props.title?.length || 0)
 const currentPlanStep = computed(() => props.reportPlan?.steps?.[props.planStepIndex] || null)
 const isLastPlanStep = computed(() => props.planStepIndex >= ((props.reportPlan?.steps?.length || 1) - 1))
 const reportTypeLabel = computed(() => {
-  if (props.reportType === 'person-intelligence-report') return '人物报'
-  if (props.reportType === 'risk-assessment-reports') return '风险报'
-  if (props.reportType === 'write-hb-k') return 'K报'
-  if (props.reportType === 'write-hb-hb') return 'HB报'
+  if (effectiveReportType.value === 'person-intelligence-report') return '人物报'
+  if (effectiveReportType.value === 'risk-assessment-reports') return '风险报'
+  if (effectiveReportType.value === 'write-hb-k') return 'K报'
+  if (effectiveReportType.value === 'write-hb-hb') return 'HB报'
   return props.job?.skill || '报告'
 })
 const taskStatusType = computed(() => {
@@ -390,7 +391,7 @@ const reportTypeOptions = [
     placeholder: '请输入需要编写的报告标题，例如：2026年东南亚区域安全态势研判',
   },
 ]
-const selectedReportType = computed(() => reportTypeOptions.find((item) => item.value === props.reportType) || reportTypeOptions[0])
+const selectedReportType = computed(() => reportTypeOptions.find((item) => item.value === effectiveReportType.value) || reportTypeOptions[0])
 const activeSelectedParameters = computed(() => {
   const params = selectedReportType.value?.params || []
   return props.activeParameters.filter((param) => params.includes(param))
@@ -585,6 +586,7 @@ function submitReport() {
     return
   }
   titleValidationError.value = ''
+  if (!props.reportType) emit('update:reportType', effectiveReportType.value)
   if (canSubmitPlanning.value) emit('generate')
 }
 

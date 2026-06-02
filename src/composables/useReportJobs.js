@@ -98,7 +98,7 @@ export function useReportJobs() {
   const currentView = ref('generator')
 
   const title = ref('')
-  const reportType = ref('')
+  const reportType = ref('write-hb-k')
   const countryOrRegion = ref('')
   const currentPosition = ref('')
   const scenario = ref('foreign_leader_visit')
@@ -106,7 +106,7 @@ export function useReportJobs() {
   const visitTime = ref('')
   const contextText = ref('')
   const parameterValues = ref({})
-  const activeParameters = ref([])
+  const activeParameters = ref(['关注方向', '时间范围', '地区 / 对象', '标签'])
   const outputDepth = ref('detailed')
 
   const isGenerating = ref(false)
