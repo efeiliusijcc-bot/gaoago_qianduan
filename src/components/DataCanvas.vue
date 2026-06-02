@@ -708,7 +708,8 @@ function handleQaInputKeydown(event) {
 function isQaThreadNearBottom() {
   const target = qaThreadRef.value
   if (!target) return true
-  return target.scrollHeight - target.scrollTop - target.clientHeight < 80
+  const rect = target.getBoundingClientRect()
+  return rect.bottom - window.innerHeight < 120
 }
 
 function scrollQaThreadToBottom() {
@@ -716,7 +717,7 @@ function scrollQaThreadToBottom() {
     const target = qaThreadRef.value
     if (!target) return
     requestAnimationFrame(() => {
-      target.scrollTop = target.scrollHeight
+      target.scrollIntoView({ block: 'end', behavior: 'smooth' })
       qaThreadShouldStick.value = true
       qaThreadHasNewContent.value = false
     })
@@ -729,7 +730,7 @@ function maybeScrollQaThreadToBottom() {
     if (!target) return
     if (qaThreadShouldStick.value || isQaThreadNearBottom()) {
       requestAnimationFrame(() => {
-        target.scrollTop = target.scrollHeight
+        target.scrollIntoView({ block: 'end', behavior: 'smooth' })
         qaThreadShouldStick.value = true
         qaThreadHasNewContent.value = false
       })
@@ -742,9 +743,20 @@ function maybeScrollQaThreadToBottom() {
 function handleQaThreadScroll(event) {
   const target = event.currentTarget
   if (!target) return
-  const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 80
-  qaThreadShouldStick.value = nearBottom
-  if (nearBottom) qaThreadHasNewContent.value = false
+  if (isQaThreadNearBottom()) {
+    qaThreadShouldStick.value = true
+    qaThreadHasNewContent.value = false
+  }
+}
+
+function handleQaPageScroll() {
+  if (homeMode.value !== 'qa') return
+  if (isQaThreadNearBottom()) {
+    qaThreadShouldStick.value = true
+    qaThreadHasNewContent.value = false
+  } else {
+    qaThreadShouldStick.value = false
+  }
 }
 
 function closeQaStream() {
@@ -2190,7 +2202,13 @@ watch(() => props.homeMode, (mode) => {
   })
 })
 
-onMounted(() => ensureReportDefaults())
+onMounted(() => {
+  ensureReportDefaults()
+  window.addEventListener('scroll', handleQaPageScroll, { passive: true })
+  nextTick(() => {
+    reportRef.value?.addEventListener('scroll', handleQaPageScroll, { passive: true })
+  })
+})
 
 watch(() => props.phase, (phase) => {
   if (phase === 'idle') {
@@ -2201,6 +2219,8 @@ watch(() => props.phase, (phase) => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleQaPageScroll)
+  reportRef.value?.removeEventListener('scroll', handleQaPageScroll)
   closeQaStream()
 })
 
@@ -2704,7 +2724,7 @@ function exportPdf() {
 
     <div ref="reportRef" class="main-scroll flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
-        <section class="main-content home-dual-mode w-full">
+        <section class="main-content home-dual-mode w-full" :class="{ 'qa-main-content': homeMode === 'qa' }">
           <div class="text-center">
             <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-[#0f172a]" style="font-size: 32px; font-weight: 800">AI深度编报工作台</h1>
             <p class="font-mono text-sm text-[#374151] mb-10" style="font-size: 14px; font-weight: 500">
@@ -2836,7 +2856,15 @@ function exportPdf() {
             </div>
           </div>
 
-          <div v-else class="qa-workspace" :class="{ 'has-thread': qaTurns.length }">
+          <div
+            v-else
+            class="qa-workspace"
+            :class="{
+              'has-thread': qaTurns.length,
+              'source-open': qaSourceSidebarOpen && canShowQaSourceSidebar,
+              'source-collapsed': !qaSourceSidebarOpen && canShowQaSourceSidebar,
+            }"
+          >
             <section v-if="!qaTurns.length" class="qa-hero">
               <div class="qa-hero-icon">⌕</div>
               <div>
@@ -2862,13 +2890,7 @@ function exportPdf() {
               </div>
             </section>
 
-            <div
-              class="qa-body-grid"
-              :class="{
-                'sidebar-open': qaSourceSidebarOpen && canShowQaSourceSidebar,
-                'sidebar-collapsed': !qaSourceSidebarOpen && canShowQaSourceSidebar,
-              }"
-            >
+            <div class="qa-body-grid">
               <div class="qa-main-pane">
                 <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
               <div v-if="qaStatus === 'idle' && !qaTurns.length" class="qa-empty-card">
@@ -3105,6 +3127,7 @@ function exportPdf() {
               </div>
             </section>
               </div>
+            </div>
 
               <aside
                 v-if="canShowQaSourceSidebar"
@@ -3238,7 +3261,6 @@ function exportPdf() {
                   <p v-else class="qa-reference-empty">暂无信源记录，请先完成一次知识问答。</p>
                 </section>
               </aside>
-            </div>
           </div>
         </section>
       </div>
