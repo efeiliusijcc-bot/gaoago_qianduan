@@ -2862,18 +2862,14 @@ function exportPdf() {
               </div>
             </section>
 
-            <div class="qa-body-grid" :class="{ 'sidebar-open': qaSourceSidebarOpen && canShowQaSourceSidebar }">
+            <div
+              class="qa-body-grid"
+              :class="{
+                'sidebar-open': qaSourceSidebarOpen && canShowQaSourceSidebar,
+                'sidebar-collapsed': !qaSourceSidebarOpen && canShowQaSourceSidebar,
+              }"
+            >
               <div class="qa-main-pane">
-                <button
-                  v-if="canShowQaSourceSidebar && !qaSourceSidebarOpen"
-                  class="qa-source-sidebar-tab"
-                  type="button"
-                  @click="openQaSourceSidebar"
-                >
-                  <span>参考来源</span>
-                  <strong>{{ qaReferenceItems.length }}</strong>
-                </button>
-
                 <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
               <div v-if="qaStatus === 'idle' && !qaTurns.length" class="qa-empty-card">
                 <div class="qa-empty-icon">?</div>
@@ -3113,10 +3109,22 @@ function exportPdf() {
               <aside
                 v-if="canShowQaSourceSidebar"
                 class="qa-source-sidebar"
-                :class="{ open: qaSourceSidebarOpen }"
+                :class="{ open: qaSourceSidebarOpen, collapsed: !qaSourceSidebarOpen }"
                 aria-label="参考来源"
               >
-                <section class="qa-reference-section qa-source-section">
+                <button
+                  v-if="!qaSourceSidebarOpen"
+                  class="qa-source-collapsed-rail"
+                  type="button"
+                  @click="openQaSourceSidebar"
+                  aria-label="展开参考来源"
+                >
+                  <span class="qa-source-rail-label">参考来源</span>
+                  <strong>{{ qaReferenceItems.length || 0 }}</strong>
+                  <i aria-hidden="true">‹</i>
+                </button>
+
+                <section v-if="qaSourceSidebarOpen" class="qa-reference-section qa-source-section">
                   <div class="qa-reference-header">
                     <div>
                       <div class="qa-reference-heading">参考来源</div>
@@ -3463,7 +3471,7 @@ function exportPdf() {
           </div>
         </div>
 
-        <div class="result-info-bar">
+        <div v-if="activeResultTab !== 'sources'" class="result-info-bar">
           <div v-for="item in resultInfoItems" :key="item[0]" class="result-info-item">
             <span>{{ item[0] }}</span>
             <strong>{{ item[1] }}</strong>
