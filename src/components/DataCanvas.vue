@@ -1424,22 +1424,22 @@ function workflowLogView(phase, rawLog, status) {
   const lowerPhase = String(phase || '').toLowerCase()
   const lower = String(rawLog || '').toLowerCase()
   const views = {
-    start: ['CONNECTING', '正在连接 AI 编报引擎', '系统正在建立任务通道。'],
-    running: ['TASK_START', 'AI 编报助手已启动', '任务已进入自动编报执行流程。'],
-    'openclaw:start': ['TASK_START', 'AI 编报助手已启动', '系统已开始处理本次编报任务。'],
+    start: ['CONNECTING', '任务准备', '系统正在整理编报要求并建立任务空间。'],
+    running: ['TASK_START', '任务准备', '系统正在整理编报要求并建立任务空间。'],
+    'openclaw:start': ['TASK_START', '任务准备', '系统正在整理编报要求并建立任务空间。'],
     'openclaw:complete': ['COMPLETED', '编报任务已完成', '系统已完成执行。'],
-    waiting_final_report: ['WAITING_REPORT', '等待最终报告文件', '系统已返回文件指针，正在等待最终报告落盘。'],
-    context_preparing: ['PREPARING', '准备任务上下文', '系统正在整理本次编报所需的主题、参数和上下文文件。'],
-    research_planning: ['PLANNING', '生成调研计划', 'AI 正在把编报主题拆解为可执行的调研计划。'],
-    research_dispatch: ['RESEARCH_TASK', '启动调研任务', '系统正在创建调研分组并分派资料采集任务。'],
-    research_waiting: ['WAITING_RESEARCH', '等待调研完成', '系统正在等待调研结果返回。'],
-    research_collecting: ['RESEARCHING', '执行资料调研', '调研子任务正在检索、读取和整理公开资料。'],
+    waiting_final_report: ['WAITING_REPORT', '报告生成', '系统正在生成报告正文并完成校验。'],
+    context_preparing: ['PREPARING', '任务准备', '系统正在整理编报要求并建立任务空间。'],
+    research_planning: ['PLANNING', '调研规划', '系统正在拆解调研方向并安排采集任务。'],
+    research_dispatch: ['RESEARCH_TASK', '资料采集', '系统正在采集公开资料并提取关键事实。'],
+    research_waiting: ['WAITING_RESEARCH', '资料采集', '系统正在采集公开资料并提取关键事实。'],
+    research_collecting: ['RESEARCHING', '资料采集', '系统正在采集公开资料并提取关键事实。'],
     research_complete: ['RESEARCH_DONE', '调研结果已返回', '调研已完成，系统正在收集结果。'],
-    synthesis_dispatch: ['SYNTHESIS_TASK', '启动撰稿任务', '系统正在生成报告正文。'],
-    synthesis_waiting: ['WAITING_SYNTHESIS', '等待撰稿完成', '系统正在等待报告正文完成。'],
-    synthesis_writing: ['WRITING', '整合并撰写报告', 'AI 正在整合调研材料并撰写最终报告。'],
-    report_verifying: ['VERIFYING', '校验报告文件', '系统正在确认 Markdown 报告文件已经生成且内容可用。'],
-    report_saving: ['SAVING', '保存报告文件', '报告正文已经生成，系统正在保存并登记报告文件。'],
+    synthesis_dispatch: ['SYNTHESIS_TASK', '报告生成', '系统正在生成报告正文并完成校验。'],
+    synthesis_waiting: ['WAITING_SYNTHESIS', '报告生成', '系统正在生成报告正文并完成校验。'],
+    synthesis_writing: ['WRITING', '报告生成', '系统正在生成报告正文并完成校验。'],
+    report_verifying: ['VERIFYING', '报告生成', '系统正在生成报告正文并完成校验。'],
+    report_saving: ['SAVING', '报告生成', '系统正在生成报告正文并完成校验。'],
     technical_detail: ['DETAIL', '处理技术细节', '系统正在读取配置或中间文件；可展开查看原始记录。'],
     done: ['COMPLETED', '编报任务已完成', '报告已生成，可以查看或导出。'],
     error: ['ERROR', '任务执行出现异常', '系统执行过程中出现异常，请查看技术详情或重试。'],
@@ -1453,11 +1453,11 @@ function workflowLogView(phase, rawLog, status) {
   if (lower.includes('sessions_spawn') && lower.includes('synthesis')) return { stage: 'SYNTHESIS_TASK', title: views.synthesis_dispatch[1], description: views.synthesis_dispatch[2], status }
   if (lower.includes('sessions_yield') && lower.includes('synthesis')) return { stage: 'WAITING_SYNTHESIS', title: views.synthesis_waiting[1], description: views.synthesis_waiting[2], status }
   if (lower.includes('sessions_yield')) return { stage: 'WAITING_RESEARCH', title: views.research_waiting[1], description: views.research_waiting[2], status }
-  if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) return { stage: 'PG_RECALL', title: 'PG 向量信源召回', description: '系统正在检索 PostgreSQL 向量信源库，并保存数据库信源与查询计划。', status }
-  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) return { stage: 'HARNESS_PLAN', title: '生成调研计划', description: '系统正在调用 Harness 生成 plan.json 与调研分组文件。', status }
-  if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research')) return { stage: 'RESEARCH_RUN', title: '执行调研子任务', description: 'Research 子任务正在检索、抓取并输出分组调研结果。', status }
-  if (lower.includes('consolidated.json')) return { stage: 'CONSOLIDATE', title: '合并调研素材', description: '系统正在汇总 PG 信源和公开调研结果，生成综合素材包。', status }
-  if (lower.includes('validate_report.py') || lower.includes('validate report')) return { stage: 'VALIDATE_SAVE', title: '校验并保存报告', description: '系统正在校验最终 Markdown 报告并保存任务结果。', status }
+  if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) return { stage: 'PG_RECALL', title: '信源筛选', description: '系统正在检索并筛选与主题相关的可信信源。', status }
+  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) return { stage: 'HARNESS_PLAN', title: '调研规划', description: '系统正在拆解调研方向并安排采集任务。', status }
+  if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research')) return { stage: 'RESEARCH_RUN', title: '资料采集', description: '系统正在采集公开资料并提取关键事实。', status }
+  if (lower.includes('consolidated.json')) return { stage: 'CONSOLIDATE', title: '素材整合', description: '系统正在汇总信源、证据和分析要点。', status }
+  if (lower.includes('validate_report.py') || lower.includes('validate report')) return { stage: 'VALIDATE_SAVE', title: '报告生成', description: '系统正在生成报告正文并完成校验。', status }
   if (lower.includes('group_') && lower.includes('.json')) return { stage: 'RESEARCH_TASK', title: views.research_dispatch[1], description: views.research_dispatch[2], status }
   if (lower.includes('context.json')) return { stage: 'PREPARING', title: views.context_preparing[1], description: views.context_preparing[2], status }
   if ((lower.includes('report_file') || lower.includes('final/report.md')) && !lower.includes('error')) return { stage: 'SAVING', title: views.report_saving[1], description: views.report_saving[2], status }
@@ -1535,8 +1535,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'CONNECTING',
-      title: '正在连接 AI 编报引擎',
-      description: '系统正在建立任务通道。',
+      title: '任务准备',
+      description: '系统正在整理编报要求并建立任务空间。',
     }
   }
 
@@ -1544,8 +1544,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'TASK_START',
-      title: 'AI 编报助手已启动',
-      description: '任务已进入自动编报执行流程。',
+      title: '任务准备',
+      description: '系统正在整理编报要求并建立任务空间。',
     }
   }
 
@@ -1553,8 +1553,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'PG_RECALL',
-      title: 'PG 向量信源召回',
-      description: '系统正在检索 PostgreSQL 向量信源库，并保存数据库信源与查询计划。',
+      title: '信源筛选',
+      description: '系统正在检索并筛选与主题相关的可信信源。',
     }
   }
 
@@ -1562,8 +1562,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'HARNESS_PLAN',
-      title: '生成调研计划',
-      description: '系统正在调用 Harness 生成 plan.json 与调研分组文件。',
+      title: '调研规划',
+      description: '系统正在拆解调研方向并安排采集任务。',
     }
   }
 
@@ -1571,8 +1571,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'RESEARCH_RUN',
-      title: '执行调研子任务',
-      description: 'Research 子任务正在检索、抓取并输出分组调研结果。',
+      title: '资料采集',
+      description: '系统正在采集公开资料并提取关键事实。',
     }
   }
 
@@ -1580,8 +1580,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'CONSOLIDATE',
-      title: '合并调研素材',
-      description: '系统正在汇总 PG 信源和公开调研结果，生成综合素材包。',
+      title: '素材整合',
+      description: '系统正在汇总信源、证据和分析要点。',
     }
   }
 
@@ -1589,8 +1589,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'VALIDATE_SAVE',
-      title: '校验并保存报告',
-      description: '系统正在校验最终 Markdown 报告并保存任务结果。',
+      title: '报告生成',
+      description: '系统正在生成报告正文并完成校验。',
     }
   }
 
@@ -1598,8 +1598,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'SYNTHESIS',
-      title: 'Synthesis 撰稿',
-      description: '撰稿子任务正在基于综合素材生成最终报告正文。',
+      title: '报告生成',
+      description: '系统正在生成报告正文并完成校验。',
     }
   }
 
@@ -1656,8 +1656,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'SAVING',
-      title: '正在生成报告文件',
-      description: '报告正文已生成，正在保存为文件。',
+      title: '报告生成',
+      description: '系统正在生成报告正文并完成校验。',
     }
   }
 
@@ -1991,144 +1991,109 @@ const technicalLogs = computed(() => {
   }))
 })
 
-const executionProgressText = computed(() => {
-  const logs = technicalLogs.value.map((log) => translateOpenClawLog(log))
-  return logs.map((log) => `${log.stage} ${log.title} ${log.description} ${log.raw || ''}`).join('\n').toLowerCase()
-})
+const userProgressStages = [
+  { key: 'prepare', number: '1', icon: '01', title: '任务准备', desc: '整理编报要求并建立任务空间' },
+  { key: 'source', number: '2', icon: '02', title: '信源筛选', desc: '检索并筛选与主题相关的可信信源' },
+  { key: 'plan', number: '3', icon: '03', title: '调研规划', desc: '拆解调研方向并安排采集任务' },
+  { key: 'research', number: '4', icon: '04', title: '资料采集', desc: '采集公开资料并提取关键事实' },
+  { key: 'consolidate', number: '5', icon: '05', title: '素材整合', desc: '汇总信源、证据和分析要点' },
+  { key: 'report', number: '6', icon: '06', title: '报告生成', desc: '生成报告正文并完成校验' },
+]
 
-function progressHas(...needles) {
-  const text = executionProgressText.value
-  return needles.some((needle) => text.includes(String(needle).toLowerCase()))
+const progressStageOrder = {
+  CONNECTING: 0,
+  TASK_START: 0,
+  AGENT_START: 0,
+  PREPARING: 0,
+  PG_RECALL: 1,
+  PLANNING: 2,
+  HARNESS_PLAN: 2,
+  RESEARCH_TASK: 3,
+  WAITING_RESEARCH: 3,
+  RESEARCHING: 3,
+  RESEARCH_RUN: 3,
+  RESEARCH_DONE: 3,
+  SEARCHING: 3,
+  EXTRACTING: 3,
+  CONSOLIDATE: 4,
+  ANALYZING: 4,
+  SYNTHESIS_TASK: 5,
+  WAITING_SYNTHESIS: 5,
+  SYNTHESIS: 5,
+  WRITING: 5,
+  VERIFYING: 5,
+  VALIDATE_SAVE: 5,
+  SAVING: 5,
+  WAITING_REPORT: 5,
+  COMPLETED: 5,
 }
 
-function resolveProgressStatus(step) {
+function rawProgressStageIndex(rawLog) {
+  const lower = String(rawLog || '').toLowerCase()
+  if (!lower) return -1
+  if (lower.includes('synthesis') || lower.includes('final/report.md') || lower.includes('validate_report.py') || lower.includes('report_file')) return 5
+  if (lower.includes('consolidated.json')) return 4
+  if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research') || lower.includes('sessions_yield')) return 3
+  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json') || lower.includes('group_')) return 2
+  if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) return 1
+  if (lower.includes('context.json') || lower.includes('preparing openclaw gateway') || lower.includes('running openclaw report-agent')) return 0
+  return -1
+}
+
+function logProgressStageIndex(log) {
+  const view = translateOpenClawLog(log)
+  const stageIndex = progressStageOrder[view.stage]
+  if (Number.isInteger(stageIndex)) return stageIndex
+  return rawProgressStageIndex(view.raw)
+}
+
+const resolvedProgressStageStatuses = computed(() => {
   const isDone = props.job?.status === 'succeeded' || props.phase === 'done'
   const isFailed = props.job?.status === 'failed' || props.phase === 'error'
-  if (isFailed && step.failWhenError) return 'error'
-  if (isDone || step.doneWhen()) return 'done'
-  if (step.currentWhen()) return 'current'
-  return 'waiting'
-}
+  let activeIndex = props.job?.jobId || props.phase === 'loading' ? 0 : -1
 
-const progressStageFlow = computed(() => {
-  const hasJob = Boolean(props.job?.jobId)
-  const stages = [
-    {
-      key: 'context',
-      number: '1',
-      title: '任务建档',
-      desc: '生成 context.json',
-      doneWhen: () => progressHas('PREPARING', 'PG_RECALL', 'HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED') || hasJob,
-      currentWhen: () => !hasJob || progressHas('CONNECTING', 'TASK_START', 'context.json'),
-    },
-    {
-      key: 'source',
-      number: '2',
-      title: '信源召回',
-      desc: 'PG 向量库预检索',
-      doneWhen: () => progressHas('HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED'),
-      currentWhen: () => progressHas('PG_RECALL', 'pg-sources', 'database_sources.json', 'vector_sources.json'),
-    },
-    {
-      key: 'plan',
-      number: '3',
-      title: '调研计划',
-      desc: 'Harness 生成分组',
-      doneWhen: () => progressHas('RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED'),
-      currentWhen: () => progressHas('HARNESS_PLAN', 'harness_cli.py plan', 'plan.json', 'group_'),
-    },
-    {
-      key: 'research',
-      number: '4',
-      title: '分组调研',
-      desc: 'Research 子任务执行',
-      doneWhen: () => progressHas('CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED'),
-      currentWhen: () => progressHas('RESEARCH_TASK', 'RESEARCH_RUN', 'WAITING_RESEARCH', 'harness_cli.py run', 'research_'),
-    },
-    {
-      key: 'report',
-      number: '5',
-      title: '撰稿校验',
-      desc: '合并素材并生成报告',
-      doneWhen: () => progressHas('COMPLETED'),
-      currentWhen: () => progressHas('CONSOLIDATE', 'SYNTHESIS', 'WRITING', 'VERIFYING', 'VALIDATE_SAVE', 'SAVING', 'final/report.md', '报告文件'),
-      failWhenError: true,
-    },
-  ]
-
-  const resolved = stages.map((stage) => ({ ...stage, status: resolveProgressStatus(stage) }))
-  if (!resolved.some((stage) => stage.status === 'current') && props.phase === 'loading') {
-    const firstWaiting = resolved.find((stage) => stage.status === 'waiting')
-    if (firstWaiting) firstWaiting.status = 'current'
+  for (const log of technicalLogs.value) {
+    const stageIndex = logProgressStageIndex(log)
+    if (stageIndex > activeIndex) activeIndex = stageIndex
   }
-  return resolved
+
+  if (isDone) return userProgressStages.map(() => 'done')
+
+  return userProgressStages.map((_, index) => {
+    if (activeIndex < 0) return 'waiting'
+    if (isFailed) {
+      if (index < activeIndex) return 'done'
+      if (index === activeIndex) return 'error'
+      return 'waiting'
+    }
+    if (index < activeIndex) return 'done'
+    if (index === activeIndex) return 'current'
+    return 'waiting'
+  })
 })
 
-const executionTaskCards = computed(() => {
-  const isDone = props.job?.status === 'succeeded' || props.phase === 'done'
-  const tasks = [
-    {
-      key: 'context',
-      icon: '01',
-      title: '创建任务上下文',
-      desc: '建立 Job 目录，写入 context.json',
-      doneWhen: () => Boolean(props.job?.jobId) || progressHas('PREPARING', 'PG_RECALL', 'HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
-      currentWhen: () => progressHas('PREPARING', 'context.json'),
-    },
-    {
-      key: 'pg-recall',
-      icon: '02',
-      title: 'PG信源预召回',
-      desc: '查询向量信源库并落盘信源计划',
-      doneWhen: () => isDone || progressHas('HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
-      currentWhen: () => progressHas('PG_RECALL', 'pg-sources', 'database_sources.json', 'vector_sources.json'),
-    },
-    {
-      key: 'harness-plan',
-      icon: '03',
-      title: 'Harness调研计划',
-      desc: '生成 plan.json 和 groups/group_*.json',
-      doneWhen: () => isDone || progressHas('RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
-      currentWhen: () => progressHas('HARNESS_PLAN', 'harness_cli.py plan', 'plan.json', 'group_'),
-    },
-    {
-      key: 'research-run',
-      icon: '04',
-      title: 'Research子任务',
-      desc: '并行检索抓取，生成 research_*.json',
-      doneWhen: () => isDone || progressHas('CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
-      currentWhen: () => progressHas('RESEARCH_TASK', 'RESEARCH_RUN', 'WAITING_RESEARCH', 'harness_cli.py run', 'research_'),
-    },
-    {
-      key: 'consolidate',
-      icon: '05',
-      title: '合并综合素材',
-      desc: '汇总 PG 信源与调研结果为 consolidated.json',
-      doneWhen: () => isDone || progressHas('SYNTHESIS', 'VALIDATE_SAVE', 'SAVING'),
-      currentWhen: () => progressHas('CONSOLIDATE', 'consolidated.json'),
-    },
-    {
-      key: 'synthesis',
-      icon: '06',
-      title: 'Synthesis撰稿',
-      desc: '生成 final/report.md 并校验保存',
-      doneWhen: () => isDone,
-      currentWhen: () => progressHas('SYNTHESIS', 'WRITING', 'VERIFYING', 'VALIDATE_SAVE', 'SAVING', 'final/report.md', '最终报告'),
-      failWhenError: true,
-    },
-  ]
+const progressStageFlow = computed(() => userProgressStages.map((stage, index) => ({
+  ...stage,
+  status: resolvedProgressStageStatuses.value[index],
+})))
 
-  return tasks.map((task) => ({
-    ...task,
-    status: resolveProgressStatus(task),
-  }))
+const executionTaskCards = computed(() => progressStageFlow.value.map((stage) => ({
+  ...stage,
+  icon: stage.icon || stage.number,
+})))
+
+const overallProgressStatus = computed(() => {
+  if (progressStageFlow.value.some((stage) => stage.status === 'error')) return 'error'
+  if (progressStageFlow.value.every((stage) => stage.status === 'done')) return 'done'
+  if (progressStageFlow.value.some((stage) => stage.status === 'current')) return 'current'
+  return 'waiting'
 })
 
 function progressStatusLabel(status) {
   if (status === 'done') return '已完成'
   if (status === 'current') return '进行中'
   if (status === 'error') return '异常'
-  return '待开始'
+  return '未开始'
 }
 
 function extractReportPlainText() {
@@ -3864,7 +3829,7 @@ function exportPdf() {
                   <strong>AI执行过程</strong>
                   <span>{{ taskProgressView.subtitle }}</span>
                 </div>
-                <span>{{ progressStatusLabel(progressStageFlow.find((stage) => stage.status === 'current')?.status || (progressStageFlow.every((stage) => stage.status === 'done') ? 'done' : 'waiting')) }}</span>
+                <span>{{ progressStatusLabel(overallProgressStatus) }}</span>
               </header>
               <div class="ai-process-grid">
                 <article
@@ -4301,7 +4266,7 @@ function exportPdf() {
                   <strong>AI执行过程</strong>
                   <span>{{ taskProgressView.subtitle }}</span>
                 </div>
-                <span>{{ progressStatusLabel(progressStageFlow.find((stage) => stage.status === 'current')?.status || (progressStageFlow.every((stage) => stage.status === 'done') ? 'done' : 'waiting')) }}</span>
+                <span>{{ progressStatusLabel(overallProgressStatus) }}</span>
               </header>
               <div class="ai-process-grid">
                 <article
