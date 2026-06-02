@@ -85,6 +85,9 @@ const K_SECTION_DEFS = [
   },
 ]
 
+const SOURCE_SCOPE_OPTION_IDS = new Set(K_SOURCE_SCOPE_STEP.options.map((option) => option.id))
+const SOURCE_SCOPE_OPTION_LABELS = new Set(K_SOURCE_SCOPE_STEP.options.map((option) => option.label))
+
 export function useReportJobs() {
   const currentView = ref('generator')
 
@@ -743,21 +746,35 @@ export function useReportJobs() {
         ...option,
         selected: true,
       }))
+      const useMatchedOptions = matchedOptions.length > 0 && !isSourceScopeOptionGroup(matchedOptions)
       return {
         id: matchedStep?.id || sectionDef.id,
         type: 'report_section',
         sectionKey: matchedStep?.sectionKey || sectionDef.id,
         title: sectionDef.sectionTitle,
         sectionTitle: sectionDef.sectionTitle,
-        description: matchedStep?.description || sectionDef.description,
+        description: useMatchedOptions ? (matchedStep?.description || sectionDef.description) : sectionDef.description,
         allowMultiple: true,
-        options: matchedOptions.length ? matchedOptions : fallbackOptions,
+        options: useMatchedOptions ? matchedOptions : fallbackOptions,
       }
     })
     return {
       ...plan,
       steps: [sourceStep, ...sectionSteps],
     }
+  }
+
+  function isSourceScopeOptionGroup(options) {
+    if (!Array.isArray(options) || options.length === 0) return false
+    const sourceLikeCount = options.filter((option) => {
+      const id = String(option?.id || '')
+      const label = String(option?.label || '')
+      const detail = String(option?.detail || '')
+      return SOURCE_SCOPE_OPTION_IDS.has(id) ||
+        SOURCE_SCOPE_OPTION_LABELS.has(label) ||
+        /(官方信源|主流媒体|智库研究|行业与数据材料|公开新闻|政府与机构|供应链与贸易数据|信源|媒体|智库|数据材料)/.test(`${label} ${detail}`)
+    }).length
+    return sourceLikeCount >= Math.min(2, options.length)
   }
 
   function buildContext(extraSections = []) {
