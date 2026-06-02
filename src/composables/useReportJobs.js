@@ -52,6 +52,8 @@ const K_SOURCE_SCOPE_STEP = {
 const K_SECTION_DEFS = [
   {
     id: 'k_basic_situation',
+    sectionKeys: ['basic_info', 'k_basic_situation'],
+    sectionTitles: ['基本情况', '一、基本情况'],
     sectionTitle: '基本情况',
     description: '梳理事件背景、关键主体、时间线和主要事实。',
     match: /(基本|背景|事实|情况|态势|概况)/,
@@ -63,6 +65,8 @@ const K_SECTION_DEFS = [
   },
   {
     id: 'k_china_risks',
+    sectionKeys: ['risk_to_china', 'k_china_risks'],
+    sectionTitles: ['涉我风险', '二、涉我风险'],
     sectionTitle: '涉我风险',
     description: '研判对我国利益、产业链、贸易、安全和舆论环境的影响。',
     match: /(涉我|风险|影响|挑战|安全|产业链|供应链|贸易)/,
@@ -74,6 +78,8 @@ const K_SECTION_DEFS = [
   },
   {
     id: 'k_countermeasures',
+    sectionKeys: ['countermeasures', 'k_countermeasures'],
+    sectionTitles: ['对策建议', '三、对策建议'],
     sectionTitle: '对策建议',
     description: '提出应对思路、工作建议和后续跟踪重点。',
     match: /(建议|对策|应对|处置|措施|跟踪)/,
@@ -731,11 +737,10 @@ export function useReportJobs() {
       ...K_SOURCE_SCOPE_STEP,
       options: K_SOURCE_SCOPE_STEP.options.map((option) => ({ ...option })),
     }
+    const usedStepIds = new Set()
     const sectionSteps = K_SECTION_DEFS.map((sectionDef) => {
-      const matchedStep = reportSectionSteps.find((step) => {
-        const text = `${step.sectionTitle || ''} ${step.title || ''} ${step.description || ''}`
-        return sectionDef.match.test(text)
-      })
+      const matchedStep = findKSectionStep(reportSectionSteps, sectionDef, usedStepIds)
+      if (matchedStep?.id) usedStepIds.add(matchedStep.id)
       const matchedOptions = (matchedStep?.options || []).map((option, index) => ({
         id: option.id || `${sectionDef.id}_${index}`,
         label: option.label || option.title || `方向 ${index + 1}`,
@@ -762,6 +767,31 @@ export function useReportJobs() {
       ...plan,
       steps: [sourceStep, ...sectionSteps],
     }
+  }
+
+  function normalizePlanSectionText(value) {
+    return String(value || '')
+      .replace(/^[一二三四五六七八九十]+[、.．]\s*/, '')
+      .replace(/\s+/g, '')
+      .trim()
+  }
+
+  function findKSectionStep(steps, sectionDef, usedStepIds = new Set()) {
+    const availableSteps = steps.filter((step) => !step?.id || !usedStepIds.has(step.id))
+    const keys = new Set(sectionDef.sectionKeys || [])
+    const titles = new Set((sectionDef.sectionTitles || [sectionDef.sectionTitle]).map(normalizePlanSectionText))
+    const exact = availableSteps.find((step) => {
+      const key = String(step?.sectionKey || '')
+      const sectionTitle = normalizePlanSectionText(step?.sectionTitle)
+      const title = normalizePlanSectionText(step?.title)
+      return (key && keys.has(key)) || (sectionTitle && titles.has(sectionTitle)) || (title && titles.has(title))
+    })
+    if (exact) return exact
+
+    return availableSteps.find((step) => {
+      const text = `${step?.sectionTitle || ''} ${step?.title || ''}`
+      return sectionDef.match.test(text)
+    })
   }
 
   function isSourceScopeOptionGroup(options) {
