@@ -181,6 +181,7 @@ const drawerLogHasNewItems = ref(false)
 let qaEventSource = null
 let qaStreamRecoveryTimer = null
 let sourceListRequestId = 0
+const qaStreamStates = new Map()
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
 const isLiveLogVisible = computed(() => props.phase === 'loading')
@@ -641,6 +642,7 @@ function qaSessionSnapshot(status = qaStatus.value) {
     answer: qaAnswer.value,
     messages: qaMessages.value,
     turns: qaTurns.value,
+    activeTurnId: activeQaTurnId.value,
     sourcesCount: qaReferenceItems.value.length,
     status,
     createdAt: qaSessionCreatedAt.value || new Date().toISOString(),
@@ -652,6 +654,53 @@ function qaSessionSnapshot(status = qaStatus.value) {
 function emitQaSession(status = qaStatus.value) {
   const session = qaSessionSnapshot(status)
   if (session) emit('qa-session-upsert', session)
+}
+
+function emitStoredQaSession(session, select = false) {
+  if (!session?.id) return
+  emit('qa-session-upsert', {
+    ...session,
+    select,
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+function qaStreamState(sessionId) {
+  if (!sessionId) return null
+  if (!qaStreamStates.has(sessionId)) {
+    qaStreamStates.set(sessionId, {
+      source: null,
+      recoveryTimer: null,
+      session: null,
+    })
+  }
+  return qaStreamStates.get(sessionId)
+}
+
+function rememberCurrentQaStreamSession(status = qaStatus.value) {
+  const session = qaSessionSnapshot(status)
+  const state = qaStreamState(session?.id)
+  if (state && session) state.session = session
+  return session
+}
+
+function updateStoredQaTurn(session, patch) {
+  if (!session) return session
+  const turns = Array.isArray(session.turns) ? [...session.turns] : []
+  if (!turns.length) return { ...session, ...patch }
+  const activeId = session.activeTurnId || turns[turns.length - 1]?.id
+  const nextTurns = turns.map((turn, index) => (
+    turn.id === activeId || (!activeId && index === turns.length - 1)
+      ? { ...turn, ...patch }
+      : turn
+  ))
+  const last = nextTurns[nextTurns.length - 1] || null
+  return {
+    ...session,
+    turns: nextTurns,
+    question: last?.question || session.question,
+    answer: last?.answer || session.answer || '',
+  }
 }
 
 function normalizeQaMessages(session) {
@@ -747,15 +796,17 @@ function qaSourceField(value, fallback = '--') {
 
 function restoreQaSession(session) {
   if (!session?.id) return
-  closeQaStream()
-  currentQaSessionId.value = session.sessionId || session.id
-  qaSessionCreatedAt.value = session.createdAt || new Date().toISOString()
-  qaMessages.value = normalizeQaMessages(session)
-  qaTurns.value = normalizeQaTurns(session)
+  const sessionId = session.sessionId || session.id
+  const liveSession = qaStreamStates.get(sessionId)?.session
+  const restored = liveSession || session
+  currentQaSessionId.value = sessionId
+  qaSessionCreatedAt.value = restored.createdAt || new Date().toISOString()
+  qaMessages.value = normalizeQaMessages(restored)
+  qaTurns.value = normalizeQaTurns(restored)
   syncCurrentQaFromTurns()
-  qaStatus.value = session.status || (session.answer ? 'done' : 'idle')
-  qaError.value = session.status === 'failed' ? '回答生成失败，请稍后重试。' : ''
-  qaReferencePayloads.value = Array.isArray(session.referencePayloads) ? session.referencePayloads : []
+  qaStatus.value = restored.status || (restored.answer ? 'done' : 'idle')
+  qaError.value = restored.status === 'failed' ? '回答生成失败，请稍后重试。' : ''
+  qaReferencePayloads.value = Array.isArray(restored.referencePayloads) ? restored.referencePayloads : []
   qaSourceSidebarDismissed.value = qaReferencePayloads.value.length > 0
   qaSourceSidebarOpen.value = false
   resetQaSourceView()
@@ -897,19 +948,27 @@ function handleQaPageScroll() {
   }
 }
 
-function closeQaStream() {
-  clearQaStreamRecoveryTimer()
-  if (qaEventSource) {
-    qaEventSource.close()
-    qaEventSource = null
+function closeQaStream(sessionId = currentQaSessionId.value) {
+  clearQaStreamRecoveryTimer(sessionId)
+  const state = qaStreamStates.get(sessionId)
+  if (state?.source) state.source.close()
+  if (qaEventSource === state?.source) qaEventSource = null
+  if (state) {
+    state.source = null
+    qaStreamStates.delete(sessionId)
   }
 }
 
-function clearQaStreamRecoveryTimer() {
-  if (qaStreamRecoveryTimer) {
-    window.clearTimeout(qaStreamRecoveryTimer)
-    qaStreamRecoveryTimer = null
-  }
+function closeAllQaStreams() {
+  for (const sessionId of Array.from(qaStreamStates.keys())) closeQaStream(sessionId)
+}
+
+function clearQaStreamRecoveryTimer(sessionId = currentQaSessionId.value) {
+  const state = qaStreamStates.get(sessionId)
+  const timer = state?.recoveryTimer || (sessionId === currentQaSessionId.value ? qaStreamRecoveryTimer : null)
+  if (timer) window.clearTimeout(timer)
+  if (state) state.recoveryTimer = null
+  if (sessionId === currentQaSessionId.value) qaStreamRecoveryTimer = null
 }
 
 function scheduleQaStreamRecoveryFailure() {
@@ -932,6 +991,53 @@ function scheduleQaStreamRecoveryFailure() {
     emitQaSession('failed')
     closeQaStream()
   }, 90000)
+}
+
+function scheduleQaStreamRecoveryFailureForSession(sessionId = currentQaSessionId.value) {
+  const state = qaStreamState(sessionId)
+  if (!state || state.recoveryTimer) return
+  const timer = window.setTimeout(() => {
+    const latest = qaStreamStates.get(sessionId)
+    if (latest) latest.recoveryTimer = null
+    if (sessionId === currentQaSessionId.value) qaStreamRecoveryTimer = null
+
+    if (sessionId === currentQaSessionId.value) {
+      if (qaStatus.value === 'done') return
+      if (qaAnswer.value.trim()) {
+        qaStatus.value = 'done'
+        updateActiveQaTurn({ status: 'done' })
+        appendQaAssistantMessage()
+        emitQaSession('done')
+        rememberCurrentQaStreamSession('done')
+        closeQaStream(sessionId)
+        return
+      }
+      qaStatus.value = 'failed'
+      qaError.value = '连接中断，可重新提问。'
+      pushQaTechnical({ type: 'error', message: qaError.value })
+      updateActiveQaTurn({ status: 'failed' })
+      emitQaSession('failed')
+      rememberCurrentQaStreamSession('failed')
+      closeQaStream(sessionId)
+      return
+    }
+
+    const session = latest?.session
+    if (!session) return
+    if (String(session.answer || '').trim()) {
+      const doneSession = updateStoredQaTurn({ ...session, status: 'done' }, { status: 'done' })
+      latest.session = doneSession
+      emitStoredQaSession(doneSession, false)
+      closeQaStream(sessionId)
+      return
+    }
+    const failedSession = updateStoredQaTurn({ ...session, status: 'failed' }, { status: 'failed' })
+    latest.session = failedSession
+    emitStoredQaSession(failedSession, false)
+    closeQaStream(sessionId)
+  }, 90000)
+  state.recoveryTimer = timer
+  if (sessionId === currentQaSessionId.value) qaStreamRecoveryTimer = timer
 }
 
 function sanitizeQaText(value, maxLength = 240) {
@@ -965,7 +1071,7 @@ function pushQaTechnical(event) {
   if (qaTechnicalEvents.value.length > 80) qaTechnicalEvents.value = qaTechnicalEvents.value.slice(-80)
 }
 
-function collectQaReferences(event) {
+function extractQaReferencePayloads(event) {
   const candidates = [
     event?.sources,
     event?.source,
@@ -981,6 +1087,11 @@ function collectQaReferences(event) {
     if (Array.isArray(candidate)) nextItems.push(...candidate)
     else if (candidate && typeof candidate === 'object') nextItems.push(candidate)
   }
+  return nextItems
+}
+
+function collectQaReferences(event) {
+  const nextItems = extractQaReferencePayloads(event)
   if (!nextItems.length) return
   qaReferencePayloads.value = [...qaReferencePayloads.value, ...nextItems].slice(-40)
 }
@@ -1019,6 +1130,77 @@ function handleQaEvent(event) {
     updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     closeQaStream()
+  }
+}
+
+function handleQaEventForSession(sessionId, event) {
+  if (!event || typeof event !== 'object') return
+  if (sessionId === currentQaSessionId.value) {
+    handleQaEvent(event)
+    if (qaStreamStates.has(sessionId)) rememberCurrentQaStreamSession(qaStatus.value)
+    return
+  }
+
+  const state = qaStreamStates.get(sessionId)
+  if (!state?.session) return
+  const references = extractQaReferencePayloads(event)
+  let session = references.length
+    ? {
+        ...state.session,
+        referencePayloads: [...(state.session.referencePayloads || []), ...references].slice(-40),
+      }
+    : state.session
+
+  if (event.type === 'text_delta') {
+    const turns = Array.isArray(session.turns) ? session.turns : []
+    const activeTurn = turns.find((turn) => turn.id === session.activeTurnId) || turns[turns.length - 1] || {}
+    session = updateStoredQaTurn(
+      { ...session, status: 'streaming' },
+      {
+        answer: `${activeTurn.answer || ''}${sanitizeQaAnswerDelta(event.content || '')}`,
+        status: 'streaming',
+      },
+    )
+    state.session = session
+    emitStoredQaSession(session, false)
+    return
+  }
+
+  if (event.type === 'token') {
+    state.session = session
+    return
+  }
+
+  if (event.type === 'tool_start' || event.type === 'tool_delta' || event.type === 'tool_end' || event.type === 'stage' || event.type === 'status') {
+    session = {
+      ...session,
+      status: session.status === 'searching' ? 'integrating' : session.status,
+    }
+    state.session = session
+    emitStoredQaSession(session, false)
+    return
+  }
+
+  if (event.type === 'done') {
+    session = updateStoredQaTurn({ ...session, status: 'done' }, { status: 'done' })
+    const answer = String(session.answer || '').trim()
+    const messages = Array.isArray(session.messages) ? [...session.messages] : [QA_SYSTEM_MESSAGE]
+    const last = messages[messages.length - 1]
+    if (answer && !(last?.role === 'assistant' && last.content === answer)) {
+      messages.push({ role: 'assistant', content: answer })
+    }
+    session = { ...session, messages }
+    state.session = session
+    emitStoredQaSession(session, false)
+    closeQaStream(sessionId)
+    return
+  }
+
+  if (event.type === 'error') {
+    session = updateStoredQaTurn({ ...session, status: 'failed' }, { status: 'failed' })
+    state.session = session
+    emitStoredQaSession(session, false)
+    closeQaStream(sessionId)
   }
 }
 
@@ -1061,31 +1243,57 @@ async function startQa(questionOverride = '') {
   qaThreadHasNewContent.value = false
   qaStatus.value = 'searching'
   emitQaSession('streaming')
+  const sessionId = currentQaSessionId.value
+  const state = qaStreamState(sessionId)
+  if (state) state.session = qaSessionSnapshot('streaming')
   scrollQaThreadToBottom()
 
   try {
     const response = await createChatCompletion({
       stream: true,
-      sessionId: currentQaSessionId.value,
+      sessionId,
       messages: qaMessages.value,
     })
     const url = getChatStreamUrl(response?.eventsUrl)
     if (!url) throw new Error('未获得回答通道')
-    qaEventSource = new EventSource(url)
-    qaEventSource.onmessage = (message) => {
-      clearQaStreamRecoveryTimer()
+    const source = new EventSource(url)
+    if (state) state.source = source
+    if (sessionId === currentQaSessionId.value) qaEventSource = source
+    source.onmessage = (message) => {
+      clearQaStreamRecoveryTimer(sessionId)
       try {
-        handleQaEvent(JSON.parse(message.data))
+        handleQaEventForSession(sessionId, JSON.parse(message.data))
       } catch {
         pushQaTechnical({ type: 'message', message: '收到一条无法解析的系统事件' })
       }
     }
-    qaEventSource.onerror = () => {
+    source.onerror = () => {
+      if (sessionId !== currentQaSessionId.value) {
+        const latest = qaStreamStates.get(sessionId)
+        const session = latest?.session
+        if (!session) return
+        if (String(session.answer || '').trim()) {
+          const doneSession = updateStoredQaTurn({ ...session, status: 'done' }, { status: 'done' })
+          latest.session = doneSession
+          emitStoredQaSession(doneSession, false)
+          closeQaStream(sessionId)
+          return
+        }
+        const pendingSession = {
+          ...session,
+          status: session.status === 'searching' ? 'integrating' : session.status,
+        }
+        latest.session = pendingSession
+        emitStoredQaSession(pendingSession, false)
+        scheduleQaStreamRecoveryFailureForSession(sessionId)
+        return
+      }
       if (qaStatus.value !== 'done' && !(qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
         if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
         pushQaTechnical({ type: 'status', message: '连接不稳定，正在尝试恢复回答。' })
         emitQaSession(qaStatus.value)
-        scheduleQaStreamRecoveryFailure()
+        rememberCurrentQaStreamSession(qaStatus.value)
+        scheduleQaStreamRecoveryFailureForSession(sessionId)
         return
       }
       if (qaStatus.value === 'done' || (qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
@@ -1093,7 +1301,8 @@ async function startQa(questionOverride = '') {
         updateActiveQaTurn({ status: 'done' })
         appendQaAssistantMessage()
         emitQaSession('done')
-        closeQaStream()
+        rememberCurrentQaStreamSession('done')
+        closeQaStream(sessionId)
         return
       }
       if (qaStatus.value !== 'done') {
@@ -1102,8 +1311,9 @@ async function startQa(questionOverride = '') {
         pushQaTechnical({ type: 'error', message: qaError.value })
         updateActiveQaTurn({ status: 'failed' })
         emitQaSession('failed')
+        rememberCurrentQaStreamSession('failed')
       }
-      closeQaStream()
+      closeQaStream(sessionId)
     }
   } catch (error) {
     qaStatus.value = 'failed'
@@ -1111,7 +1321,8 @@ async function startQa(questionOverride = '') {
     pushQaTechnical({ type: 'error', message: error instanceof Error ? error.message : String(error) })
     updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
-    closeQaStream()
+    rememberCurrentQaStreamSession('failed')
+    closeQaStream(sessionId)
   }
 }
 
@@ -2457,7 +2668,7 @@ watch(() => props.phase, (phase) => {
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleQaPageScroll)
   reportRef.value?.removeEventListener('scroll', handleQaPageScroll)
-  closeQaStream()
+  closeAllQaStreams()
 })
 
 function htmlToPlainText(html) {
