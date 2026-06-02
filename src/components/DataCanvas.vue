@@ -487,9 +487,10 @@ function selectHomeMode(mode) {
   qaImportNotice.value = ''
   qaValidationError.value = ''
   if (mode === 'report') ensureReportDefaults()
+  scrollToTop()
   nextTick(() => {
-    if (mode === 'qa') qaInputRef.value?.focus()
-    if (mode === 'report') titleInputRef.value?.focus()
+    if (mode === 'qa') qaInputRef.value?.focus({ preventScroll: true })
+    if (mode === 'report') titleInputRef.value?.focus({ preventScroll: true })
   })
 }
 
@@ -2725,14 +2726,14 @@ function exportPdf() {
     <div ref="reportRef" class="main-scroll flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
         <section class="main-content home-dual-mode w-full" :class="{ 'qa-main-content': homeMode === 'qa' }">
-          <div class="text-center">
+          <div v-if="homeMode === 'report'" class="text-center">
             <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-[#0f172a]" style="font-size: 32px; font-weight: 800">AI深度编报工作台</h1>
             <p class="font-mono text-sm text-[#374151] mb-10" style="font-size: 14px; font-weight: 500">
               选择 K报编写生成正式编报，或进入知识问答快速检索和整合信源信息。
             </p>
           </div>
 
-          <div class="home-mode-grid mb-8">
+          <div v-if="homeMode === 'report'" class="home-mode-grid mb-8">
             <button
               v-for="card in featureCards"
               :key="card.key"
@@ -2750,6 +2751,31 @@ function exportPdf() {
               </div>
               <div class="home-mode-action">{{ card.action }}</div>
             </button>
+          </div>
+
+          <div v-if="homeMode === 'qa'" class="workspace-mode-tabs-wrap">
+            <div class="workspace-mode-tabs" role="tablist" aria-label="工作模式切换">
+              <button
+                class="workspace-mode-tab"
+                :class="{ active: homeMode === 'report' }"
+                type="button"
+                role="tab"
+                :aria-selected="homeMode === 'report'"
+                @click="selectHomeMode('report')"
+              >
+                K报编写
+              </button>
+              <button
+                class="workspace-mode-tab"
+                :class="{ active: homeMode === 'qa' }"
+                type="button"
+                role="tab"
+                :aria-selected="homeMode === 'qa'"
+                @click="selectHomeMode('qa')"
+              >
+                知识问答
+              </button>
+            </div>
           </div>
 
           <div v-if="homeMode === 'report'" class="input-panel mx-auto text-left p-5 md:p-6">
