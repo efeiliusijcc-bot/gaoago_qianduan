@@ -723,12 +723,13 @@ export function useReportJobs() {
   function normalizeKReportPlan(plan) {
     if (reportType.value !== 'write-hb-k' || !plan) return plan
     const originalSteps = Array.isArray(plan.steps) ? plan.steps : []
+    const reportSectionSteps = originalSteps.filter((step) => step?.type === 'report_section')
     const sourceStep = {
       ...K_SOURCE_SCOPE_STEP,
       options: K_SOURCE_SCOPE_STEP.options.map((option) => ({ ...option })),
     }
     const sectionSteps = K_SECTION_DEFS.map((sectionDef) => {
-      const matchedStep = originalSteps.find((step) => {
+      const matchedStep = reportSectionSteps.find((step) => {
         const text = `${step.sectionTitle || ''} ${step.title || ''} ${step.description || ''}`
         return sectionDef.match.test(text)
       })
