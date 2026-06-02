@@ -885,6 +885,19 @@ canvas {
   width: 100%;
   max-width: none;
   padding-inline: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-scroll:has(.qa-main-content) {
+  overflow: hidden;
+}
+
+.main-scroll:has(.qa-main-content) > .min-h-full {
+  height: 100%;
+  min-height: 0;
 }
 
 .archive-main {
@@ -1293,6 +1306,7 @@ canvas {
 .workspace-mode-tabs-wrap {
   display: flex;
   justify-content: center;
+  flex-shrink: 0;
   width: 100%;
   margin: 0 0 18px;
 }
@@ -1343,9 +1357,13 @@ canvas {
   grid-template-columns: minmax(0, 1fr);
   column-gap: 24px;
   row-gap: 16px;
-  align-items: start;
-  min-height: calc(100vh - 230px);
-  padding-bottom: 8px;
+  align-items: stretch;
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  padding-bottom: 0;
+  overflow: hidden;
   transition: grid-template-columns .22s ease;
 }
 
@@ -1370,24 +1388,31 @@ canvas {
 .qa-body-grid {
   display: block;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .qa-main-pane {
   width: min(100%, 920px);
   margin: 0 auto;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  overflow: hidden;
 }
 
 .qa-source-sidebar {
   grid-column: 2;
   align-self: stretch;
   min-width: 0;
-  position: sticky;
-  top: 0;
+  min-height: 0;
+  height: 100%;
+  position: relative;
   z-index: 1;
   overflow: hidden;
   opacity: 1;
@@ -1413,7 +1438,8 @@ canvas {
 
 .qa-source-collapsed-rail {
   width: 56px;
-  min-height: min(620px, calc(100vh - 280px));
+  min-height: 0;
+  height: 100%;
   padding: 16px 8px;
   border: 1px solid rgba(37, 99, 235, 0.24);
   border-radius: 18px;
@@ -1468,6 +1494,7 @@ canvas {
 
 .qa-source-sidebar .qa-reference-section {
   height: 100%;
+  max-height: 100%;
   margin: 0;
   padding: 16px;
   border: 1px solid rgba(148, 163, 184, 0.22);
@@ -1619,10 +1646,12 @@ canvas {
   position: relative;
   flex: 1;
   width: 100%;
-  min-height: calc(100vh - 300px);
-  overflow: visible;
-  padding: 8px 0 18px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 8px 18px;
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 .qa-empty-card {
@@ -2237,9 +2266,9 @@ canvas {
 }
 
 .qa-composer-wrap {
-  position: sticky;
-  bottom: 0;
+  position: relative;
   z-index: 5;
+  flex-shrink: 0;
   width: 100%;
   padding: 14px 0 2px;
   background: linear-gradient(180deg, rgba(241, 245, 249, 0), rgba(241, 245, 249, 0.94) 34%, rgba(241, 245, 249, 0.98));
@@ -4669,6 +4698,10 @@ body {
 .main-content.home-dual-mode.qa-main-content {
   width: 100% !important;
   max-width: none !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 .home-dual-mode > .text-center {
