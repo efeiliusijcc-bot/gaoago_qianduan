@@ -2891,38 +2891,30 @@ function exportPdf() {
               'source-collapsed': !qaSourceSidebarOpen && canShowQaSourceSidebar,
             }"
           >
-            <section v-if="!qaTurns.length" class="qa-hero">
-              <div class="qa-hero-icon">⌕</div>
-              <div>
-                <h2>知识问答</h2>
-                <p>基于知识库检索与信息整合，快速获取专业、可追溯的回答。</p>
-              </div>
-            </section>
-
-            <section v-if="!qaTurns.length" class="qa-recommendations">
-              <div class="qa-recommend-heading">
-                <span>推荐问题</span>
-                <button type="button" @click="rotateRecommendedQuestions">换一批</button>
-              </div>
-              <div class="qa-recommend-list">
-                <button
-                  v-for="question in visibleRecommendedQuestions"
-                  :key="question"
-                  type="button"
-                  @click="fillRecommendedQuestion(question)"
-                >
-                  {{ question }}
-                </button>
-              </div>
-            </section>
-
             <div class="qa-body-grid">
               <div class="qa-main-pane">
                 <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
               <div v-if="qaStatus === 'idle' && !qaTurns.length" class="qa-empty-card">
-                <div class="qa-empty-icon">?</div>
-                <h3>您可以尝试提问</h3>
-                <p>系统将检索知识库中的信源资料，并整合生成回答。</p>
+                <div class="qa-empty-icon">⌕</div>
+                <h3>知识问答</h3>
+                <p>基于知识库检索与信息整合，快速获取专业、可追溯的回答。</p>
+
+                <section class="qa-recommendations">
+                  <div class="qa-recommend-heading">
+                    <span>推荐问题</span>
+                    <button type="button" @click="rotateRecommendedQuestions">换一批</button>
+                  </div>
+                  <div class="qa-recommend-list">
+                    <button
+                      v-for="question in visibleRecommendedQuestions"
+                      :key="question"
+                      type="button"
+                      @click="fillRecommendedQuestion(question)"
+                    >
+                      {{ question }}
+                    </button>
+                  </div>
+                </section>
               </div>
 
               <template v-for="turn in qaTurns" :key="turn.id">
