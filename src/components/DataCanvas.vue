@@ -1585,25 +1585,137 @@ const technicalLogs = computed(() => {
   }))
 })
 
-const readableProgressSteps = computed(() => {
+const executionProgressText = computed(() => {
   const logs = technicalLogs.value.map((log) => translateOpenClawLog(log))
-  const logText = logs.map((log) => `${log.stage} ${log.title} ${log.description}`).join('\n').toLowerCase()
+  return logs.map((log) => `${log.stage} ${log.title} ${log.description} ${log.raw || ''}`).join('\n').toLowerCase()
+})
+
+function progressHas(...needles) {
+  const text = executionProgressText.value
+  return needles.some((needle) => text.includes(String(needle).toLowerCase()))
+}
+
+function resolveProgressStatus(step) {
   const isDone = props.job?.status === 'succeeded' || props.phase === 'done'
-  const has = (...needles) => needles.some((needle) => logText.includes(String(needle).toLowerCase()))
-  const steps = [
-    { key: 'submitted', label: '任务已提交', done: Boolean(props.job?.jobId) },
-    { key: 'searched', label: '正在检索公开资料', done: isDone || has('SEARCHING', 'RESEARCH_DONE', '信源', '检索') },
-    { key: 'extracted', label: '正在提取重点网页正文', done: isDone || has('EXTRACTING', '正文抽取', '正文') },
-    { key: 'evidence', label: '正在整理证据材料', done: isDone || has('ANALYZING', '证据', '材料') },
-    { key: 'drafting', label: '正在生成报告初稿', done: isDone || has('WRITING', '撰写', '初稿', '报告') },
-    { key: 'verified', label: '正在进行质量校验', done: isDone || has('VERIFYING', '校验') },
-    { key: 'done', label: '报告已生成', done: isDone },
+  const isFailed = props.job?.status === 'failed' || props.phase === 'error'
+  if (isFailed && step.failWhenError) return 'error'
+  if (isDone || step.doneWhen()) return 'done'
+  if (step.currentWhen()) return 'current'
+  return 'waiting'
+}
+
+const progressStageFlow = computed(() => {
+  const hasJob = Boolean(props.job?.jobId)
+  const stages = [
+    {
+      key: 'question',
+      number: '1',
+      title: '提出问题',
+      desc: '明确编报主题',
+      doneWhen: () => hasJob,
+      currentWhen: () => !hasJob,
+    },
+    {
+      key: 'research',
+      number: '2',
+      title: '深度调研',
+      desc: '多源信息检索分析',
+      doneWhen: () => progressHas('RESEARCH_DONE', 'ANALYZING', 'WRITING', 'VERIFYING', 'SAVING', 'COMPLETED'),
+      currentWhen: () => progressHas('SEARCHING', 'RESEARCHING', 'EXTRACTING', '检索', '网页正文', '资料调研'),
+    },
+    {
+      key: 'analysis',
+      number: '3',
+      title: '分析推理',
+      desc: '归纳总结形成观点',
+      doneWhen: () => progressHas('WRITING', 'VERIFYING', 'SAVING', 'COMPLETED'),
+      currentWhen: () => progressHas('ANALYZING', '证据', '材料', '交叉分析'),
+    },
+    {
+      key: 'report',
+      number: '4',
+      title: '生成报告',
+      desc: '输出结构化报告',
+      doneWhen: () => progressHas('COMPLETED'),
+      currentWhen: () => progressHas('WRITING', 'SYNTHESIS', 'VERIFYING', 'SAVING', '报告文件', '撰写'),
+      failWhenError: true,
+    },
   ]
-  return steps.map((step, index) => ({
-    ...step,
-    current: !step.done && steps.slice(0, index).every((item) => item.done),
+
+  const resolved = stages.map((stage) => ({ ...stage, status: resolveProgressStatus(stage) }))
+  if (!resolved.some((stage) => stage.status === 'current') && props.phase === 'loading') {
+    const firstWaiting = resolved.find((stage) => stage.status === 'waiting')
+    if (firstWaiting) firstWaiting.status = 'current'
+  }
+  return resolved
+})
+
+const executionTaskCards = computed(() => {
+  const isDone = props.job?.status === 'succeeded' || props.phase === 'done'
+  const tasks = [
+    {
+      key: 'planning',
+      icon: '01',
+      title: '任务规划',
+      desc: '拆解主题、确认调研路径',
+      doneWhen: () => Boolean(props.job?.jobId) || progressHas('PLANNING', 'PREPARING'),
+      currentWhen: () => progressHas('PLANNING', 'PREPARING', '上下文'),
+    },
+    {
+      key: 'search',
+      icon: '02',
+      title: '信息检索',
+      desc: '公开资料与重点信源发现',
+      doneWhen: () => isDone || progressHas('RESEARCH_DONE', 'EXTRACTING', 'ANALYZING', 'WRITING'),
+      currentWhen: () => progressHas('SEARCHING', 'RESEARCHING', '检索', '公开资料'),
+    },
+    {
+      key: 'screening',
+      icon: '03',
+      title: '信息筛选',
+      desc: '识别高价值材料并去噪',
+      doneWhen: () => isDone || progressHas('EXTRACTING', 'ANALYZING', 'WRITING', 'VERIFYING'),
+      currentWhen: () => progressHas('RESEARCH_DONE', '筛选', '高价值', '重点来源'),
+    },
+    {
+      key: 'analysis',
+      icon: '04',
+      title: '数据分析',
+      desc: '归纳、交叉验证和研判',
+      doneWhen: () => isDone || progressHas('WRITING', 'VERIFYING', 'SAVING'),
+      currentWhen: () => progressHas('ANALYZING', '证据', '材料', '交叉分析'),
+    },
+    {
+      key: 'reasoning',
+      icon: '05',
+      title: '观点推理',
+      desc: '形成判断、风险点和结论',
+      doneWhen: () => isDone || progressHas('WRITING', 'VERIFYING', 'SAVING'),
+      currentWhen: () => progressHas('WRITING', '撰写', '初稿'),
+    },
+    {
+      key: 'report',
+      icon: '06',
+      title: '报告生成',
+      desc: '生成正文、校验并保存',
+      doneWhen: () => isDone,
+      currentWhen: () => progressHas('VERIFYING', 'SAVING', '报告文件', '最终报告'),
+      failWhenError: true,
+    },
+  ]
+
+  return tasks.map((task) => ({
+    ...task,
+    status: resolveProgressStatus(task),
   }))
 })
+
+function progressStatusLabel(status) {
+  if (status === 'done') return '已完成'
+  if (status === 'current') return '进行中'
+  if (status === 'error') return '异常'
+  return '待开始'
+}
 
 function extractReportPlainText() {
   return htmlToPlainText(props.generatedHtml || '')
@@ -3315,15 +3427,46 @@ function exportPdf() {
             <div class="source-task-pill">{{ taskSummaryText }}</div>
           </div>
 
-          <div class="progress-timeline execution-progress-timeline">
-            <div
-              v-for="step in readableProgressSteps"
-              :key="step.key"
-              class="progress-step"
-              :class="{ done: step.done, current: step.current }"
-            >
-              <span class="progress-dot"></span>
-              <span>{{ step.label }}</span>
+          <div class="task-progress-panel execution-progress-timeline">
+            <div class="task-stage-flow">
+              <article
+                v-for="stage in progressStageFlow"
+                :key="stage.key"
+                class="task-stage-card"
+                :class="`task-stage-${stage.status}`"
+              >
+                <div class="task-stage-badge">{{ stage.status === 'done' ? '✓' : stage.number }}</div>
+                <div class="task-stage-copy">
+                  <strong>{{ stage.title }}</strong>
+                  <span>{{ stage.desc }}</span>
+                </div>
+                <em>{{ progressStatusLabel(stage.status) }}</em>
+              </article>
+            </div>
+
+            <div class="ai-process-panel">
+              <header class="ai-process-header">
+                <div>
+                  <strong>AI执行过程</strong>
+                  <span>{{ taskProgressView.subtitle }}</span>
+                </div>
+                <span>{{ progressStatusLabel(progressStageFlow.find((stage) => stage.status === 'current')?.status || (progressStageFlow.every((stage) => stage.status === 'done') ? 'done' : 'waiting')) }}</span>
+              </header>
+              <div class="ai-process-grid">
+                <article
+                  v-for="task in executionTaskCards"
+                  :key="task.key"
+                  class="ai-process-card"
+                  :class="`ai-process-${task.status}`"
+                >
+                  <div class="ai-process-icon">{{ task.status === 'done' ? '✓' : task.icon }}</div>
+                  <div>
+                    <strong>{{ task.title }}</strong>
+                    <p>{{ task.desc }}</p>
+                  </div>
+                  <span>{{ progressStatusLabel(task.status) }}</span>
+                </article>
+              </div>
             </div>
           </div>
 
@@ -3721,15 +3864,46 @@ function exportPdf() {
         </section>
 
         <section v-else class="result-tab-panel">
-          <div class="progress-timeline">
-            <div
-              v-for="step in readableProgressSteps"
-              :key="step.key"
-              class="progress-step"
-              :class="{ done: step.done, current: step.current }"
-            >
-              <span></span>
-              <div>{{ step.label }}</div>
+          <div class="task-progress-panel">
+            <div class="task-stage-flow">
+              <article
+                v-for="stage in progressStageFlow"
+                :key="stage.key"
+                class="task-stage-card"
+                :class="`task-stage-${stage.status}`"
+              >
+                <div class="task-stage-badge">{{ stage.status === 'done' ? '✓' : stage.number }}</div>
+                <div class="task-stage-copy">
+                  <strong>{{ stage.title }}</strong>
+                  <span>{{ stage.desc }}</span>
+                </div>
+                <em>{{ progressStatusLabel(stage.status) }}</em>
+              </article>
+            </div>
+
+            <div class="ai-process-panel">
+              <header class="ai-process-header">
+                <div>
+                  <strong>AI执行过程</strong>
+                  <span>{{ taskProgressView.subtitle }}</span>
+                </div>
+                <span>{{ progressStatusLabel(progressStageFlow.find((stage) => stage.status === 'current')?.status || (progressStageFlow.every((stage) => stage.status === 'done') ? 'done' : 'waiting')) }}</span>
+              </header>
+              <div class="ai-process-grid">
+                <article
+                  v-for="task in executionTaskCards"
+                  :key="task.key"
+                  class="ai-process-card"
+                  :class="`ai-process-${task.status}`"
+                >
+                  <div class="ai-process-icon">{{ task.status === 'done' ? '✓' : task.icon }}</div>
+                  <div>
+                    <strong>{{ task.title }}</strong>
+                    <p>{{ task.desc }}</p>
+                  </div>
+                  <span>{{ progressStatusLabel(task.status) }}</span>
+                </article>
+              </div>
             </div>
           </div>
 
