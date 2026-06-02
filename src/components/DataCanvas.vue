@@ -1503,8 +1503,6 @@ const sourceTypeOptions = [
   { key: 'all', label: '全部' },
   { key: 'report_refs', label: '报告引用' },
   { key: 'structured_sources', label: '结构化信源' },
-  { key: 'candidate_hits', label: '候选命中' },
-  { key: 'extract_failed', label: '抽取失败' },
 ]
 
 const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', '其他']
@@ -1537,22 +1535,6 @@ const sourceCardConfigs = computed(() => [
     desc: '来自数据库 / 向量召回',
     icon: '▤',
     tone: 'cyan',
-  },
-  {
-    key: 'candidate_hits',
-    title: '候选命中',
-    value: sourceOverviewStats.value.candidateHits ?? '--',
-    desc: '检索阶段命中的候选池',
-    icon: '≋',
-    tone: 'orange',
-  },
-  {
-    key: 'extract_failed',
-    title: '抽取失败',
-    value: sourceOverviewStats.value.failed ?? '--',
-    desc: '正文抽取失败或不可用',
-    icon: '!',
-    tone: 'red',
   },
 ])
 
@@ -1863,7 +1845,10 @@ function localSourcePool(type = activeSourceType.value) {
     ],
   }
 
-  if (type === 'all') return Object.values(grouped).flat()
+  if (type === 'all') return [
+    ...grouped.report_refs,
+    ...grouped.structured_sources,
+  ]
   return grouped[type] || []
 }
 
@@ -1884,6 +1869,7 @@ const filteredSourceRows = computed(() => {
   const query = sourceSearchQuery.value.trim().toLowerCase()
   const rows = sourceListItems.value.filter((source) => {
     const searchable = `${source.title} ${source.sourceName} ${source.summary} ${source.detail} ${source.sourceType}`.toLowerCase()
+    if (activeSourceType.value === 'all' && ['candidate_hits', 'extract_failed'].includes(source.sourceGroup)) return false
     if (query && !searchable.includes(query)) return false
     if (sourceKindFilter.value !== '全部' && source.sourceType !== sourceKindFilter.value) return false
     if (!sourceMatchesTime(source)) return false
@@ -3557,7 +3543,7 @@ function exportPdf() {
             </div>
 
             <div class="source-count-note">
-              口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示；候选命中是检索阶段命中的候选池，三者不混算。
+              口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示，两类信源不混算。
             </div>
 
             <div class="source-sub-filter" aria-label="信源类型筛选">
