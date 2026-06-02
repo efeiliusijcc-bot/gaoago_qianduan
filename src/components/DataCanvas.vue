@@ -1453,7 +1453,11 @@ function workflowLogView(phase, rawLog, status) {
   if (lower.includes('sessions_spawn') && lower.includes('synthesis')) return { stage: 'SYNTHESIS_TASK', title: views.synthesis_dispatch[1], description: views.synthesis_dispatch[2], status }
   if (lower.includes('sessions_yield') && lower.includes('synthesis')) return { stage: 'WAITING_SYNTHESIS', title: views.synthesis_waiting[1], description: views.synthesis_waiting[2], status }
   if (lower.includes('sessions_yield')) return { stage: 'WAITING_RESEARCH', title: views.research_waiting[1], description: views.research_waiting[2], status }
-  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) return { stage: 'PLANNING', title: views.research_planning[1], description: views.research_planning[2], status }
+  if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) return { stage: 'PG_RECALL', title: 'PG 向量信源召回', description: '系统正在检索 PostgreSQL 向量信源库，并保存数据库信源与查询计划。', status }
+  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) return { stage: 'HARNESS_PLAN', title: '生成调研计划', description: '系统正在调用 Harness 生成 plan.json 与调研分组文件。', status }
+  if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research')) return { stage: 'RESEARCH_RUN', title: '执行调研子任务', description: 'Research 子任务正在检索、抓取并输出分组调研结果。', status }
+  if (lower.includes('consolidated.json')) return { stage: 'CONSOLIDATE', title: '合并调研素材', description: '系统正在汇总 PG 信源和公开调研结果，生成综合素材包。', status }
+  if (lower.includes('validate_report.py') || lower.includes('validate report')) return { stage: 'VALIDATE_SAVE', title: '校验并保存报告', description: '系统正在校验最终 Markdown 报告并保存任务结果。', status }
   if (lower.includes('group_') && lower.includes('.json')) return { stage: 'RESEARCH_TASK', title: views.research_dispatch[1], description: views.research_dispatch[2], status }
   if (lower.includes('context.json')) return { stage: 'PREPARING', title: views.context_preparing[1], description: views.context_preparing[2], status }
   if ((lower.includes('report_file') || lower.includes('final/report.md')) && !lower.includes('error')) return { stage: 'SAVING', title: views.report_saving[1], description: views.report_saving[2], status }
@@ -1542,6 +1546,60 @@ function translateOpenClawLog(log) {
       stage: 'TASK_START',
       title: 'AI 编报助手已启动',
       description: '任务已进入自动编报执行流程。',
+    }
+  }
+
+  if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) {
+    return {
+      ...base,
+      stage: 'PG_RECALL',
+      title: 'PG 向量信源召回',
+      description: '系统正在检索 PostgreSQL 向量信源库，并保存数据库信源与查询计划。',
+    }
+  }
+
+  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) {
+    return {
+      ...base,
+      stage: 'HARNESS_PLAN',
+      title: '生成调研计划',
+      description: '系统正在调用 Harness 生成 plan.json 与调研分组文件。',
+    }
+  }
+
+  if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research')) {
+    return {
+      ...base,
+      stage: 'RESEARCH_RUN',
+      title: '执行调研子任务',
+      description: 'Research 子任务正在检索、抓取并输出分组调研结果。',
+    }
+  }
+
+  if (lower.includes('consolidated.json')) {
+    return {
+      ...base,
+      stage: 'CONSOLIDATE',
+      title: '合并调研素材',
+      description: '系统正在汇总 PG 信源和公开调研结果，生成综合素材包。',
+    }
+  }
+
+  if (lower.includes('validate_report.py') || lower.includes('validate report')) {
+    return {
+      ...base,
+      stage: 'VALIDATE_SAVE',
+      title: '校验并保存报告',
+      description: '系统正在校验最终 Markdown 报告并保存任务结果。',
+    }
+  }
+
+  if (lower.includes('synthesis') || lower.includes('final/report.md')) {
+    return {
+      ...base,
+      stage: 'SYNTHESIS',
+      title: 'Synthesis 撰稿',
+      description: '撰稿子任务正在基于综合素材生成最终报告正文。',
     }
   }
 
@@ -1956,36 +2014,44 @@ const progressStageFlow = computed(() => {
   const hasJob = Boolean(props.job?.jobId)
   const stages = [
     {
-      key: 'question',
+      key: 'context',
       number: '1',
-      title: '提出问题',
-      desc: '明确编报主题',
-      doneWhen: () => hasJob,
-      currentWhen: () => !hasJob,
+      title: '任务建档',
+      desc: '生成 context.json',
+      doneWhen: () => progressHas('PREPARING', 'PG_RECALL', 'HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED') || hasJob,
+      currentWhen: () => !hasJob || progressHas('CONNECTING', 'TASK_START', 'context.json'),
+    },
+    {
+      key: 'source',
+      number: '2',
+      title: '信源召回',
+      desc: 'PG 向量库预检索',
+      doneWhen: () => progressHas('HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED'),
+      currentWhen: () => progressHas('PG_RECALL', 'pg-sources', 'database_sources.json', 'vector_sources.json'),
+    },
+    {
+      key: 'plan',
+      number: '3',
+      title: '调研计划',
+      desc: 'Harness 生成分组',
+      doneWhen: () => progressHas('RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED'),
+      currentWhen: () => progressHas('HARNESS_PLAN', 'harness_cli.py plan', 'plan.json', 'group_'),
     },
     {
       key: 'research',
-      number: '2',
-      title: '深度调研',
-      desc: '多源信息检索分析',
-      doneWhen: () => progressHas('RESEARCH_DONE', 'ANALYZING', 'WRITING', 'VERIFYING', 'SAVING', 'COMPLETED'),
-      currentWhen: () => progressHas('SEARCHING', 'RESEARCHING', 'EXTRACTING', '检索', '网页正文', '资料调研'),
-    },
-    {
-      key: 'analysis',
-      number: '3',
-      title: '分析推理',
-      desc: '归纳总结形成观点',
-      doneWhen: () => progressHas('WRITING', 'VERIFYING', 'SAVING', 'COMPLETED'),
-      currentWhen: () => progressHas('ANALYZING', '证据', '材料', '交叉分析'),
+      number: '4',
+      title: '分组调研',
+      desc: 'Research 子任务执行',
+      doneWhen: () => progressHas('CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE', 'SAVING', 'COMPLETED'),
+      currentWhen: () => progressHas('RESEARCH_TASK', 'RESEARCH_RUN', 'WAITING_RESEARCH', 'harness_cli.py run', 'research_'),
     },
     {
       key: 'report',
-      number: '4',
-      title: '生成报告',
-      desc: '输出结构化报告',
+      number: '5',
+      title: '撰稿校验',
+      desc: '合并素材并生成报告',
       doneWhen: () => progressHas('COMPLETED'),
-      currentWhen: () => progressHas('WRITING', 'SYNTHESIS', 'VERIFYING', 'SAVING', '报告文件', '撰写'),
+      currentWhen: () => progressHas('CONSOLIDATE', 'SYNTHESIS', 'WRITING', 'VERIFYING', 'VALIDATE_SAVE', 'SAVING', 'final/report.md', '报告文件'),
       failWhenError: true,
     },
   ]
@@ -2002,52 +2068,52 @@ const executionTaskCards = computed(() => {
   const isDone = props.job?.status === 'succeeded' || props.phase === 'done'
   const tasks = [
     {
-      key: 'planning',
+      key: 'context',
       icon: '01',
-      title: '任务规划',
-      desc: '拆解主题、确认调研路径',
-      doneWhen: () => Boolean(props.job?.jobId) || progressHas('PLANNING', 'PREPARING'),
-      currentWhen: () => progressHas('PLANNING', 'PREPARING', '上下文'),
+      title: '创建任务上下文',
+      desc: '建立 Job 目录，写入 context.json',
+      doneWhen: () => Boolean(props.job?.jobId) || progressHas('PREPARING', 'PG_RECALL', 'HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
+      currentWhen: () => progressHas('PREPARING', 'context.json'),
     },
     {
-      key: 'search',
+      key: 'pg-recall',
       icon: '02',
-      title: '信息检索',
-      desc: '公开资料与重点信源发现',
-      doneWhen: () => isDone || progressHas('RESEARCH_DONE', 'EXTRACTING', 'ANALYZING', 'WRITING'),
-      currentWhen: () => progressHas('SEARCHING', 'RESEARCHING', '检索', '公开资料'),
+      title: 'PG信源预召回',
+      desc: '查询向量信源库并落盘信源计划',
+      doneWhen: () => isDone || progressHas('HARNESS_PLAN', 'RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
+      currentWhen: () => progressHas('PG_RECALL', 'pg-sources', 'database_sources.json', 'vector_sources.json'),
     },
     {
-      key: 'screening',
+      key: 'harness-plan',
       icon: '03',
-      title: '信息筛选',
-      desc: '识别高价值材料并去噪',
-      doneWhen: () => isDone || progressHas('EXTRACTING', 'ANALYZING', 'WRITING', 'VERIFYING'),
-      currentWhen: () => progressHas('RESEARCH_DONE', '筛选', '高价值', '重点来源'),
+      title: 'Harness调研计划',
+      desc: '生成 plan.json 和 groups/group_*.json',
+      doneWhen: () => isDone || progressHas('RESEARCH_RUN', 'CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
+      currentWhen: () => progressHas('HARNESS_PLAN', 'harness_cli.py plan', 'plan.json', 'group_'),
     },
     {
-      key: 'analysis',
+      key: 'research-run',
       icon: '04',
-      title: '数据分析',
-      desc: '归纳、交叉验证和研判',
-      doneWhen: () => isDone || progressHas('WRITING', 'VERIFYING', 'SAVING'),
-      currentWhen: () => progressHas('ANALYZING', '证据', '材料', '交叉分析'),
+      title: 'Research子任务',
+      desc: '并行检索抓取，生成 research_*.json',
+      doneWhen: () => isDone || progressHas('CONSOLIDATE', 'SYNTHESIS', 'VALIDATE_SAVE'),
+      currentWhen: () => progressHas('RESEARCH_TASK', 'RESEARCH_RUN', 'WAITING_RESEARCH', 'harness_cli.py run', 'research_'),
     },
     {
-      key: 'reasoning',
+      key: 'consolidate',
       icon: '05',
-      title: '观点推理',
-      desc: '形成判断、风险点和结论',
-      doneWhen: () => isDone || progressHas('WRITING', 'VERIFYING', 'SAVING'),
-      currentWhen: () => progressHas('WRITING', '撰写', '初稿'),
+      title: '合并综合素材',
+      desc: '汇总 PG 信源与调研结果为 consolidated.json',
+      doneWhen: () => isDone || progressHas('SYNTHESIS', 'VALIDATE_SAVE', 'SAVING'),
+      currentWhen: () => progressHas('CONSOLIDATE', 'consolidated.json'),
     },
     {
-      key: 'report',
+      key: 'synthesis',
       icon: '06',
-      title: '报告生成',
-      desc: '生成正文、校验并保存',
+      title: 'Synthesis撰稿',
+      desc: '生成 final/report.md 并校验保存',
       doneWhen: () => isDone,
-      currentWhen: () => progressHas('VERIFYING', 'SAVING', '报告文件', '最终报告'),
+      currentWhen: () => progressHas('SYNTHESIS', 'WRITING', 'VERIFYING', 'VALIDATE_SAVE', 'SAVING', 'final/report.md', '最终报告'),
       failWhenError: true,
     },
   ]
