@@ -618,8 +618,8 @@ function restoreQaSession(session) {
   qaStatus.value = session.status || (session.answer ? 'done' : 'idle')
   qaError.value = session.status === 'failed' ? '回答生成失败，请稍后重试。' : ''
   qaReferencePayloads.value = Array.isArray(session.referencePayloads) ? session.referencePayloads : []
-  qaSourceSidebarDismissed.value = false
-  qaSourceSidebarOpen.value = qaReferencePayloads.value.length > 0
+  qaSourceSidebarDismissed.value = qaReferencePayloads.value.length > 0
+  qaSourceSidebarOpen.value = false
   resetQaSourceView()
   qaCopyNotice.value = ''
   qaValidationError.value = ''
@@ -640,8 +640,8 @@ async function loadQaSessionSources(sessionId) {
     const sources = Array.isArray(result?.sources) ? result.sources : []
     if (!sources.length) return
     qaReferencePayloads.value = sources
-    qaSourceSidebarDismissed.value = false
-    qaSourceSidebarOpen.value = true
+    qaSourceSidebarDismissed.value = true
+    qaSourceSidebarOpen.value = false
     resetQaSourceView()
     emitQaSession(qaStatus.value)
   } catch {
@@ -2836,8 +2836,8 @@ function exportPdf() {
             </div>
           </div>
 
-          <div v-else class="qa-workspace">
-            <section class="qa-hero">
+          <div v-else class="qa-workspace" :class="{ 'has-thread': qaTurns.length }">
+            <section v-if="!qaTurns.length" class="qa-hero">
               <div class="qa-hero-icon">⌕</div>
               <div>
                 <h2>知识问答</h2>
@@ -2845,7 +2845,7 @@ function exportPdf() {
               </div>
             </section>
 
-            <section class="qa-recommendations">
+            <section v-if="!qaTurns.length" class="qa-recommendations">
               <div class="qa-recommend-heading">
                 <span>推荐问题</span>
                 <button type="button" @click="rotateRecommendedQuestions">换一批</button>
