@@ -510,7 +510,7 @@ const qaTechnicalLabels = {
 }
 
 const qaSensitiveTermReplacements = [
-  [/OpenClaw/gi, '底层系统'],
+  [/OpenClaw/gi, '自主智能体'],
   [/\bAgent\b/gi, '处理服务'],
   [/\bGateway\b/gi, '连接服务'],
   [/\bMCP\b/gi, '检索服务'],
@@ -1413,6 +1413,10 @@ function buildRawLogText(log) {
     .join('\n')
 }
 
+function sanitizeReportLogText(value) {
+  return String(value || '').replace(/OpenClaw/gi, '自主智能体')
+}
+
 function extractQuery(rawLog) {
   const text = rawLog || ''
   const quoted = text.match(/--query\s+["']([^"']+)["']/i)
@@ -1478,6 +1482,7 @@ function isLowValueTechnicalLog(rawLog) {
 
 function translateOpenClawLog(log) {
   const rawLog = buildRawLogText(log)
+  const displayRawLog = sanitizeReportLogText(rawLog)
   const lower = rawLog.toLowerCase()
   const status = log?.status === 'failed' || log?.status === 'error'
     ? 'error'
@@ -1490,7 +1495,7 @@ function translateOpenClawLog(log) {
     stage: 'RUNNING',
     title: '正在推进编报任务',
     description: '系统正在执行当前编报步骤。',
-    raw: rawLog,
+    raw: displayRawLog,
     status,
   }
 
@@ -2149,7 +2154,8 @@ function firstText(source, keys, fallback = '') {
 
 function scrubSourceDisplayText(value) {
   return String(value || '')
-    .replace(/OpenClaw|Agent|MCP|tool_call|command|rawPayload/gi, '技术信息')
+    .replace(/OpenClaw/gi, '自主智能体')
+    .replace(/Agent|MCP|tool_call|command|rawPayload/gi, '技术信息')
     .replace(/\bSQL\b/gi, '查询信息')
     .trim()
 }
