@@ -365,19 +365,19 @@ const resultTabs = [
 const featureCards = [
   {
     key: 'report',
-    title: 'K报编写',
+    title: 'AI智能体深度编报',
     icon: '▤',
-    desc: '围绕特定主题，生成结构化、全面、深度的 K 报。',
-    tags: ['深度调研', '多维分析', '专业编报'],
-    action: '开始编写 K报',
+    desc: '围绕专题任务完成信源检索、研判分析和正式编报。',
+    tags: ['深度调研', '多维分析', '智能编报'],
+    action: '开始深度编报',
   },
   {
     key: 'qa',
-    title: '知识问答',
+    title: '热点事件动态感知',
     icon: '⌕',
-    desc: '基于知识库，快速获取专业回答。',
-    tags: ['数据库检索', '信息整合', '流式回答'],
-    action: '开始提问',
+    desc: '快速感知热点事件进展，整合信源并形成动态判断。',
+    tags: ['事件监测', '信源整合', '动态感知'],
+    action: '开始感知',
   },
 ]
 
@@ -3211,14 +3211,7 @@ function exportPdf() {
     <div ref="reportRef" class="main-scroll flex-1 overflow-auto px-8 py-7">
       <div v-if="phase === 'idle'" class="min-h-full flex items-start justify-center py-10">
         <section class="main-content home-dual-mode w-full" :class="{ 'qa-main-content': homeMode === 'qa' }">
-          <div v-if="homeMode === 'report'" class="text-center">
-            <h1 class="font-mono text-[34px] leading-tight tracking-wide mb-4 text-[#0f172a]" style="font-size: 32px; font-weight: 800">AI深度编报工作台</h1>
-            <p class="font-mono text-sm text-[#374151] mb-10" style="font-size: 14px; font-weight: 500">
-              选择 K报编写生成正式编报，或进入知识问答快速检索和整合信源信息。
-            </p>
-          </div>
-
-          <div v-if="homeMode === 'report'" class="home-mode-grid mb-8">
+          <div v-if="homeMode === 'report'" class="home-mode-grid mb-6">
             <button
               v-for="card in featureCards"
               :key="card.key"
@@ -3248,7 +3241,7 @@ function exportPdf() {
                 :aria-selected="homeMode === 'report'"
                 @click="selectHomeMode('report')"
               >
-                K报编写
+                AI智能体深度编报
               </button>
               <button
                 class="workspace-mode-tab"
@@ -3258,7 +3251,7 @@ function exportPdf() {
                 :aria-selected="homeMode === 'qa'"
                 @click="selectHomeMode('qa')"
               >
-                知识问答
+                热点事件动态感知
               </button>
             </div>
           </div>
@@ -3283,7 +3276,7 @@ function exportPdf() {
 
             <div class="mt-5">
               <div class="flex items-center justify-between mb-3 px-1">
-                <div class="font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">K报编写参数</div>
+                <div class="font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">深度编报参数</div>
                 <span class="font-mono text-[10px] text-neon-green/80">规划前可调整</span>
               </div>
 
@@ -3381,8 +3374,8 @@ function exportPdf() {
                 <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
               <div v-if="qaStatus === 'idle' && !qaTurns.length" class="qa-empty-card">
                 <div class="qa-empty-icon">⌕</div>
-                <h3>知识问答</h3>
-                <p>基于知识库检索与信息整合，快速获取专业、可追溯的回答。</p>
+                <h3>热点事件动态感知</h3>
+                <p>基于热点事件检索与信源整合，快速获取专业、可追溯的动态判断。</p>
 
                 <section class="qa-recommendations">
                   <div class="qa-recommend-heading">
