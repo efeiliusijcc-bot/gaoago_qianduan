@@ -875,9 +875,8 @@ canvas {
 }
 
 .settings-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  position: fixed;
+  z-index: 130;
   width: 156px;
   height: 42px;
   display: flex;

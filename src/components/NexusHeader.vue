@@ -4,8 +4,10 @@ import { fetchResearchKeys, fetchVectorSourceStatus, updateResearchKeys } from '
 
 const currentTime = ref('')
 const canvasRef = ref(null)
+const settingsButtonRef = ref(null)
 const settingsMenuRef = ref(null)
 const showSettingsMenu = ref(false)
+const settingsMenuStyle = ref({})
 const showKeySettings = ref(false)
 const keyStatus = ref(null)
 const keyForm = ref({
@@ -88,7 +90,19 @@ function closeKeySettings() {
   if (!keySaving.value) showKeySettings.value = false
 }
 
-function toggleSettingsMenu() {
+function updateSettingsMenuPosition() {
+  const button = settingsButtonRef.value
+  if (!button) return
+  const rect = button.getBoundingClientRect()
+  settingsMenuStyle.value = {
+    top: `${rect.bottom + 8}px`,
+    right: `${Math.max(16, window.innerWidth - rect.right)}px`,
+  }
+}
+
+function toggleSettingsMenu(event) {
+  event?.stopPropagation()
+  if (!showSettingsMenu.value) updateSettingsMenuPosition()
   showSettingsMenu.value = !showSettingsMenu.value
 }
 
@@ -98,12 +112,17 @@ function closeSettingsMenu() {
 
 function handleDocumentClick(event) {
   const menu = settingsMenuRef.value
-  if (!menu || menu.contains(event.target)) return
+  const button = settingsButtonRef.value
+  if (menu?.contains(event.target) || button?.contains(event.target)) return
   closeSettingsMenu()
 }
 
 function handleDocumentKeydown(event) {
   if (event.key === 'Escape') closeSettingsMenu()
+}
+
+function handleWindowResize() {
+  if (showSettingsMenu.value) updateSettingsMenuPosition()
 }
 
 function configuredLabel(name) {
@@ -207,6 +226,7 @@ onMounted(() => {
   timeInterval = window.setInterval(updateTime, 1000)
   document.addEventListener('click', handleDocumentClick)
   document.addEventListener('keydown', handleDocumentKeydown)
+  window.addEventListener('resize', handleWindowResize)
   drawWave()
 })
 
@@ -214,6 +234,7 @@ onUnmounted(() => {
   window.clearInterval(timeInterval)
   document.removeEventListener('click', handleDocumentClick)
   document.removeEventListener('keydown', handleDocumentKeydown)
+  window.removeEventListener('resize', handleWindowResize)
   if (animFrameId) cancelAnimationFrame(animFrameId)
 })
 </script>
@@ -235,29 +256,35 @@ onUnmounted(() => {
       <span class="font-mono text-xs text-slate-700 tracking-wider">{{ currentTime }}</span>
     </div>
 
-    <div ref="settingsMenuRef" class="header-settings relative">
+    <div class="header-settings relative">
       <button
+        ref="settingsButtonRef"
         class="settings-icon-btn"
         type="button"
         aria-label="设置"
         :aria-expanded="showSettingsMenu"
         title="设置"
-        @click="toggleSettingsMenu"
+        @click.stop="toggleSettingsMenu"
       >
         ⚙
       </button>
-      <button
-        v-if="showSettingsMenu"
-        class="settings-dropdown"
-        type="button"
-        role="menuitem"
-        @click="openKeySettings"
-      >
-        <span class="settings-menu-icon">⌁</span>
-        <span>信源设置</span>
-      </button>
     </div>
   </header>
+
+  <Teleport to="body">
+    <button
+      v-if="showSettingsMenu"
+      ref="settingsMenuRef"
+      class="settings-dropdown"
+      type="button"
+      role="menuitem"
+      :style="settingsMenuStyle"
+      @click.stop="openKeySettings"
+    >
+      <span class="settings-menu-icon">⌁</span>
+      <span>信源设置</span>
+    </button>
+  </Teleport>
 
   <Teleport to="body">
     <div
