@@ -185,6 +185,12 @@ function startReportFromSidebar() {
   selectedQaSessionId.value = ''
 }
 
+function openReportHistoryList() {
+  homeMode.value = 'report'
+  selectedQaSessionId.value = ''
+  loadJobList(true)
+}
+
 function resetForNewReportFromCanvas() {
   homeMode.value = 'report'
   selectedQaSessionId.value = ''
@@ -252,7 +258,7 @@ function jobActionLabel(status) {
         @start-qa="startQaFromSidebar"
         @start-report="startReportFromSidebar"
         @refresh-health="refreshHealth"
-        @refresh-list="refreshRecentReports"
+        @open-history-list="openReportHistoryList"
         @load-more-recent="loadMoreRecentReports"
       />
 

@@ -29,7 +29,7 @@ const props = defineProps({
   currentQaSessionId: String,
 })
 
-const emit = defineEmits(['open-job', 'open-qa-session', 'start-qa', 'start-report', 'refresh-health', 'refresh-list', 'load-more-recent'])
+const emit = defineEmits(['open-job', 'open-qa-session', 'start-qa', 'start-report', 'refresh-health', 'open-history-list', 'load-more-recent'])
 
 const hasHealth = computed(() => Boolean(props.health))
 const healthOk = computed(() => Boolean(props.health?.ok))
@@ -124,7 +124,7 @@ function handleRecentScroll(event) {
 
 function handleHistoryAction() {
   if (isQaMode.value) emit('start-qa')
-  else emit('refresh-list')
+  else emit('open-history-list')
 }
 </script>
 

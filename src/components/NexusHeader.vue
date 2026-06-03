@@ -4,6 +4,8 @@ import { fetchResearchKeys, fetchVectorSourceStatus, updateResearchKeys } from '
 
 const currentTime = ref('')
 const canvasRef = ref(null)
+const settingsMenuRef = ref(null)
+const showSettingsMenu = ref(false)
 const showKeySettings = ref(false)
 const keyStatus = ref(null)
 const keyForm = ref({
@@ -73,6 +75,7 @@ async function loadResearchKeys() {
 }
 
 function openKeySettings() {
+  showSettingsMenu.value = false
   showKeySettings.value = true
   keyNotice.value = ''
   keyError.value = ''
@@ -83,6 +86,24 @@ function openKeySettings() {
 
 function closeKeySettings() {
   if (!keySaving.value) showKeySettings.value = false
+}
+
+function toggleSettingsMenu() {
+  showSettingsMenu.value = !showSettingsMenu.value
+}
+
+function closeSettingsMenu() {
+  showSettingsMenu.value = false
+}
+
+function handleDocumentClick(event) {
+  const menu = settingsMenuRef.value
+  if (!menu || menu.contains(event.target)) return
+  closeSettingsMenu()
+}
+
+function handleDocumentKeydown(event) {
+  if (event.key === 'Escape') closeSettingsMenu()
 }
 
 function configuredLabel(name) {
@@ -184,11 +205,15 @@ function drawWave() {
 onMounted(() => {
   updateTime()
   timeInterval = window.setInterval(updateTime, 1000)
+  document.addEventListener('click', handleDocumentClick)
+  document.addEventListener('keydown', handleDocumentKeydown)
   drawWave()
 })
 
 onUnmounted(() => {
   window.clearInterval(timeInterval)
+  document.removeEventListener('click', handleDocumentClick)
+  document.removeEventListener('keydown', handleDocumentKeydown)
   if (animFrameId) cancelAnimationFrame(animFrameId)
 })
 </script>
@@ -205,15 +230,32 @@ onUnmounted(() => {
       <canvas ref="canvasRef" class="w-full h-full"></canvas>
     </div>
 
-    <div class="header-actions mr-4 flex items-center gap-3">
-      <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="openKeySettings">
-        信源设置
-      </button>
-    </div>
-
     <div class="header-time flex flex-col items-end">
       <span class="font-mono text-[8px] text-slate-400 tracking-widest mb-1">系统时间</span>
       <span class="font-mono text-xs text-slate-700 tracking-wider">{{ currentTime }}</span>
+    </div>
+
+    <div ref="settingsMenuRef" class="header-settings relative">
+      <button
+        class="settings-icon-btn"
+        type="button"
+        aria-label="设置"
+        :aria-expanded="showSettingsMenu"
+        title="设置"
+        @click="toggleSettingsMenu"
+      >
+        ⚙
+      </button>
+      <button
+        v-if="showSettingsMenu"
+        class="settings-dropdown"
+        type="button"
+        role="menuitem"
+        @click="openKeySettings"
+      >
+        <span class="settings-menu-icon">⌁</span>
+        <span>信源设置</span>
+      </button>
     </div>
   </header>
 

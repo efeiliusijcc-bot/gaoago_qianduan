@@ -1183,6 +1183,7 @@ export function useReportJobs() {
   }
 
   async function loadJobList(switchView = true, overrides = {}) {
+    if (switchView) currentView.value = 'list'
     try {
       if (overrides.page !== undefined) listPage.value = overrides.page
       if (overrides.pageSize !== undefined) listPageSize.value = overrides.pageSize
@@ -1215,7 +1216,6 @@ export function useReportJobs() {
         listTotalPages.value = response.totalPages || 1
         listStatusCounts.value = response.statusCounts || { succeeded: 0, running: 0 }
       }
-      if (switchView) currentView.value = 'list'
     } catch (error) {
       errorMessage.value = error instanceof Error ? error.message : String(error)
       pushLog(`历史任务加载失败：${errorMessage.value}`)
