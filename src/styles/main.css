@@ -3264,6 +3264,22 @@ canvas {
   font-weight: 700;
 }
 
+.report-status-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(37, 99, 235, 0.18);
+  border-top-color: #2563eb;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  animation: report-status-spin 0.75s linear infinite;
+}
+
+@keyframes report-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .recent-time-divider {
   margin: 0 6px;
   color: var(--text-faint);

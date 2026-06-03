@@ -82,6 +82,10 @@ function statusClass(status) {
   return 'bg-blue-500 shadow-[0_0_8px_rgba(37,99,235,0.32)]'
 }
 
+function isRunningStatus(status) {
+  return status === 'running' || status === 'queued'
+}
+
 function statusText(status) {
   if (status === 'succeeded') return '已完成'
   if (status === 'failed' || status === 'cancelled') return '失败'
@@ -179,7 +183,12 @@ function handleHistoryAction() {
             @click="emit('open-job', item)"
           >
             <div class="flex items-center gap-2 min-w-0">
-              <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusClass(item.status)"></span>
+              <span
+                v-if="isRunningStatus(item.status)"
+                class="report-status-spinner shrink-0"
+                aria-label="任务进行中"
+              ></span>
+              <span v-else class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusClass(item.status)"></span>
               <span class="recent-title font-mono text-xs truncate">{{ jobTitle(item) }}</span>
               <span class="ml-auto text-[#64748b] shrink-0">›</span>
             </div>
