@@ -68,6 +68,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  progressState: {
+    type: Object,
+    default: null,
+  },
   databaseSources: {
     type: Object,
     default: null,
@@ -2007,6 +2011,31 @@ const userProgressStages = [
   { key: 'report', number: '6', icon: '06', title: '报告生成', desc: '生成报告正文并完成校验' },
 ]
 
+function displayProgressStatus(status) {
+  if (status === 'done') return 'done'
+  if (status === 'running') return 'current'
+  if (status === 'failed') return 'error'
+  return 'waiting'
+}
+
+const backendProgressStageFlow = computed(() => {
+  const stages = Array.isArray(props.progressState?.stages) ? props.progressState.stages : []
+  if (!stages.length) return []
+  const byKey = new Map(stages.map((stage) => [stage.key, stage]))
+  return userProgressStages.map((stage, index) => {
+    const backendStage = byKey.get(stage.key)
+    return {
+      ...stage,
+      number: String(index + 1),
+      icon: String(index + 1).padStart(2, '0'),
+      title: backendStage?.title || stage.title,
+      desc: backendStage?.desc || stage.desc,
+      status: displayProgressStatus(backendStage?.status),
+      evidence: backendStage?.evidence || [],
+    }
+  })
+})
+
 const progressStageOrder = {
   CONNECTING: 0,
   TASK_START: 0,
@@ -2079,10 +2108,13 @@ const resolvedProgressStageStatuses = computed(() => {
   })
 })
 
-const progressStageFlow = computed(() => userProgressStages.map((stage, index) => ({
-  ...stage,
-  status: resolvedProgressStageStatuses.value[index],
-})))
+const progressStageFlow = computed(() => {
+  if (backendProgressStageFlow.value.length) return backendProgressStageFlow.value
+  return userProgressStages.map((stage, index) => ({
+    ...stage,
+    status: resolvedProgressStageStatuses.value[index],
+  }))
+})
 
 const executionTaskCards = computed(() => progressStageFlow.value.map((stage) => ({
   ...stage,

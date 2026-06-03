@@ -60,6 +60,7 @@ const {
   returnableWorkspaceJobId,
   savedNotice,
   executionLogs,
+  progressState,
   unreadLogCount,
   isLogDrawerOpen,
   getJobTitle,
@@ -293,6 +294,7 @@ function jobActionLabel(status) {
         v-model:databaseSourceEnabled="databaseSourceEnabled"
         :planError="planError"
         :executionLogs="executionLogs"
+        :progress-state="progressState"
         :databaseSources="databaseSources"
         :databaseSourcesLoading="databaseSourcesLoading"
         :unreadLogCount="unreadLogCount"

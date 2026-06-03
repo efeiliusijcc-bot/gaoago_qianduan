@@ -7,6 +7,7 @@ import {
   fetchReportJob,
   fetchReportJobEventLog,
   fetchReportJobs,
+  fetchReportProgress,
   fetchReportResult,
   getJobEventsUrl,
 } from '../lib/api.js'
@@ -147,6 +148,7 @@ export function useReportJobs() {
   const savedNotice = ref('')
   const activePollJobId = ref(null)
   const executionLogs = ref([])
+  const progressState = ref(null)
   const databaseSources = ref(null)
   const databaseSourcesLoading = ref(false)
   const unreadLogCount = ref(0)
@@ -224,6 +226,7 @@ export function useReportJobs() {
       processLogs: [...processLogs.value],
       loadingStep: loadingStep.value,
       job: job.value ? { ...job.value } : null,
+      progressState: progressState.value ? { ...progressState.value } : null,
       errorMessage: errorMessage.value,
       selectedReport: selectedReport.value ? { ...selectedReport.value } : null,
       savedNotice: savedNotice.value,
@@ -272,6 +275,7 @@ export function useReportJobs() {
     processLogs.value = [...(snapshot.processLogs || [])]
     loadingStep.value = snapshot.loadingStep || ''
     job.value = snapshot.job ? { ...snapshot.job } : null
+    progressState.value = snapshot.progressState || job.value?.progressState || null
     errorMessage.value = snapshot.errorMessage || ''
     selectedReport.value = snapshot.selectedReport ? { ...snapshot.selectedReport } : null
     savedNotice.value = snapshot.savedNotice || ''
@@ -397,6 +401,7 @@ export function useReportJobs() {
   function resetExecutionLogs() {
     closeJobEvents()
     executionLogs.value = []
+    progressState.value = null
     unreadLogCount.value = 0
     activeExecutionLogJobId = null
   }
@@ -406,6 +411,7 @@ export function useReportJobs() {
     unreadLogCount.value = 0
     if (!jobId) {
       executionLogs.value = []
+      progressState.value = null
       return
     }
     if (Array.isArray(items)) {
@@ -495,6 +501,36 @@ export function useReportJobs() {
     }
   }
 
+  function applyProgressState(next, jobId = activeExecutionLogJobId) {
+    if (!next?.stages?.length) return
+    progressState.value = next
+    if (job.value?.jobId === jobId && !openedHistoryJobId.value) {
+      job.value = { ...job.value, progressState: next }
+    }
+    if (activeWorkspaceSnapshot.value?.job?.jobId === jobId) {
+      patchActiveWorkspaceSnapshot({
+        progressState: next,
+        job: activeWorkspaceSnapshot.value.job
+          ? { ...activeWorkspaceSnapshot.value.job, progressState: next }
+          : activeWorkspaceSnapshot.value.job,
+        __force: true,
+      })
+    }
+  }
+
+  async function loadProgressState(jobId, shouldApply = () => true) {
+    if (!jobId) {
+      progressState.value = null
+      return
+    }
+    try {
+      const next = await fetchReportProgress(jobId)
+      if (shouldApply()) applyProgressState(next, jobId)
+    } catch {
+      // Older backend versions may not expose progress yet; the UI keeps its log fallback.
+    }
+  }
+
   function normalizeEventLog(event) {
     const raw = event?.raw && typeof event.raw === 'object' ? event.raw : {}
     const label = raw.label || event.name || event.stage || event.type
@@ -542,6 +578,11 @@ export function useReportJobs() {
   }
 
   function handleJobEvent(event, eventJobId = activeExecutionLogJobId) {
+    if (event.type === 'progress_state') {
+      applyProgressState(event.progressState, eventJobId)
+      return
+    }
+
     const log = normalizeEventLog(event)
     if (log) appendExecutionLog(log, eventJobId)
     const visibleForEvent = job.value?.jobId === eventJobId && openedHistoryJobId.value !== job.value?.jobId
@@ -579,6 +620,7 @@ export function useReportJobs() {
 
     if (event.type === 'done') {
       fetchDatabaseSourcesData(eventJobId)
+      loadProgressState(eventJobId)
       closeJobEvents()
     }
   }
@@ -611,6 +653,7 @@ export function useReportJobs() {
         const latest = await fetchReportJob(jobId)
         if (job.value?.jobId === jobId && !openedHistoryJobId.value) job.value = latest
         if (activeWorkspaceSnapshot.value?.job?.jobId === jobId) patchActiveWorkspaceSnapshot({ job: latest, __force: true })
+        await loadProgressState(jobId)
         if (latest.status === 'succeeded' || latest.status === 'failed' || latest.status === 'cancelled') {
           closeJobEvents()
           return
@@ -986,6 +1029,8 @@ export function useReportJobs() {
     try {
       while (activePollJobId.value === jobId) {
         const next = await fetchReportJob(jobId)
+        if (next?.progressState) applyProgressState(next.progressState, jobId)
+        else void loadProgressState(jobId, () => activePollJobId.value === jobId)
         const visibleForPoll = job.value?.jobId === jobId && openedHistoryJobId.value !== jobId
         const nextLoadingStep = stepMessages[tick % stepMessages.length]
         if (visibleForPoll) {
@@ -1156,6 +1201,7 @@ export function useReportJobs() {
       resetReportPlan()
       pushLog(`任务已创建：${created.jobId}`)
       subscribeJobEvents(created.jobId)
+      void loadProgressState(created.jobId, () => job.value?.jobId === created.jobId)
       await pollUntilDone(created.jobId)
     } catch (error) {
       const backgroundMessage = error instanceof Error ? error.message : String(error)
@@ -1257,6 +1303,7 @@ export function useReportJobs() {
     currentView.value = 'generator'
     openedHistoryJobId.value = item.jobId
     job.value = item
+    progressState.value = item.progressState || null
     phase.value = 'history-loading'
     loadingStep.value = '正在加载历史报告'
     detailLoading.value = true
@@ -1274,6 +1321,7 @@ export function useReportJobs() {
 
     const isCurrentHistory = () => requestId === historyOpenRequestId && openedHistoryJobId.value === item.jobId
     void loadExecutionLog(item.jobId, isCurrentHistory)
+    void loadProgressState(item.jobId, isCurrentHistory)
     void fetchDatabaseSourcesData(item.jobId, isCurrentHistory)
 
     try {
@@ -1332,6 +1380,7 @@ export function useReportJobs() {
     savedNotice.value = ''
     processLogs.value = []
     job.value = item
+    progressState.value = item.progressState || null
     phase.value = 'loading'
     loadingStep.value = '正在跟踪后端任务状态'
     applyJobFormData(item)
@@ -1340,6 +1389,7 @@ export function useReportJobs() {
     if (!unfinishedWorkspace) subscribeJobEvents(item.jobId)
     const isCurrentRunning = () => historyOpenRequestId === requestId && openedHistoryJobId.value === null && job.value?.jobId === item.jobId
     void loadExecutionLog(item.jobId, isCurrentRunning)
+    void loadProgressState(item.jobId, isCurrentRunning)
     void fetchDatabaseSourcesData(item.jobId, isCurrentRunning)
 
     if (item.status === 'failed' || item.status === 'waiting_approval' || item.status === 'cancelled') {
@@ -1462,6 +1512,7 @@ export function useReportJobs() {
     succeededCount,
     runningCount,
     executionLogs,
+    progressState,
     databaseSources,
     databaseSourcesLoading,
     unreadLogCount,

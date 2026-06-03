@@ -84,6 +84,10 @@ export function fetchReportJobEventLog(jobId) {
   return request(`/report-jobs/${jobId}/event-log`)
 }
 
+export function fetchReportProgress(jobId) {
+  return request(`/report-jobs/${jobId}/progress`)
+}
+
 export function fetchReportResult(jobId) {
   return request(`/report-jobs/${jobId}/result`)
 }
