@@ -1710,6 +1710,48 @@ const dbSourcesState = computed(() => {
 const taskProgressView = computed(() => {
   const status = props.job?.status
   const step = String(props.loadingStep || '').toLowerCase()
+  const currentBackendStage = Array.isArray(props.progressState?.stages)
+    ? props.progressState.stages.find((stage) => stage.key === props.progressState?.currentStage)
+    : null
+  if (currentBackendStage && status !== 'queued' && status !== 'failed' && status !== 'succeeded' && props.phase !== 'error' && props.phase !== 'done') {
+    const stageText = {
+      prepare: {
+        title: '正在准备编报任务',
+        subtitle: '系统正在整理编报要求并建立任务空间。',
+        tone: 'queued',
+      },
+      source: {
+        title: '正在筛选可信信源',
+        subtitle: '系统正在检索并筛选与主题相关的可信信源。',
+        tone: 'searching',
+      },
+      plan: {
+        title: '正在拆解调研计划',
+        subtitle: '系统正在拆解调研方向并安排后续采集任务。',
+        tone: 'planning',
+      },
+      research: {
+        title: '正在采集调研资料',
+        subtitle: '系统正在采集公开资料并提取关键事实。',
+        tone: 'extracting',
+      },
+      consolidate: {
+        title: '正在整合分析素材',
+        subtitle: '系统正在汇总信源、证据和分析要点。',
+        tone: 'integrating',
+      },
+      report: {
+        title: '正在生成最终报告',
+        subtitle: '调研素材已进入撰稿阶段，系统正在生成报告正文并完成校验。',
+        tone: 'waiting_report',
+      },
+    }
+    return stageText[currentBackendStage.key] || {
+      title: `${currentBackendStage.title}进行中`,
+      subtitle: currentBackendStage.desc,
+      tone: 'searching',
+    }
+  }
   if (status === 'queued') {
     return {
       title: '任务已提交',

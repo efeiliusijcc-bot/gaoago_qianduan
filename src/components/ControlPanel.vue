@@ -86,12 +86,21 @@ function isRunningStatus(status) {
   return status === 'running' || status === 'queued'
 }
 
-function statusText(status) {
+function statusText(status, item = null) {
   if (status === 'succeeded') return '已完成'
   if (status === 'failed' || status === 'cancelled') return '失败'
   if (status === 'waiting_approval') return '等待报告'
   if (status === 'queued') return '处理中'
-  return '检索中'
+  const currentStage = item?.progressState?.currentStage
+  const stageLabels = {
+    prepare: '任务准备中',
+    source: '信源筛选中',
+    plan: '调研规划中',
+    research: '资料采集中',
+    consolidate: '素材整合中',
+    report: '报告生成中',
+  }
+  return stageLabels[currentStage] || '处理中'
 }
 
 function qaStatusClass(status) {
@@ -193,7 +202,7 @@ function handleHistoryAction() {
               <span class="ml-auto text-[#64748b] shrink-0">›</span>
             </div>
             <div class="recent-time font-mono text-[10px] mt-2 pl-3.5">
-              <span class="recent-status-text">{{ statusText(item.status) }}</span>
+              <span class="recent-status-text">{{ statusText(item.status, item) }}</span>
               <span class="recent-time-divider">·</span>
               <span>{{ formatTime(item.updatedAt || item.createdAt) }}</span>
             </div>
