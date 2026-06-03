@@ -132,7 +132,7 @@ const technicalLogOpenIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
 const expandedSourceId = ref('')
 const sourceListRef = ref(null)
-const activeSourceType = ref('report_refs')
+const activeSourceType = ref('database_recall')
 const sourceSearchQuery = ref('')
 const sourceKindFilter = ref('全部')
 const sourceTimeFilter = ref('all')
@@ -144,6 +144,7 @@ const sourceListPage = ref(1)
 const sourceListPageSize = ref(10)
 const sourceListTotal = ref(null)
 const sourceListHasMore = ref(false)
+const sourceListSummary = ref(null)
 const sourceCurrentPage = ref(1)
 const expandedSourceListId = ref('')
 const sourceListNotice = ref('')
@@ -1938,9 +1939,11 @@ const sourceStats = computed(() => {
 })
 
 const sourceOverviewStats = computed(() => {
-  const candidateHits = props.databaseSources?.totalHits || props.databaseSources?.vectorPlan?.vectorHits || props.databaseSources?.queryPlan?.totalHits || null
-  const structuredSources = normalizedSources.value.length || null
-  const reportCitations = reportCitationNumbers.value.length || null
+  const summary = sourceListSummary.value || {}
+  const databaseRecall = (summary.databaseRecallCount ?? normalizedSources.value.length) || null
+  const toolSearch = (summary.toolSearchCount ?? reportCitationNumbers.value.length) || null
+  const structuredSources = (summary.structuredSourceCount ?? normalizedSources.value.length) || null
+  const reportCitations = (summary.reportReferenceCount ?? reportCitationNumbers.value.length) || null
   const failed = normalizedSources.value.filter((item) => item.status === 'failed').length
   const extracted = props.databaseSources?.queryPlan?.contentRowsRead ||
     normalizedSources.value.filter((item) => item.status === 'extracted').length ||
@@ -1949,9 +1952,10 @@ const sourceOverviewStats = computed(() => {
     ? Math.max(structuredSources - (extracted || 0) - failed, 0)
     : normalizedSources.value.filter((item) => item.status === 'snippet_only' || item.status === 'used').length
   return {
+    databaseRecall,
+    toolSearch,
     reportCitations,
     structuredSources,
-    candidateHits,
     extracted,
     snippetOnly: snippetOnly || null,
     failed: failed || null,
@@ -1960,11 +1964,11 @@ const sourceOverviewStats = computed(() => {
 
 const sourceTypeOptions = [
   { key: 'all', label: '全部' },
-  { key: 'report_refs', label: '报告引用' },
-  { key: 'structured_sources', label: '结构化信源' },
+  { key: 'database_recall', label: '数据库召回' },
+  { key: 'tool_search', label: '工具调用搜索' },
 ]
 
-const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', '其他']
+const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', 'PG向量召回', 'Exa搜索', 'Tavily搜索', 'Tavily抽取', 'Firecrawl抽取', '其他']
 const sourceTimeOptions = [
   { key: 'all', label: '全部时间' },
   { key: '7d', label: '近 7 天', days: 7 },
@@ -1980,18 +1984,18 @@ const sourceSortOptions = [
 
 const sourceCardConfigs = computed(() => [
   {
-    key: 'report_refs',
-    title: '报告引用',
-    value: sourceOverviewStats.value.reportCitations ?? '--',
-    desc: '来自正文参考编号',
+    key: 'database_recall',
+    title: '数据库召回',
+    value: sourceOverviewStats.value.databaseRecall ?? '--',
+    desc: '来自 PG 向量库 / 数据库召回',
     icon: '◎',
     tone: 'blue',
   },
   {
-    key: 'structured_sources',
-    title: '结构化信源',
-    value: sourceOverviewStats.value.structuredSources ?? '--',
-    desc: '来自数据库 / 向量召回',
+    key: 'tool_search',
+    title: '工具调用搜索',
+    value: sourceOverviewStats.value.toolSearch ?? '--',
+    desc: '来自 Exa / Firecrawl / Tavily',
     icon: '▤',
     tone: 'cyan',
   },
@@ -2009,12 +2013,14 @@ const activeSourceConfig = computed(() => {
   }
   const base = sourceCardConfigs.value.find((item) => item.key === activeSourceType.value) || sourceCardConfigs.value[0]
   const descriptions = {
+    database_recall: ['数据库召回信源', '以下信源来自 PG 向量库或数据库召回，并已保留引用编号和结构化整理状态。', '暂无数据库召回信源', '当前报告没有数据库召回类信源记录，您可以切换工具调用搜索查看。'],
+    tool_search: ['工具调用搜索信源', '以下信源来自 Exa、Firecrawl、Tavily 的公开搜索或正文抽取结果。', '暂无工具调用搜索信源', '当前报告没有工具调用搜索类信源记录，您可以切换数据库召回查看。'],
     report_refs: ['报告引用信源', '以下信源来自报告正文中的参考编号和引用依据。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
     structured_sources: ['结构化信源', '以下信源来自数据库或向量召回结果，已完成结构化整理。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
     candidate_hits: ['候选命中信源', '以下内容为检索阶段命中的候选信源，尚未全部进入正文引用。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
     extract_failed: ['抽取失败记录', '以下来源在正文抽取阶段失败，可能仅保留标题、摘要或 URL。', '暂无抽取失败记录', '本次任务未发现正文抽取失败的信源。'],
   }
-  const [title, desc, emptyTitle, emptyDesc] = descriptions[base.key] || descriptions.report_refs
+  const [title, desc, emptyTitle, emptyDesc] = descriptions[base.key] || descriptions.database_recall
   return { ...base, title, desc, emptyTitle, emptyDesc }
 })
 
@@ -2235,23 +2241,28 @@ function scrubSourceDisplayText(value) {
 }
 
 function inferSourceGroup(source, fallbackGroup = activeSourceType.value) {
+  const origin = source?.sourceOrigin || source?.source_origin
+  if (origin === 'database_recall' || origin === 'tool_search') return origin
   const explicit = source?.sourceGroup || source?.source_group || source?.group || source?.category
-  const text = `${explicit || ''} ${source?.type || ''} ${source?.source_type || ''} ${source?.tag || ''} ${source?.designated_tag || ''} ${source?.status || ''} ${source?.extract_status || ''}`.toLowerCase()
+  if (explicit === 'database_recall' || explicit === 'tool_search') return explicit
+  const text = `${explicit || ''} ${source?.type || ''} ${source?.source_type || ''} ${source?.sourceType || ''} ${source?.tag || ''} ${source?.designated_tag || ''} ${source?.status || ''} ${source?.extract_status || ''} ${source?.method || ''} ${source?.engine || ''}`.toLowerCase()
+  if (/database_recall|pg_vector|pgvector|database|vector|结构化|数据库|向量/.test(text)) return 'database_recall'
+  if (/tool_search|exa|firecrawl|tavily|工具调用|公开搜索/.test(text)) return 'tool_search'
   if (/report_refs|report_ref|citation|reference|引用|参考/.test(text)) return 'report_refs'
   if (/candidate_hits|candidate|hit|候选|命中/.test(text)) return 'candidate_hits'
   if (/extract_failed|failed|failure|error|失败|不可用/.test(text)) return 'extract_failed'
-  if (/structured_sources|structured|database|vector|结构化|数据库|向量/.test(text)) return 'structured_sources'
-  return fallbackGroup === 'all' ? 'structured_sources' : fallbackGroup
+  if (/structured_sources|structured/.test(text)) return 'database_recall'
+  return fallbackGroup === 'all' ? 'database_recall' : fallbackGroup
 }
 
 function normalizeSourceListItem(source, index, fallbackGroup = activeSourceType.value) {
   const title = scrubSourceDisplayText(firstText(source, ['title', 'ch_title', 'headline', 'sourceTitle', 'name'], '未命名信源'))
-  const summary = scrubSourceDisplayText(firstText(source, ['summary', 'abstract', 'description'], '当前信源暂无摘要。'))
-  const detail = scrubSourceDisplayText(firstText(source, ['excerpt', 'content_excerpt', 'chunk_text', 'content_chunk', 'body', 'content', 'fullText', 'text', 'detail'], ''))
+  const summary = scrubSourceDisplayText(firstText(source, ['summary', 'abstract', 'description', 'snippet', 'finding', 'claim', 'content_preview'], '当前信源暂无摘要。'))
+  const detail = scrubSourceDisplayText(firstText(source, ['excerpt', 'content_excerpt', 'chunk_text', 'content_chunk', 'body', 'content', 'markdown', 'fullText', 'text', 'detail', 'content_preview'], ''))
   const url = firstText(source, ['url', 'source_url', 'data_source_url', 'sourceUrl'], '')
   const sourceName = scrubSourceDisplayText(firstText(source, ['publisher', 'website_name', 'source_name', 'site_name', 'sourceName', 'source', 'websiteName'], '来源未知'))
   const publishRaw = firstText(source, ['published_at', 'publish_time', 'pub_time', 'source_time', 'publishTime', 'publishedAt', 'time'], '')
-  const sourceType = normalizeSourceKind(firstText(source, ['source_type', 'type', 'tag', 'designated_tag', 'sourceType'], '其他'))
+  const sourceType = normalizeSourceKind(firstText(source, ['source_type', 'type', 'tag', 'designated_tag', 'sourceType'], '其他'), source)
   const status = scrubSourceDisplayText(firstText(source, ['status', 'extract_status', 'source_status'], ''))
   const method = scrubSourceDisplayText(firstText(source, ['method', 'retrievalMode', 'collection_method'], ''))
   const failedReason = scrubSourceDisplayText(firstText(source, ['failedReason', 'failure_reason', 'error', 'message', 'note'], ''))
@@ -2271,6 +2282,9 @@ function normalizeSourceListItem(source, index, fallbackGroup = activeSourceType
     sourceType,
     status,
     method,
+    engine: firstText(source, ['engine', 'search_engine', 'provider'], ''),
+    sourceOrigin: firstText(source, ['sourceOrigin', 'source_origin'], sourceGroup),
+    evidenceKind: firstText(source, ['evidenceKind', 'evidence_kind'], ''),
     failedReason,
     authorityScore: inferAuthorityScore(sourceName, sourceType),
     numericScore: normalizeNumericScore(score),
@@ -2278,9 +2292,21 @@ function normalizeSourceListItem(source, index, fallbackGroup = activeSourceType
   }
 }
 
-function normalizeSourceKind(value) {
+function normalizeSourceKind(value, source = null) {
+  const engine = String(source?.engine || source?.search_engine || source?.provider || '').trim().toLowerCase()
+  const origin = String(source?.sourceOrigin || source?.source_origin || source?.sourceGroup || '').trim().toLowerCase()
+  if (engine === 'exa') return 'Exa搜索'
+  if (engine === 'firecrawl') return 'Firecrawl抽取'
+  if (engine === 'tavily_extract') return 'Tavily抽取'
+  if (engine === 'tavily') return 'Tavily搜索'
+  if (engine === 'pg_vector' || /database_recall|pg_vector|vector/.test(origin)) return 'PG向量召回'
   const text = String(value || '').trim()
   if (!text) return '其他'
+  if (/exa/i.test(text)) return 'Exa搜索'
+  if (/firecrawl/i.test(text)) return 'Firecrawl抽取'
+  if (/tavily.*extract|tavily抽取/i.test(text)) return 'Tavily抽取'
+  if (/tavily/i.test(text)) return 'Tavily搜索'
+  if (/pg|向量|vector/i.test(text)) return 'PG向量召回'
   if (/官方|政府|公告|声明|文件|policy|gov/i.test(text)) return '官方文件'
   if (/媒体|新闻|报道|news|media/i.test(text)) return '媒体报道'
   if (/研究|报告|智库|analysis|report|think/i.test(text)) return '研究报告'
@@ -2340,7 +2366,7 @@ function normalizeSourceListResponse(response, fallbackGroup = activeSourceType.
 
 function sourceRequestType(type = activeSourceType.value) {
   if (type === 'all') return ''
-  return type || 'report_refs'
+  return type || 'database_recall'
 }
 
 function sourceCandidateHitTotal() {
@@ -2368,7 +2394,9 @@ function candidateDetailNotice(items) {
 function localSourcePool(type = activeSourceType.value) {
   const citationSources = citationItems.value.map((item, index) => normalizeSourceListItem({
     id: `citation-${item.number}`,
-    sourceGroup: 'report_refs',
+    sourceGroup: 'tool_search',
+    sourceOrigin: 'tool_search',
+    evidenceKind: 'report_reference',
     title: item.title,
     source_name: item.sourceName,
     summary: item.summary,
@@ -2379,7 +2407,9 @@ function localSourcePool(type = activeSourceType.value) {
 
   const structuredSources = normalizedSources.value.map((item, index) => normalizeSourceListItem({
     id: item.id,
-    sourceGroup: item.status === 'failed' ? 'extract_failed' : 'structured_sources',
+    sourceGroup: item.status === 'failed' ? 'extract_failed' : 'database_recall',
+    sourceOrigin: item.status === 'failed' ? '' : 'database_recall',
+    evidenceKind: 'structured_source',
     title: item.title,
     source_name: item.sourceName,
     publish_time: item.publishTime,
@@ -2409,6 +2439,8 @@ function localSourcePool(type = activeSourceType.value) {
     }, index))
 
   const grouped = {
+    database_recall: structuredSources.filter((item) => item.sourceGroup !== 'extract_failed'),
+    tool_search: citationSources,
     report_refs: citationSources,
     structured_sources: structuredSources.filter((item) => item.sourceGroup !== 'extract_failed'),
     candidate_hits: candidateSources,
@@ -2419,8 +2451,8 @@ function localSourcePool(type = activeSourceType.value) {
   }
 
   if (type === 'all') return [
-    ...grouped.report_refs,
-    ...grouped.structured_sources,
+    ...grouped.database_recall,
+    ...grouped.tool_search,
   ]
   return grouped[type] || []
 }
@@ -2442,7 +2474,7 @@ const filteredSourceRows = computed(() => {
   const query = sourceSearchQuery.value.trim().toLowerCase()
   const rows = sourceListItems.value.filter((source) => {
     const searchable = `${source.title} ${source.sourceName} ${source.summary} ${source.detail} ${source.sourceType}`.toLowerCase()
-    if (activeSourceType.value === 'all' && ['candidate_hits', 'extract_failed'].includes(source.sourceGroup)) return false
+    if (activeSourceType.value === 'all' && ['candidate_hits', 'extract_failed', 'report_refs', 'structured_sources'].includes(source.sourceGroup)) return false
     if (query && !searchable.includes(query)) return false
     if (sourceKindFilter.value !== '全部' && source.sourceType !== sourceKindFilter.value) return false
     if (!sourceMatchesTime(source)) return false
@@ -2475,6 +2507,7 @@ function resetSourceListState() {
   sourceListPage.value = 1
   sourceListTotal.value = null
   sourceListHasMore.value = false
+  sourceListSummary.value = null
   sourceCurrentPage.value = 1
   sourceListError.value = ''
   sourceListNotice.value = ''
@@ -2516,6 +2549,7 @@ async function loadSourceListPage(page = 1) {
       ? 'all'
       : requestType
     const normalized = normalizeSourceListResponse(response, fallbackGroup)
+    sourceListSummary.value = response?.meta?.summary || sourceListSummary.value
     const typedItems = requestType === 'all'
       ? normalized.items
       : normalized.items.filter((item) => item.sourceGroup === requestType)
@@ -2712,12 +2746,12 @@ watch(() => [props.phase, props.isHistoryMode], () => {
 })
 watch(() => [props.phase, props.job?.jobId], () => {
   if (props.phase === 'done') activeResultTab.value = 'report'
-  activeSourceType.value = 'report_refs'
+  activeSourceType.value = 'database_recall'
   resetSourceListState()
 })
 watch(() => activeResultTab.value, (tab) => {
   if (tab === 'sources' && props.job?.jobId && !sourceListItems.value.length && !sourceListLoading.value) {
-    selectSourceType(activeSourceType.value || 'report_refs')
+    selectSourceType(activeSourceType.value || 'database_recall')
   }
 })
 watch([sourceSearchQuery, sourceKindFilter, sourceTimeFilter, sourceSortMode], handleSourceFiltersChanged)
@@ -4140,7 +4174,7 @@ function exportPdf() {
             </div>
 
             <div class="source-count-note">
-              口径说明：报告引用来自正文参考编号；结构化信源来自数据库/向量透明展示，两类信源不混算。
+              口径说明：数据库召回来自 PG 向量库/数据库；工具调用搜索来自 Exa、Firecrawl、Tavily。报告引用编号和结构化整理状态作为信源属性展示，不作为主分类混算。
             </div>
 
             <div class="source-sub-filter" aria-label="信源类型筛选">
