@@ -262,23 +262,25 @@ onUnmounted(() => {
       <canvas ref="canvasRef" class="w-full h-full"></canvas>
     </div>
 
-    <div class="header-time flex flex-col items-end">
-      <span class="font-mono text-[8px] text-slate-400 tracking-widest mb-1">系统时间</span>
-      <span class="font-mono text-xs text-slate-700 tracking-wider">{{ currentTime }}</span>
-    </div>
+    <div class="header-right-actions">
+      <div class="header-time flex flex-col items-end">
+        <span class="font-mono text-[8px] text-slate-400 tracking-widest mb-1">系统时间</span>
+        <span class="font-mono text-xs text-slate-700 tracking-wider">{{ currentTime }}</span>
+      </div>
 
-    <div class="header-settings relative">
-      <button
-        ref="settingsButtonRef"
-        class="settings-icon-btn"
-        type="button"
-        aria-label="设置"
-        :aria-expanded="showSettingsMenu"
-        title="设置"
-        @click.stop="toggleSettingsMenu"
-      >
-        ⚙
-      </button>
+      <div class="header-settings relative">
+        <button
+          ref="settingsButtonRef"
+          class="settings-icon-btn"
+          type="button"
+          aria-label="设置"
+          :aria-expanded="showSettingsMenu"
+          title="设置"
+          @click.stop="toggleSettingsMenu"
+        >
+          ⚙
+        </button>
+      </div>
     </div>
   </header>
 
