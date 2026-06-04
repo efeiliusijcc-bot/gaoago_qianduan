@@ -157,6 +157,8 @@ export function useReportJobs() {
   let listSearchTimer = null
   let jobEventSource = null
   let subscribedJobId = null
+  let progressPollTimer = null
+  let progressPollJobId = null
   let activeExecutionLogJobId = null
   let historyOpenRequestId = 0
   let databaseSourcesRequestId = 0
@@ -400,8 +402,34 @@ export function useReportJobs() {
     subscribedJobId = null
   }
 
+  function stopProgressPolling(jobId = null) {
+    if (jobId && progressPollJobId && progressPollJobId !== jobId) return
+    if (progressPollTimer) {
+      window.clearInterval(progressPollTimer)
+      progressPollTimer = null
+    }
+    progressPollJobId = null
+  }
+
+  function startProgressPolling(jobId) {
+    if (!jobId) return
+    if (progressPollJobId === jobId && progressPollTimer) return
+    stopProgressPolling()
+    progressPollJobId = jobId
+    const refresh = () => {
+      void loadProgressState(jobId, () => {
+        const visibleJob = job.value?.jobId === jobId && openedHistoryJobId.value !== jobId
+        const activeWorkspaceJob = activeWorkspaceSnapshot.value?.job?.jobId === jobId
+        return progressPollJobId === jobId && (visibleJob || activeWorkspaceJob)
+      })
+    }
+    refresh()
+    progressPollTimer = window.setInterval(refresh, 2000)
+  }
+
   function resetExecutionLogs() {
     closeJobEvents()
+    stopProgressPolling()
     executionLogs.value = []
     progressState.value = null
     unreadLogCount.value = 0
@@ -617,22 +645,27 @@ export function useReportJobs() {
         })
         pushWorkspaceSnapshotLog(`错误：${message}`)
       }
+      stopProgressPolling(eventJobId)
       closeJobEvents()
     }
 
     if (event.type === 'done') {
       fetchDatabaseSourcesData(eventJobId)
       loadProgressState(eventJobId)
+      stopProgressPolling(eventJobId)
       closeJobEvents()
     }
   }
 
   function subscribeJobEvents(jobId) {
-    if (!window.EventSource || !jobId) return
+    if (!jobId) return
+    startProgressPolling(jobId)
+    if (!window.EventSource) return
     if (subscribedJobId === jobId && jobEventSource) return
 
     closeJobEvents()
     if (activeExecutionLogJobId !== jobId) setActiveExecutionLogJob(jobId)
+    startProgressPolling(jobId)
     subscribedJobId = jobId
     const source = new EventSource(getJobEventsUrl(jobId))
     jobEventSource = source
@@ -657,6 +690,7 @@ export function useReportJobs() {
         if (activeWorkspaceSnapshot.value?.job?.jobId === jobId) patchActiveWorkspaceSnapshot({ job: latest, __force: true })
         await loadProgressState(jobId)
         if (latest.status === 'succeeded' || latest.status === 'failed' || latest.status === 'cancelled') {
+          stopProgressPolling(jobId)
           closeJobEvents()
           return
         }
@@ -1088,6 +1122,7 @@ export function useReportJobs() {
         interval = Math.min(interval * 2, maxInterval)
       }
     } finally {
+      stopProgressPolling(jobId)
       if (activePollJobId.value === jobId) activePollJobId.value = null
     }
   }
