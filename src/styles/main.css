@@ -834,6 +834,31 @@ canvas {
   min-width: 0;
 }
 
+.header-home-btn {
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, background 0.18s ease;
+}
+
+.header-home-btn:hover {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.94);
+}
+
 .header-tech-line {
   min-width: 120px;
   overflow: hidden;

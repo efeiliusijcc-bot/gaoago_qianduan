@@ -372,8 +372,10 @@ export function useReportJobs() {
       })
       recentPage.value = Array.isArray(response) ? nextPage : response.page || nextPage
       if (Array.isArray(response)) {
+        if (reset) listTotal.value = recentJobs.value.length
         recentHasMore.value = items.length >= recentPageSize
       } else {
+        listTotal.value = response.total || recentJobs.value.length
         recentHasMore.value = recentPage.value < (response.totalPages || 1)
       }
     } catch (error) {

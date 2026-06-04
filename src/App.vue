@@ -198,6 +198,12 @@ function resetForNewReportFromCanvas() {
   resetForNewReport()
 }
 
+function returnHome() {
+  homeMode.value = 'report'
+  selectedQaSessionId.value = ''
+  resetForNewReport()
+}
+
 watch(qaSessions, persistQaSessions, { deep: true })
 
 function skillLabel(item) {
@@ -240,7 +246,7 @@ function jobActionLabel(status) {
     <div class="crt-overlay"></div>
     <div class="crt-scanline"></div>
 
-    <NexusHeader />
+    <NexusHeader @return-home="returnHome" />
 
     <div v-if="currentView === 'generator'" class="app-body">
       <ControlPanel
@@ -249,6 +255,8 @@ function jobActionLabel(status) {
         :jobs="filteredJobs"
         :recentJobs="recentJobs"
         :qaSessions="qaSessions"
+        :reportTotal="listTotal"
+        :qaTotal="qaSessions.length"
         :recentLoadingMore="recentLoadingMore"
         :recentHasMore="recentHasMore"
         :recentLoadError="recentLoadError"

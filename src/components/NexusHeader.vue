@@ -2,6 +2,8 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { fetchResearchKeys, fetchVectorSourceStatus, updateResearchKeys } from '../lib/api.js'
 
+const emit = defineEmits(['return-home'])
+
 const currentTime = ref('')
 const canvasRef = ref(null)
 const settingsButtonRef = ref(null)
@@ -242,6 +244,15 @@ onUnmounted(() => {
 <template>
   <header class="topbar flex items-center justify-between px-6">
     <div class="header-brand flex items-center">
+      <button
+        class="header-home-btn"
+        type="button"
+        aria-label="返回首页"
+        title="返回首页"
+        @click="emit('return-home')"
+      >
+        ‹
+      </button>
       <span class="font-mono tracking-wide" style="font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: 0.02em; line-height: 1.2;">
         AI深度编报
       </span>

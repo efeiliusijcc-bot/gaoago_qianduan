@@ -26,6 +26,14 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  reportTotal: {
+    type: Number,
+    default: 0,
+  },
+  qaTotal: {
+    type: Number,
+    default: 0,
+  },
   currentQaSessionId: String,
 })
 
@@ -34,21 +42,14 @@ const emit = defineEmits(['open-job', 'open-qa-session', 'start-qa', 'start-repo
 const hasHealth = computed(() => Boolean(props.health))
 const healthOk = computed(() => Boolean(props.health?.ok))
 const engineStatus = computed(() => {
-  if (!hasHealth.value) return '检测中'
-  return healthOk.value ? '正常' : props.health?.status === 'degraded' ? '部分异常' : '异常'
+  return healthOk.value ? '正常' : '--'
 })
 const engineText = computed(() => {
   if (!hasHealth.value) return '正在连接 AI 引擎'
   return healthOk.value ? '系统运行良好' : props.health?.details?.[0] || '服务连接异常'
 })
-const serviceStatus = computed(() => {
-  if (!hasHealth.value) return '检测中'
-  return props.health?.checks?.openclawHttpApi || props.health?.checks?.openclawBinary ? '正常' : '异常'
-})
-const localStatus = computed(() => {
-  if (!hasHealth.value) return '检测中'
-  return props.health?.checks?.localProbe ? '正常' : '异常'
-})
+const reportTotalText = computed(() => Number(props.reportTotal || 0).toLocaleString('zh-CN'))
+const qaTotalText = computed(() => Number(props.qaTotal || 0).toLocaleString('zh-CN'))
 const recentJobs = computed(() => props.recentJobs.length ? props.recentJobs : props.jobs)
 const isQaMode = computed(() => props.mode === 'qa')
 const historyTitle = computed(() => isQaMode.value ? '问答历史' : '编报历史')
@@ -152,7 +153,7 @@ function handleHistoryAction() {
           <h2 class="font-mono text-sm neon-text tracking-widest">AI引擎状态</h2>
           <div class="mt-1 font-mono text-[10px] text-[#374151]">ENGINE STATUS</div>
         </div>
-        <button class="sci-btn text-[10px] px-3 py-1.5" @click="emit('refresh-health')">检测</button>
+        <button type="button" class="sci-btn text-[10px] px-3 py-1.5" @click.stop="emit('refresh-health')">检测</button>
       </div>
 
       <div class="flex items-center gap-3 mb-3">
@@ -170,12 +171,12 @@ function handleHistoryAction() {
 
       <div class="space-y-1.5 border-t border-neon-cyan/10 pt-3">
         <div class="soft-field flex items-center justify-between px-3 py-2">
-          <span class="font-mono text-xs text-slate-300/65">服务连接状态</span>
-          <span class="font-mono text-xs" :class="serviceStatus === '正常' ? 'text-neon-green' : serviceStatus === '检测中' ? 'text-cyber-yellow' : 'text-red-300'">{{ serviceStatus }}</span>
+          <span class="font-mono text-xs text-slate-300/65">当前编报总数</span>
+          <span class="font-mono text-xs text-neon-green">{{ reportTotalText }}</span>
         </div>
         <div class="soft-field flex items-center justify-between px-3 py-2">
-          <span class="font-mono text-xs text-slate-300/65">本地服务引擎</span>
-          <span class="font-mono text-xs" :class="localStatus === '正常' ? 'text-neon-green' : localStatus === '检测中' ? 'text-cyber-yellow' : 'text-red-300'">{{ localStatus }}</span>
+          <span class="font-mono text-xs text-slate-300/65">问答总数</span>
+          <span class="font-mono text-xs text-neon-green">{{ qaTotalText }}</span>
         </div>
       </div>
     </section>
