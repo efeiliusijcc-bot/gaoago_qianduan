@@ -356,23 +356,26 @@ onUnmounted(() => {
   <Teleport to="body">
     <div
       v-if="showKeySettings"
-      class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/30 px-4 backdrop-blur-sm"
+      class="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-slate-900/30 px-4 py-6 backdrop-blur-sm"
       @click.self="closeKeySettings"
     >
-      <section class="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-        <div class="mb-4 flex items-start justify-between gap-4">
+      <section class="flex max-h-[calc(100vh-3rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div class="shrink-0 border-b border-slate-100 px-5 pb-4 pt-5">
+          <div class="flex items-start justify-between gap-4">
           <div>
             <h2 class="font-mono text-lg font-bold text-slate-900">信源设置</h2>
             <p class="mt-1 text-xs leading-relaxed text-slate-500">配置 Tavily、Exa、Firecrawl 和向量检索 API Key。密钥只保存在服务器，前端不回显明文。</p>
           </div>
           <button class="sci-btn px-3 py-2 text-[10px]" type="button" @click="closeKeySettings">关闭</button>
+          </div>
         </div>
 
-        <div v-if="keyLoading" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-          正在读取配置状态...
-        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4 overscroll-contain">
+          <div v-if="keyLoading" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            正在读取配置状态...
+          </div>
 
-        <div v-else class="space-y-3">
+          <div v-else class="space-y-3">
           <div
             v-for="field in keyFields"
             :key="field.key"
@@ -456,16 +459,17 @@ onUnmounted(() => {
             </div>
             <div v-if="vectorStatus.fallbackReason" class="mt-1 text-amber-600">{{ vectorStatus.fallbackReason }}</div>
           </div>
+
+          <div v-if="keyError" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {{ keyError }}
+          </div>
+          <div v-if="keyNotice" class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            {{ keyNotice }}
+          </div>
+        </div>
         </div>
 
-        <div v-if="keyError" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {{ keyError }}
-        </div>
-        <div v-if="keyNotice" class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {{ keyNotice }}
-        </div>
-
-        <div class="mt-5 flex items-center justify-end gap-2">
+        <div class="shrink-0 border-t border-slate-100 bg-white px-5 py-4 flex items-center justify-end gap-2">
           <button class="sci-btn px-4 py-2 text-[10px]" type="button" :disabled="keySaving" @click="closeKeySettings">
             取消
           </button>
