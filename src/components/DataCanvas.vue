@@ -364,9 +364,106 @@ function qaAnswerHtml(answer) {
 const resultTabs = [
   { key: 'report', label: '报告正文' },
   { key: 'sources', label: '信源概览' },
+  { key: 'planning', label: '规划选择' },
   { key: 'citations', label: '引用依据' },
   { key: 'progress', label: '任务进度' },
 ]
+
+function parseStructuredPlanningContext(value) {
+  if (!value) return null
+  if (typeof value === 'object') return value
+  const text = String(value || '').trim()
+  if (!text) return null
+  const candidates = [text]
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start >= 0 && end > start) candidates.push(text.slice(start, end + 1))
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate)
+      if (parsed?.kind === 'structured_report_context' || parsed?.selectedModules || parsed?.selectedSearchQueries) return parsed
+    } catch {
+      // Ignore non-JSON legacy context.
+    }
+  }
+  return null
+}
+
+const planningContext = computed(() => {
+  const payload = props.job?.payload || {}
+  const candidates = [
+    payload.known_context,
+    payload.visit_context,
+    payload.context,
+    payload.research_context,
+    payload.planningContext,
+    props.job?.planningContext,
+  ]
+  for (const candidate of candidates) {
+    const parsed = parseStructuredPlanningContext(candidate)
+    if (parsed) return parsed
+  }
+  return null
+})
+
+function normalizePlanningItems(items) {
+  return Array.isArray(items)
+    ? items
+      .map((item) => {
+        if (typeof item === 'string') return { id: item, label: item, detail: '' }
+        return {
+          id: item?.id || item?.label || item?.title || '',
+          label: item?.label || item?.title || item?.name || item?.id || '',
+          detail: item?.detail || item?.description || item?.summary || '',
+        }
+      })
+      .filter((item) => item.label)
+    : []
+}
+
+const planningSelectionView = computed(() => {
+  const context = planningContext.value
+  if (!context) {
+    return {
+      available: false,
+      searchQueries: [],
+      sourceScopes: [],
+      modules: [],
+      manualSources: [],
+      parameterEntries: [],
+      databaseEnabled: false,
+      supplement: '',
+      freeTextContext: '',
+      totalDirections: 0,
+    }
+  }
+  const modules = Array.isArray(context.selectedModules)
+    ? context.selectedModules.map((module, index) => {
+      const directions = normalizePlanningItems(module.selectedDirections || module.options)
+      return {
+        id: module.stepId || module.sectionKey || `module-${index}`,
+        title: module.sectionTitle || module.title || module.sectionKey || `规划模块 ${index + 1}`,
+        type: planStepTypeLabel(module.stepType),
+        directions,
+      }
+    })
+    : []
+  const parameterEntries = Object.entries(context.parameterValues || {})
+    .filter(([, value]) => String(value || '').trim())
+    .map(([key, value]) => ({ key, value: String(value) }))
+  return {
+    available: true,
+    searchQueries: Array.isArray(context.selectedSearchQueries) ? context.selectedSearchQueries.filter(Boolean) : [],
+    sourceScopes: normalizePlanningItems(context.selectedSources),
+    modules,
+    manualSources: Array.isArray(context.userProvidedSources) ? context.userProvidedSources.filter(Boolean) : [],
+    parameterEntries,
+    databaseEnabled: Boolean(context.databaseSourceOptions?.enabled),
+    supplement: String(context.supplement || '').trim(),
+    freeTextContext: String(context.freeTextContext || '').trim(),
+    totalDirections: modules.reduce((sum, module) => sum + module.directions.length, 0),
+  }
+})
 const featureCards = [
   {
     key: 'report',
@@ -4327,6 +4424,123 @@ function exportPdf() {
 
               <footer v-if="sourceListNotice" class="source-fixed-notice">{{ sourceListNotice }}</footer>
             </div>
+          </div>
+        </section>
+
+        <section v-else-if="activeResultTab === 'planning'" class="result-tab-panel">
+          <div v-if="!planningSelectionView.available" class="planning-empty-state">
+            <strong>暂无规划选择记录</strong>
+            <p>当前任务没有保存可展示的规划勾选信息。新生成的编报任务会在这里展示规划阶段的选择结果。</p>
+          </div>
+          <div v-else class="planning-selection-page">
+            <header class="planning-selection-hero">
+              <div>
+                <span>规划选择</span>
+                <h2>本次编报采用的规划勾选结果</h2>
+                <p>展示正式提交编报前，用户在规划阶段确认的检索词、信源范围、章节方向和补充要求。</p>
+              </div>
+              <div class="planning-selection-status">
+                <strong>{{ planningSelectionView.databaseEnabled ? '已启用' : '未启用' }}</strong>
+                <span>数据库信源</span>
+              </div>
+            </header>
+
+            <div class="planning-summary-grid">
+              <article>
+                <span>检索词</span>
+                <strong>{{ planningSelectionView.searchQueries.length }}</strong>
+              </article>
+              <article>
+                <span>信源范围</span>
+                <strong>{{ planningSelectionView.sourceScopes.length }}</strong>
+              </article>
+              <article>
+                <span>编报模块</span>
+                <strong>{{ planningSelectionView.modules.length }}</strong>
+              </article>
+              <article>
+                <span>选择方向</span>
+                <strong>{{ planningSelectionView.totalDirections }}</strong>
+              </article>
+            </div>
+
+            <section class="planning-selection-section">
+              <div class="planning-section-heading">
+                <h3>检索词选择</h3>
+                <p>用于触发资料检索和信源召回的主题关键词。</p>
+              </div>
+              <div v-if="planningSelectionView.searchQueries.length" class="planning-chip-list">
+                <span v-for="query in planningSelectionView.searchQueries" :key="query">{{ query }}</span>
+              </div>
+              <div v-else class="planning-muted-box">未保存检索词选择。</div>
+            </section>
+
+            <section class="planning-selection-section">
+              <div class="planning-section-heading">
+                <h3>信源范围</h3>
+                <p>规划阶段选择纳入检索的材料类型和来源范围。</p>
+              </div>
+              <div v-if="planningSelectionView.sourceScopes.length" class="planning-source-grid">
+                <article v-for="source in planningSelectionView.sourceScopes" :key="source.id || source.label">
+                  <strong>{{ source.label }}</strong>
+                  <p>{{ source.detail || '已纳入本次编报信源范围。' }}</p>
+                </article>
+              </div>
+              <div v-else class="planning-muted-box">未保存信源范围选择。</div>
+            </section>
+
+            <section class="planning-selection-section">
+              <div class="planning-section-heading">
+                <h3>章节与方向选择</h3>
+                <p>正式编报时采用的章节模块和每个模块下的重点方向。</p>
+              </div>
+              <div v-if="planningSelectionView.modules.length" class="planning-module-list">
+                <article v-for="module in planningSelectionView.modules" :key="module.id" class="planning-module-card">
+                  <div class="planning-module-title">
+                    <span>{{ module.type }}</span>
+                    <strong>{{ module.title }}</strong>
+                  </div>
+                  <div v-if="module.directions.length" class="planning-direction-list">
+                    <div v-for="direction in module.directions" :key="direction.id || direction.label" class="planning-direction-item">
+                      <strong>{{ direction.label }}</strong>
+                      <p>{{ direction.detail || '已选择纳入正式编报。' }}</p>
+                    </div>
+                  </div>
+                  <div v-else class="planning-muted-box">该模块未保存具体方向。</div>
+                </article>
+              </div>
+              <div v-else class="planning-muted-box">未保存章节方向选择。</div>
+            </section>
+
+            <section
+              v-if="planningSelectionView.manualSources.length || planningSelectionView.parameterEntries.length || planningSelectionView.supplement || planningSelectionView.freeTextContext"
+              class="planning-selection-section"
+            >
+              <div class="planning-section-heading">
+                <h3>补充要求</h3>
+                <p>用户在规划确认前额外填写的限定条件、指定信源和背景说明。</p>
+              </div>
+              <div class="planning-extra-grid">
+                <article v-if="planningSelectionView.parameterEntries.length">
+                  <h4>参数信息</h4>
+                  <p v-for="entry in planningSelectionView.parameterEntries" :key="entry.key">
+                    <span>{{ entry.key }}</span>{{ entry.value }}
+                  </p>
+                </article>
+                <article v-if="planningSelectionView.manualSources.length">
+                  <h4>指定信源</h4>
+                  <p v-for="source in planningSelectionView.manualSources" :key="source">{{ source }}</p>
+                </article>
+                <article v-if="planningSelectionView.supplement">
+                  <h4>补充方向</h4>
+                  <p>{{ planningSelectionView.supplement }}</p>
+                </article>
+                <article v-if="planningSelectionView.freeTextContext">
+                  <h4>背景说明</h4>
+                  <p>{{ planningSelectionView.freeTextContext }}</p>
+                </article>
+              </div>
+            </section>
           </div>
         </section>
 
