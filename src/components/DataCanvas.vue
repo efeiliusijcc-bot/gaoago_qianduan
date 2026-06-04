@@ -2035,12 +2035,36 @@ const sourceStats = computed(() => {
   return { candidateHits, highValue, visibleSources, extracted }
 })
 
+function firstPositiveCount(...values) {
+  for (const value of values) {
+    const number = Number(value)
+    if (Number.isFinite(number) && number > 0) return number
+  }
+  return null
+}
+
+function loadedSourceCountFor(group) {
+  if (activeSourceType.value === group) {
+    return firstPositiveCount(sourceListTotal.value, sourceListItems.value.length)
+  }
+  return firstPositiveCount(sourceListItems.value.filter((item) => item.sourceGroup === group).length)
+}
+
 const sourceOverviewStats = computed(() => {
   const summary = sourceListSummary.value || {}
-  const databaseRecall = (summary.databaseRecallCount ?? normalizedSources.value.length) || null
-  const toolSearch = (summary.toolSearchCount ?? reportCitationNumbers.value.length) || null
-  const structuredSources = (summary.structuredSourceCount ?? normalizedSources.value.length) || null
-  const reportCitations = (summary.reportReferenceCount ?? reportCitationNumbers.value.length) || null
+  const databaseRecall = firstPositiveCount(
+    summary.databaseRecallCount,
+    loadedSourceCountFor('database_recall'),
+    normalizedSources.value.length,
+  )
+  const toolSearch = firstPositiveCount(
+    summary.toolSearchCount,
+    loadedSourceCountFor('tool_search'),
+    localSourcePool('tool_search').length,
+    reportCitationNumbers.value.length,
+  )
+  const structuredSources = firstPositiveCount(summary.structuredSourceCount, normalizedSources.value.length)
+  const reportCitations = firstPositiveCount(summary.reportReferenceCount, reportCitationNumbers.value.length)
   const failed = normalizedSources.value.filter((item) => item.status === 'failed').length
   const extracted = props.databaseSources?.queryPlan?.contentRowsRead ||
     normalizedSources.value.filter((item) => item.status === 'extracted').length ||
