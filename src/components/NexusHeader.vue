@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
-import { fetchResearchKeys, fetchVectorSourceStatus, updateResearchKeys } from '../lib/api.js'
+import { fetchResearchKeys, fetchVectorSourceStatus, switchVectorSourceProfile, updateResearchKeys } from '../lib/api.js'
 
 const emit = defineEmits(['return-home'])
 
@@ -29,6 +29,8 @@ const keySaving = ref(false)
 const keyError = ref('')
 const keyNotice = ref('')
 const vectorStatus = ref(null)
+const vectorRefreshing = ref(false)
+const vectorSwitching = ref(false)
 
 const keyFields = [
   { key: 'tavilyApiKey', label: 'Tavily', placeholder: 'tvly-...' },
@@ -78,6 +80,37 @@ async function loadResearchKeys() {
   }
 }
 
+async function refreshVectorStatus() {
+  vectorRefreshing.value = true
+  try {
+    vectorStatus.value = await fetchVectorSourceStatus()
+  } catch (error) {
+    keyError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    vectorRefreshing.value = false
+  }
+}
+
+function vectorStatusTime(value) {
+  if (!value) return '--'
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
+}
+
+async function changeVectorProfile(profile) {
+  if (!profile || profile === vectorStatus.value?.activeProfile) return
+  vectorSwitching.value = true
+  keyError.value = ''
+  keyNotice.value = ''
+  try {
+    vectorStatus.value = await switchVectorSourceProfile(profile)
+    keyNotice.value = '向量检索配置已切换，后续主题召回立即使用当前模型。'
+  } catch (error) {
+    keyError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    vectorSwitching.value = false
+  }
+}
+
 function openKeySettings() {
   showSettingsMenu.value = false
   showKeySettings.value = true
@@ -85,11 +118,15 @@ function openKeySettings() {
   keyError.value = ''
   keyForm.value = emptyKeyForm()
   keyClears.value = emptyKeyClears()
+  startVectorStatusPolling()
   void loadResearchKeys()
 }
 
 function closeKeySettings() {
-  if (!keySaving.value) showKeySettings.value = false
+  if (!keySaving.value) {
+    showKeySettings.value = false
+    stopVectorStatusPolling()
+  }
 }
 
 function updateSettingsMenuPosition() {
@@ -159,7 +196,8 @@ async function saveResearchKeys() {
 
   try {
     keyStatus.value = await updateResearchKeys(body)
-    keyNotice.value = '配置已保存，下一次编报立即生效。'
+    await refreshVectorStatus()
+    keyNotice.value = '配置已保存，下一次编报和向量同步立即生效。'
     keyForm.value = emptyKeyForm()
     keyClears.value = emptyKeyClears()
   } catch (error) {
@@ -170,6 +208,7 @@ async function saveResearchKeys() {
 }
 
 let timeInterval = null
+let vectorStatusInterval = null
 let animFrameId = null
 const barCount = 40
 const barHeights = new Float32Array(barCount)
@@ -223,6 +262,20 @@ function drawWave() {
   animFrameId = requestAnimationFrame(drawWave)
 }
 
+function startVectorStatusPolling() {
+  stopVectorStatusPolling()
+  vectorStatusInterval = window.setInterval(() => {
+    if (showKeySettings.value && !vectorRefreshing.value) void refreshVectorStatus()
+  }, 15000)
+}
+
+function stopVectorStatusPolling() {
+  if (vectorStatusInterval) {
+    window.clearInterval(vectorStatusInterval)
+    vectorStatusInterval = null
+  }
+}
+
 onMounted(() => {
   updateTime()
   timeInterval = window.setInterval(updateTime, 1000)
@@ -234,6 +287,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.clearInterval(timeInterval)
+  stopVectorStatusPolling()
   document.removeEventListener('click', handleDocumentClick)
   document.removeEventListener('keydown', handleDocumentKeydown)
   window.removeEventListener('resize', handleWindowResize)
@@ -349,12 +403,56 @@ onUnmounted(() => {
               </button>
             </div>
           </div>
-          <div v-if="vectorStatus" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-            <div class="flex flex-wrap gap-x-4 gap-y-1">
-              <span>向量库：<strong :class="vectorStatus.available ? 'text-emerald-600' : 'text-amber-600'">{{ vectorStatus.available ? '可用' : '未就绪' }}</strong></span>
-              <span>索引 {{ vectorStatus.indexedRows || 0 }} 条</span>
-              <span v-if="vectorStatus.embeddingModel">模型 {{ vectorStatus.embeddingModel }}</span>
-              <span v-if="vectorStatus.lastIndexedAt">更新 {{ new Date(vectorStatus.lastIndexedAt).toLocaleString('zh-CN', { hour12: false }) }}</span>
+          <div v-if="vectorStatus" class="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <div class="font-mono text-[11px] font-bold tracking-widest text-slate-500">向量检索配置</div>
+              <button
+                class="sci-btn px-2 py-1 text-[10px]"
+                type="button"
+                :disabled="vectorRefreshing"
+                @click="refreshVectorStatus"
+              >
+                {{ vectorRefreshing ? '刷新中...' : '刷新' }}
+              </button>
+            </div>
+            <label class="mb-3 block">
+              <span class="mb-1 block text-[10px] text-slate-400">当前主题向量模型</span>
+              <select
+                class="sci-input w-full text-sm"
+                :value="vectorStatus.activeProfile"
+                :disabled="vectorSwitching"
+                @change="changeVectorProfile($event.target.value)"
+              >
+                <option
+                  v-for="profile in vectorStatus.availableProfiles || []"
+                  :key="profile.key"
+                  :value="profile.key"
+                >
+                  {{ profile.label }} / {{ profile.sourceTable }}
+                </option>
+              </select>
+            </label>
+            <div class="grid gap-2 sm:grid-cols-2">
+              <div class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <span class="block text-[10px] text-slate-400">状态</span>
+                <strong :class="vectorStatus.available ? 'text-emerald-600' : 'text-amber-600'">{{ vectorStatus.available ? '可用' : '未就绪' }}</strong>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <span class="block text-[10px] text-slate-400">已索引数据量</span>
+                <strong class="text-slate-900">{{ Number(vectorStatus.indexedRows || 0).toLocaleString('zh-CN') }} 条</strong>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 sm:col-span-2">
+                <span class="block text-[10px] text-slate-400">当前表</span>
+                <strong class="break-all text-slate-900">{{ vectorStatus.activeTable || vectorStatus.sourceTable || '--' }}</strong>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <span class="block text-[10px] text-slate-400">模型</span>
+                <strong class="text-slate-900">{{ vectorStatus.embeddingModel || '--' }}</strong>
+              </div>
+              <div class="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <span class="block text-[10px] text-slate-400">更新时间</span>
+                <strong class="text-slate-900">{{ vectorStatusTime(vectorStatus.lastIndexedAt) }}</strong>
+              </div>
             </div>
             <div v-if="vectorStatus.fallbackReason" class="mt-1 text-amber-600">{{ vectorStatus.fallbackReason }}</div>
           </div>

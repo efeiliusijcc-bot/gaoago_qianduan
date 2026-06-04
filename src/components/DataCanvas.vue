@@ -2089,7 +2089,7 @@ const sourceTypeOptions = [
   { key: 'tool_search', label: '工具调用搜索' },
 ]
 
-const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', 'PG向量召回', 'Exa搜索', 'Tavily搜索', 'Tavily抽取', 'Firecrawl抽取', '其他']
+const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', 'PG向量召回', '工具联网搜索', 'Exa搜索', 'Tavily搜索', 'Tavily抽取', 'Firecrawl抽取', '其他']
 const sourceTimeOptions = [
   { key: 'all', label: '全部时间' },
   { key: '7d', label: '近 7 天', days: 7 },
@@ -2383,12 +2383,14 @@ function normalizeSourceListItem(source, index, fallbackGroup = activeSourceType
   const url = firstText(source, ['url', 'source_url', 'data_source_url', 'sourceUrl'], '')
   const sourceName = scrubSourceDisplayText(firstText(source, ['publisher', 'website_name', 'source_name', 'site_name', 'sourceName', 'source', 'websiteName'], '来源未知'))
   const publishRaw = firstText(source, ['published_at', 'publish_time', 'pub_time', 'source_time', 'publishTime', 'publishedAt', 'time'], '')
-  const sourceType = normalizeSourceKind(firstText(source, ['source_type', 'type', 'tag', 'designated_tag', 'sourceType'], '其他'), source)
+  const sourceGroup = inferSourceGroup(source, fallbackGroup)
+  const sourceType = sourceGroup === 'tool_search'
+    ? '工具联网搜索'
+    : normalizeSourceKind(firstText(source, ['source_type', 'type', 'tag', 'designated_tag', 'sourceType'], '其他'), source)
   const status = scrubSourceDisplayText(firstText(source, ['status', 'extract_status', 'source_status'], ''))
   const method = scrubSourceDisplayText(firstText(source, ['method', 'retrievalMode', 'collection_method'], ''))
   const failedReason = scrubSourceDisplayText(firstText(source, ['failedReason', 'failure_reason', 'error', 'message', 'note'], ''))
   const score = source?.relevance_score ?? source?.relevanceScore ?? source?.score ?? source?.similarity ?? source?.rank_score ?? source?.relevance ?? null
-  const sourceGroup = inferSourceGroup(source, fallbackGroup)
   const id = firstText(source, ['id', 'sourceId', 'source_id', 'mysql_id'], `${sourceGroup}-${url || title}-${index}`)
   return {
     id: String(id),

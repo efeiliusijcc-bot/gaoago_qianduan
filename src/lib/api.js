@@ -35,6 +35,13 @@ export function fetchVectorSourceStatus() {
   return request('/vector-sources/status')
 }
 
+export function switchVectorSourceProfile(profile) {
+  return request('/vector-sources/profile', {
+    method: 'POST',
+    body: JSON.stringify({ profile }),
+  })
+}
+
 export function createReportJob(body) {
   return request('/report-jobs', {
     method: 'POST',
