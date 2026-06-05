@@ -931,6 +931,41 @@ async function loadQaSessionSources(sessionId) {
   }
 }
 
+function refreshQaSessionSourcesIfEmpty(sessionId = currentQaSessionId.value) {
+  if (!sessionId) return
+  if (sessionId === currentQaSessionId.value && qaReferencePayloads.value.length > 0) return
+  window.setTimeout(() => {
+    if (sessionId === currentQaSessionId.value && qaReferencePayloads.value.length > 0) return
+    void loadQaSessionSources(sessionId)
+  }, 300)
+}
+
+function refreshStoredQaSessionSourcesIfEmpty(sessionId, fallbackSession = null) {
+  if (!sessionId || sessionId === currentQaSessionId.value) {
+    refreshQaSessionSourcesIfEmpty(sessionId)
+    return
+  }
+  window.setTimeout(async () => {
+    const state = qaStreamStates.get(sessionId)
+    const session = state?.session || fallbackSession
+    if (!session || (Array.isArray(session.referencePayloads) && session.referencePayloads.length > 0)) return
+    try {
+      const result = await fetchQaSessionSources(sessionId)
+      const sources = Array.isArray(result?.sources) ? result.sources : []
+      if (!sources.length) return
+      const nextSession = {
+        ...session,
+        referencePayloads: sources,
+        sourcesCount: sources.length,
+      }
+      if (state) state.session = nextSession
+      emitStoredQaSession(nextSession, false)
+    } catch {
+      // Source persistence is best-effort; keep the completed answer available.
+    }
+  }, 300)
+}
+
 function clearQaWorkspace() {
   closeQaStream()
   currentQaSessionId.value = ''
@@ -1072,6 +1107,7 @@ function scheduleQaStreamRecoveryFailure() {
       updateActiveQaTurn({ status: 'done' })
       appendQaAssistantMessage()
       emitQaSession('done')
+      refreshQaSessionSourcesIfEmpty()
       closeQaStream()
       return
     }
@@ -1098,6 +1134,7 @@ function scheduleQaStreamRecoveryFailureForSession(sessionId = currentQaSessionI
         appendQaAssistantMessage()
         emitQaSession('done')
         rememberCurrentQaStreamSession('done')
+        refreshQaSessionSourcesIfEmpty(sessionId)
         closeQaStream(sessionId)
         return
       }
@@ -1116,6 +1153,7 @@ function scheduleQaStreamRecoveryFailureForSession(sessionId = currentQaSessionI
       const doneSession = updateStoredQaTurn({ ...session, status: 'done' }, { status: 'done' })
       latest.session = doneSession
       emitStoredQaSession(doneSession, false)
+      refreshStoredQaSessionSourcesIfEmpty(sessionId, doneSession)
       closeQaStream(sessionId)
       return
     }
@@ -1192,6 +1230,7 @@ function handleQaEvent(event) {
     updateActiveQaTurn({ status: 'done' })
     appendQaAssistantMessage()
     emitQaSession('done')
+    refreshQaSessionSourcesIfEmpty()
     closeQaStream()
     return
   }
@@ -1262,6 +1301,7 @@ function handleQaEventForSession(sessionId, event) {
     session = { ...session, messages }
     state.session = session
     emitStoredQaSession(session, false)
+    refreshStoredQaSessionSourcesIfEmpty(sessionId, session)
     closeQaStream(sessionId)
     return
   }
@@ -1343,6 +1383,7 @@ async function startQa(questionOverride = '') {
           const doneSession = updateStoredQaTurn({ ...session, status: 'done' }, { status: 'done' })
           latest.session = doneSession
           emitStoredQaSession(doneSession, false)
+          refreshStoredQaSessionSourcesIfEmpty(sessionId, doneSession)
           closeQaStream(sessionId)
           return
         }
@@ -1367,6 +1408,7 @@ async function startQa(questionOverride = '') {
         appendQaAssistantMessage()
         emitQaSession('done')
         rememberCurrentQaStreamSession('done')
+        refreshQaSessionSourcesIfEmpty(sessionId)
         closeQaStream(sessionId)
         return
       }
