@@ -94,6 +94,10 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  qaSessions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits([
@@ -172,6 +176,10 @@ const qaSourcePage = ref(1)
 const qaSourceSidebarOpen = ref(false)
 const qaSourceSidebarDismissed = ref(false)
 const qaImportNotice = ref('')
+const qaImportPickerOpen = ref(false)
+const qaImportExpandedSessionIds = ref(new Set())
+const selectedQaImportSessions = ref(new Set())
+const selectedQaImportTurns = ref(new Set())
 const qaValidationError = ref('')
 const qaCopyNotice = ref('')
 const qaRecommendedBatch = ref(0)
@@ -600,6 +608,37 @@ const canShowQaSourceSidebar = computed(() => {
   return homeMode.value === 'qa' && (qaReferenceItems.value.length > 0 || isQaRunning.value || qaStatus.value === 'done')
 })
 
+const qaImportSessions = computed(() => {
+  return [...(props.qaSessions || [])]
+    .map((session) => ({
+      ...session,
+      importTurns: importableQaTurns(session),
+    }))
+    .filter((session) => session.importTurns.length > 0)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
+})
+
+const selectedQaImportTurnsView = computed(() => {
+  const selected = new Map()
+  for (const session of qaImportSessions.value) {
+    const sessionSelected = selectedQaImportSessions.value.has(session.id)
+    for (const turn of session.importTurns) {
+      const key = qaImportTurnKey(session.id, turn.id)
+      if (sessionSelected || selectedQaImportTurns.value.has(key)) {
+        selected.set(key, { session, turn, key })
+      }
+    }
+  }
+  return Array.from(selected.values())
+})
+
+const selectedQaImportSessionCount = computed(() => {
+  return new Set(selectedQaImportTurnsView.value.map((item) => item.session.id)).size
+})
+
+const selectedQaImportTurnCount = computed(() => selectedQaImportTurnsView.value.length)
+const hasQaImportSelection = computed(() => selectedQaImportTurnCount.value > 0)
+
 const qaSensitiveTermReplacements = [
   [/OpenClaw/gi, '自主智能体'],
   [/\bAgent\b/gi, '处理服务'],
@@ -827,6 +866,97 @@ function normalizeQaTurns(session) {
     createdAt: session.createdAt || new Date().toISOString(),
     status: session.status || (session.answer ? 'done' : 'idle'),
   }]
+}
+
+function qaImportTurnKey(sessionId, turnId) {
+  return `${sessionId}:${turnId}`
+}
+
+function isQaImportTurnSelectable(turn) {
+  if (!String(turn?.answer || '').trim()) return false
+  return !['searching', 'integrating', 'streaming'].includes(turn.status)
+}
+
+function importableQaTurns(session) {
+  return normalizeQaTurns(session)
+    .filter(isQaImportTurnSelectable)
+    .map((turn, index) => ({
+      ...turn,
+      id: turn.id || `${session?.id || 'qa'}-turn-${index}`,
+    }))
+}
+
+function isQaImportSessionExpanded(sessionId) {
+  return qaImportExpandedSessionIds.value.has(sessionId)
+}
+
+function toggleQaImportSessionExpanded(sessionId) {
+  const next = new Set(qaImportExpandedSessionIds.value)
+  if (next.has(sessionId)) next.delete(sessionId)
+  else next.add(sessionId)
+  qaImportExpandedSessionIds.value = next
+}
+
+function isQaImportSessionSelected(session) {
+  if (!session?.importTurns?.length) return false
+  if (selectedQaImportSessions.value.has(session.id)) return true
+  return session.importTurns.every((turn) => selectedQaImportTurns.value.has(qaImportTurnKey(session.id, turn.id)))
+}
+
+function isQaImportTurnSelected(sessionId, turnId) {
+  return selectedQaImportSessions.value.has(sessionId) || selectedQaImportTurns.value.has(qaImportTurnKey(sessionId, turnId))
+}
+
+function toggleQaImportSession(session) {
+  if (!session?.id || !session.importTurns?.length) return
+  const nextSessions = new Set(selectedQaImportSessions.value)
+  const nextTurns = new Set(selectedQaImportTurns.value)
+  if (isQaImportSessionSelected(session)) {
+    nextSessions.delete(session.id)
+    for (const turn of session.importTurns) nextTurns.delete(qaImportTurnKey(session.id, turn.id))
+  } else {
+    nextSessions.add(session.id)
+    for (const turn of session.importTurns) nextTurns.delete(qaImportTurnKey(session.id, turn.id))
+  }
+  selectedQaImportSessions.value = nextSessions
+  selectedQaImportTurns.value = nextTurns
+}
+
+function toggleQaImportTurn(session, turn) {
+  if (!session?.id || !turn?.id || !isQaImportTurnSelectable(turn)) return
+  const key = qaImportTurnKey(session.id, turn.id)
+  const nextSessions = new Set(selectedQaImportSessions.value)
+  const nextTurns = new Set(selectedQaImportTurns.value)
+  if (nextSessions.has(session.id)) {
+    nextSessions.delete(session.id)
+    for (const item of session.importTurns || []) {
+      const itemKey = qaImportTurnKey(session.id, item.id)
+      if (itemKey !== key) nextTurns.add(itemKey)
+    }
+    nextTurns.delete(key)
+  } else if (nextTurns.has(key)) {
+    nextTurns.delete(key)
+  } else {
+    nextTurns.add(key)
+  }
+  selectedQaImportSessions.value = nextSessions
+  selectedQaImportTurns.value = nextTurns
+}
+
+function clearQaImportSelection() {
+  selectedQaImportSessions.value = new Set()
+  selectedQaImportTurns.value = new Set()
+}
+
+function addCurrentQaTurnToImportSelection() {
+  const sessionId = currentQaSessionId.value
+  const turnId = activeQaTurnId.value
+  if (!sessionId || !turnId || !qaAnswer.value.trim()) return
+  const next = new Set(selectedQaImportTurns.value)
+  next.add(qaImportTurnKey(sessionId, turnId))
+  selectedQaImportTurns.value = next
+  qaImportPickerOpen.value = true
+  qaImportNotice.value = '已加入编报背景选择'
 }
 
 function syncCurrentQaFromTurns() {
@@ -1454,6 +1584,111 @@ function buildQaReportTitle(question) {
   if (!cleaned) return ''
   if (/(研判|报告|分析|态势|情况)$/.test(cleaned)) return cleaned.slice(0, 200)
   return `${cleaned}情况研判`.slice(0, 200)
+}
+
+function truncateQaImportText(value, maxLength) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text
+}
+
+function qaImportSessionTitle(session) {
+  return truncateQaImportText(session?.question || session?.title || '未命名问答', 120)
+}
+
+function qaImportDate(value) {
+  if (!value) return '时间未知'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
+function qaImportSourceLines(sources) {
+  return (Array.isArray(sources) ? sources : [])
+    .slice(0, 5)
+    .map((source, index) => {
+      const normalized = normalizeSourceListItem(source, index, 'structured_sources')
+      return [
+        `${index + 1}. ${truncateQaImportText(normalized.title || '未命名来源', 120)}`,
+        normalized.sourceName ? `来源：${normalized.sourceName}` : '',
+        normalized.publishTime ? `时间：${normalized.publishTime}` : '',
+        normalized.url ? `URL：${normalized.url}` : '',
+        normalized.summary ? `摘要：${truncateQaImportText(normalized.summary, 240)}` : '',
+      ].filter(Boolean).join('；')
+    })
+}
+
+async function ensureQaImportSessionSources(session) {
+  if (!session?.id) return session
+  if (Array.isArray(session.referencePayloads) && session.referencePayloads.length) return session
+  try {
+    const result = await fetchQaSessionSources(session.id)
+    const sources = Array.isArray(result?.sources) ? result.sources : []
+    if (!sources.length) return session
+    const nextSession = {
+      ...session,
+      referencePayloads: sources,
+      sourcesCount: sources.length,
+    }
+    emitStoredQaSession(nextSession, false)
+    return nextSession
+  } catch {
+    return session
+  }
+}
+
+async function importSelectedQaAsReportContext() {
+  const selectedItems = selectedQaImportTurnsView.value
+  if (!selectedItems.length) return
+
+  const sessionMap = new Map()
+  for (const item of selectedItems) {
+    if (!sessionMap.has(item.session.id)) {
+      sessionMap.set(item.session.id, {
+        session: await ensureQaImportSessionSources(item.session),
+        turns: [],
+      })
+    }
+    sessionMap.get(item.session.id).turns.push(item.turn)
+  }
+
+  const sections = ['【问答背景资料】']
+  let firstQuestion = ''
+  for (const { session, turns } of sessionMap.values()) {
+    if (!firstQuestion) firstQuestion = turns[0]?.question || session.question || ''
+    const sources = Array.isArray(session.referencePayloads) ? session.referencePayloads : []
+    sections.push([
+      `【聊天】${qaImportSessionTitle(session)}`,
+      `时间：${qaImportDate(session.updatedAt || session.createdAt)}`,
+      `来源数量：${sources.length || session.sourcesCount || 0}`,
+    ].join('\n'))
+    turns.forEach((turn, index) => {
+      sections.push([
+        `【问答 ${index + 1}】`,
+        `问题：${truncateQaImportText(turn.question, 500)}`,
+        `回答摘要/全文：${truncateQaImportText(turn.answer, 1800)}`,
+      ].join('\n'))
+    })
+    const sourceLines = qaImportSourceLines(sources)
+    if (sourceLines.length) {
+      sections.push(['参考来源：', ...sourceLines].join('\n'))
+    }
+  }
+
+  selectHomeMode('report')
+  const titleCandidate = buildQaReportTitle(firstQuestion)
+  if (!props.title?.trim() && titleCandidate) emit('update:title', titleCandidate)
+  const nextContext = [props.contextText, sections.join('\n\n')]
+    .filter((item) => String(item || '').trim())
+    .join('\n\n')
+  emit('update:contextText', nextContext)
+  qaImportNotice.value = `已导入 ${sessionMap.size} 个聊天、${selectedItems.length} 轮问答作为编报背景`
 }
 
 function importQaAsReportContext() {
@@ -3700,9 +3935,74 @@ function exportPdf() {
 
               <div v-if="qaStatus === 'done'" class="qa-answer-actions">
                 <button type="button" @click="copyQaAnswer">复制答案</button>
-                <button class="primary" type="button" @click="importQaAsReportContext">作为编报背景</button>
+                <button class="primary" type="button" @click="addCurrentQaTurnToImportSelection">加入背景选择</button>
+                <button type="button" @click="importQaAsReportContext">一键导入当前回答</button>
                 <button type="button" @click="continueQa">继续追问</button>
               </div>
+              <section class="qa-import-panel">
+                <div class="qa-import-panel-head">
+                  <div>
+                    <strong>编报背景选择</strong>
+                    <p>已选 {{ selectedQaImportSessionCount }} 个聊天 / {{ selectedQaImportTurnCount }} 轮问答</p>
+                  </div>
+                  <div class="qa-import-panel-actions">
+                    <button type="button" @click="qaImportPickerOpen = !qaImportPickerOpen">
+                      {{ qaImportPickerOpen ? '收起选择' : '打开选择' }}
+                    </button>
+                    <button type="button" :disabled="!hasQaImportSelection" @click="clearQaImportSelection">清空选择</button>
+                    <button class="primary" type="button" :disabled="!hasQaImportSelection" @click="importSelectedQaAsReportContext">导入到编报背景</button>
+                  </div>
+                </div>
+
+                <div v-if="qaImportPickerOpen" class="qa-import-picker">
+                  <div v-if="qaImportSessions.length" class="qa-import-session-list">
+                    <article
+                      v-for="session in qaImportSessions"
+                      :key="session.id"
+                      class="qa-import-session"
+                      :class="{ selected: isQaImportSessionSelected(session) }"
+                    >
+                      <div class="qa-import-session-row">
+                        <label class="qa-import-check">
+                          <input
+                            type="checkbox"
+                            :checked="isQaImportSessionSelected(session)"
+                            @change="toggleQaImportSession(session)"
+                          />
+                          <span></span>
+                        </label>
+                        <button class="qa-import-session-main" type="button" @click="toggleQaImportSessionExpanded(session.id)">
+                          <strong>{{ qaImportSessionTitle(session) }}</strong>
+                          <small>{{ qaImportDate(session.updatedAt || session.createdAt) }} · {{ session.importTurns.length }} 轮问答 · {{ session.sourcesCount || session.referencePayloads?.length || 0 }} 条来源</small>
+                        </button>
+                        <button class="qa-import-expand" type="button" @click="toggleQaImportSessionExpanded(session.id)">
+                          {{ isQaImportSessionExpanded(session.id) ? '收起' : '展开' }}
+                        </button>
+                      </div>
+
+                      <div v-if="isQaImportSessionExpanded(session.id)" class="qa-import-turn-list">
+                        <label
+                          v-for="turn in session.importTurns"
+                          :key="turn.id"
+                          class="qa-import-turn"
+                          :class="{ selected: isQaImportTurnSelected(session.id, turn.id) }"
+                        >
+                          <input
+                            type="checkbox"
+                            :checked="isQaImportTurnSelected(session.id, turn.id)"
+                            @change="toggleQaImportTurn(session, turn)"
+                          />
+                          <span>
+                            <strong>{{ truncateQaImportText(turn.question, 120) }}</strong>
+                            <small>{{ qaImportDate(turn.createdAt) }} · {{ truncateQaImportText(turn.answer, 160) }}</small>
+                          </span>
+                        </label>
+                      </div>
+                    </article>
+                  </div>
+                  <p v-else class="qa-import-empty">暂无可导入的已完成问答。</p>
+                </div>
+              </section>
               <div v-if="qaCopyNotice" class="qa-copy-notice">{{ qaCopyNotice }}</div>
 
               <section v-if="false" class="qa-reference-section qa-source-section">

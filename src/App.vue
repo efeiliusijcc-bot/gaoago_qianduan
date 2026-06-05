@@ -279,6 +279,7 @@ function jobActionLabel(status) {
         v-model:activeParameters="activeParameters"
         :homeMode="homeMode"
         :selectedQaSession="selectedQaSession"
+        :qaSessions="qaSessions"
         :phase="phase"
         :loadingStep="loadingStep"
         :processLogs="processLogs"
