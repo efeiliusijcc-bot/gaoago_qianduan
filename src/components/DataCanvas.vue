@@ -164,7 +164,6 @@ const qaMessages = ref([])
 const activeQaTurnId = ref('')
 const qaStatus = ref('idle')
 const qaError = ref('')
-const qaTechnicalEvents = ref([])
 const qaReferencePayloads = ref([])
 const qaSourceSearch = ref('')
 const qaSourceTypeFilter = ref('all')
@@ -601,16 +600,6 @@ const canShowQaSourceSidebar = computed(() => {
   return homeMode.value === 'qa' && (qaReferenceItems.value.length > 0 || isQaRunning.value || qaStatus.value === 'done')
 })
 
-const qaTechnicalLabels = {
-  stage: '流程状态',
-  status: '状态更新',
-  tool_start: '检索事件',
-  tool_delta: '检索事件',
-  tool_end: '检索事件',
-  error: '错误信息',
-  message: '系统消息',
-}
-
 const qaSensitiveTermReplacements = [
   [/OpenClaw/gi, '自主智能体'],
   [/\bAgent\b/gi, '处理服务'],
@@ -958,9 +947,7 @@ function clearQaWorkspace() {
   qaReferencePayloads.value = []
   qaSourceSidebarOpen.value = false
   qaSourceSidebarDismissed.value = false
-  resetQaSourceView()
-  qaTechnicalEvents.value = []
-  qaCopyNotice.value = ''
+  resetQaSourceView()  qaCopyNotice.value = ''
   qaValidationError.value = ''
   qaThreadHasNewContent.value = false
   emit('qa-session-clear-selection')
@@ -1089,9 +1076,7 @@ function scheduleQaStreamRecoveryFailure() {
       return
     }
     qaStatus.value = 'failed'
-    qaError.value = '连接中断，可重新提问。'
-    pushQaTechnical({ type: 'error', message: qaError.value })
-    updateActiveQaTurn({ status: 'failed' })
+    qaError.value = '连接中断，可重新提问。'    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     closeQaStream()
   }, 90000)
@@ -1118,7 +1103,6 @@ function scheduleQaStreamRecoveryFailureForSession(sessionId = currentQaSessionI
       }
       qaStatus.value = 'failed'
       qaError.value = '连接中断，可重新提问。'
-      pushQaTechnical({ type: 'error', message: qaError.value })
       updateActiveQaTurn({ status: 'failed' })
       emitQaSession('failed')
       rememberCurrentQaStreamSession('failed')
@@ -1160,20 +1144,6 @@ function sanitizeQaAnswerDelta(value) {
   return text
 }
 
-function qaTechnicalLabel(type) {
-  return qaTechnicalLabels[type] || '系统事件'
-}
-
-function pushQaTechnical(event) {
-  const summary = event?.message || event?.name || event?.content || '系统事件'
-  qaTechnicalEvents.value.push({
-    id: `${Date.now()}-${qaTechnicalEvents.value.length}`,
-    time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-    type: qaTechnicalLabel(event?.type),
-    summary: sanitizeQaText(summary),
-  })
-  if (qaTechnicalEvents.value.length > 80) qaTechnicalEvents.value = qaTechnicalEvents.value.slice(-80)
-}
 
 function extractQaReferencePayloads(event) {
   const candidates = [
@@ -1214,9 +1184,7 @@ function handleQaEvent(event) {
   }
   if (event.type === 'token') return
   if (event.type === 'tool_start' || event.type === 'tool_delta' || event.type === 'tool_end' || event.type === 'stage' || event.type === 'status') {
-    if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
-    pushQaTechnical(event)
-    emitQaSession(qaStatus.value)
+    if (qaStatus.value === 'searching') qaStatus.value = 'integrating'    emitQaSession(qaStatus.value)
     return
   }
   if (event.type === 'done') {
@@ -1229,9 +1197,7 @@ function handleQaEvent(event) {
   }
   if (event.type === 'error') {
     qaStatus.value = 'failed'
-    qaError.value = '回答生成失败，请稍后重试。'
-    pushQaTechnical(event)
-    updateActiveQaTurn({ status: 'failed' })
+    qaError.value = '回答生成失败，请稍后重试。'    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     closeQaStream()
   }
@@ -1321,9 +1287,7 @@ async function startQa(questionOverride = '') {
   qaError.value = ''
   qaImportNotice.value = ''
   qaValidationError.value = ''
-  qaCopyNotice.value = ''
-  qaTechnicalEvents.value = []
-  const isContinuingSession = Boolean(currentQaSessionId.value && qaTurns.value.length)
+  qaCopyNotice.value = ''  const isContinuingSession = Boolean(currentQaSessionId.value && qaTurns.value.length)
   if (!currentQaSessionId.value) currentQaSessionId.value = `qa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   if (!qaSessionCreatedAt.value) qaSessionCreatedAt.value = new Date().toISOString()
   if (!isContinuingSession) qaReferencePayloads.value = []
@@ -1368,7 +1332,6 @@ async function startQa(questionOverride = '') {
       try {
         handleQaEventForSession(sessionId, JSON.parse(message.data))
       } catch {
-        pushQaTechnical({ type: 'message', message: '收到一条无法解析的系统事件' })
       }
     }
     source.onerror = () => {
@@ -1393,9 +1356,7 @@ async function startQa(questionOverride = '') {
         return
       }
       if (qaStatus.value !== 'done' && !(qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
-        if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
-        pushQaTechnical({ type: 'status', message: '连接不稳定，正在尝试恢复回答。' })
-        emitQaSession(qaStatus.value)
+        if (qaStatus.value === 'searching') qaStatus.value = 'integrating'        emitQaSession(qaStatus.value)
         rememberCurrentQaStreamSession(qaStatus.value)
         scheduleQaStreamRecoveryFailureForSession(sessionId)
         return
@@ -1411,9 +1372,7 @@ async function startQa(questionOverride = '') {
       }
       if (qaStatus.value !== 'done') {
         qaStatus.value = 'failed'
-        qaError.value = '连接中断，可重新提问。'
-        pushQaTechnical({ type: 'error', message: qaError.value })
-        updateActiveQaTurn({ status: 'failed' })
+        qaError.value = '连接中断，可重新提问。'        updateActiveQaTurn({ status: 'failed' })
         emitQaSession('failed')
         rememberCurrentQaStreamSession('failed')
       }
@@ -1421,9 +1380,7 @@ async function startQa(questionOverride = '') {
     }
   } catch (error) {
     qaStatus.value = 'failed'
-    qaError.value = '回答生成失败，请稍后重试。'
-    pushQaTechnical({ type: 'error', message: error instanceof Error ? error.message : String(error) })
-    updateActiveQaTurn({ status: 'failed' })
+    qaError.value = '回答生成失败，请稍后重试。'    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     rememberCurrentQaStreamSession('failed')
     closeQaStream(sessionId)
@@ -3835,19 +3792,6 @@ function exportPdf() {
                 </div>
                 <p v-else class="qa-reference-empty">暂无结构化来源信息。</p>
               </section>
-
-              <details v-if="qaTechnicalEvents.length" class="source-technical-details qa-technical-details">
-                <summary>查看处理详情</summary>
-                <div class="source-technical-log">
-                  <div v-for="event in qaTechnicalEvents" :key="event.id" class="friendly-log-card">
-                    <div class="friendly-log-title">
-                      <span>{{ event.time }}</span>
-                      <strong>{{ event.type }}</strong>
-                    </div>
-                    <p>{{ event.summary }}</p>
-                  </div>
-                </div>
-              </details>
 
               <button
                 v-if="qaThreadHasNewContent"
