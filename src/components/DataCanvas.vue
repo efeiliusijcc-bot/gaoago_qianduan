@@ -1510,13 +1510,40 @@ function logStatusClass(status) {
 }
 
 function buildRawLogText(log) {
-  return [log?.label, log?.summary, log?.command, log?.detail]
+  return [logToolDisplayName(log), log?.label, log?.summary, log?.command, log?.detail]
     .filter(Boolean)
     .join('\n')
 }
 
+function logToolDisplayName(log) {
+  const explicit = log?.toolDisplayName || log?.toolName
+  if (explicit) return String(explicit).trim()
+  const raw = [log?.label, log?.summary, log?.command, log?.detail].filter(Boolean).join('\n')
+  if (/pg-sources__query/i.test(raw)) return 'pg-sources__query'
+  if (/mysql-test__mysql_query/i.test(raw)) return 'mysql-test__mysql_query'
+  if (/harness_cli\.py\s+plan/i.test(raw)) return 'harness_cli.py plan'
+  if (/harness_cli\.py\s+run/i.test(raw)) return 'harness_cli.py run'
+  if (/research_cli\.py/i.test(raw)) return 'research_cli.py'
+  if (/firecrawl/i.test(raw)) return 'firecrawl'
+  if (/tavily/i.test(raw)) return 'tavily'
+  if (/\bexa\b/i.test(raw)) return 'exa'
+  return ''
+}
+
 function sanitizeReportLogText(value) {
-  return String(value || '').replace(/OpenClaw/gi, '自主智能体')
+  const text = String(value || '')
+  if (/content_filter|considered high risk|safety policy|高风险/i.test(text)) {
+    return '本次主题触发模型安全策略，生成内容被拦截，未形成有效报告。请调整表述或降低敏感措辞后重试。'
+  }
+  return text
+    .replace(/OpenClaw\s+Gateway/gi, '任务通道')
+    .replace(/OpenClaw\s+report-agent/gi, '编报智能体')
+    .replace(/OpenClaw/gi, '自主智能体')
+    .replace(/\breport-agent\b/gi, '编报智能体')
+    .replace(/\bGateway\b/g, '任务通道')
+    .replace(/(?:\/home\/node\/\.openclaw\/workspace\/|\/usr\/docker\/openclaw\/workspace\/)/gi, '.../')
+    .replace(/returned too little report content\.?/gi, '生成内容不足，未达到编报成稿要求。')
+    .trim()
 }
 
 function extractQuery(rawLog) {
@@ -1583,6 +1610,7 @@ function isLowValueTechnicalLog(rawLog) {
 }
 
 function translateOpenClawLog(log) {
+  const toolDisplayName = logToolDisplayName(log)
   const rawLog = buildRawLogText(log)
   const displayRawLog = sanitizeReportLogText(rawLog)
   const lower = rawLog.toLowerCase()
@@ -1599,6 +1627,7 @@ function translateOpenClawLog(log) {
     description: '系统正在执行当前编报步骤。',
     raw: displayRawLog,
     status,
+    toolDisplayName,
   }
 
   const hasFailureText = lower.includes('error') ||
@@ -3242,6 +3271,9 @@ function exportPdf() {
                 <div class="flex items-start justify-between gap-3">
                   <div>
                     <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
+                    <div v-if="translateOpenClawLog(log).toolDisplayName" class="friendly-log-tool">
+                      工具：{{ translateOpenClawLog(log).toolDisplayName }}
+                    </div>
                     <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
                   </div>
                   <div class="flex shrink-0 items-center gap-2">
@@ -4018,7 +4050,7 @@ function exportPdf() {
           <h1>历史报告加载失败</h1>
           <p>请稍后重试，或返回报告列表。</p>
           <div v-if="detailLoadError || errorMessage" class="history-error-message">
-            {{ detailLoadError || errorMessage }}
+            {{ sanitizeReportLogText(detailLoadError || errorMessage) }}
           </div>
           <div class="history-error-actions">
             <button class="result-action-btn result-action-primary" type="button" @click="emit('retry-history-report')">重新加载</button>
@@ -4187,6 +4219,9 @@ function exportPdf() {
                       <div class="flex items-start justify-between gap-3">
                         <div>
                           <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
+                          <div v-if="translateOpenClawLog(log).toolDisplayName" class="friendly-log-tool">
+                            工具：{{ translateOpenClawLog(log).toolDisplayName }}
+                          </div>
                           <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
                         </div>
                         <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog(log).status) }}</span>
@@ -4213,7 +4248,7 @@ function exportPdf() {
 
       <div v-else-if="phase === 'error'" class="max-w-4xl mx-auto">
         <div class="border border-red-400/40 bg-red-950/30 text-red-200 rounded p-4 font-mono text-sm">
-          {{ errorMessage || '任务失败' }}
+          {{ sanitizeReportLogText(errorMessage) || '任务失败' }}
         </div>
         <div class="mt-4 font-mono text-xs space-y-1">
           <div v-for="(log, i) in processLogs" :key="i" class="text-slate-500">{{ log }}</div>
@@ -4651,6 +4686,9 @@ function exportPdf() {
                       <div class="flex items-start justify-between gap-3">
                         <div>
                           <div class="friendly-log-stage">{{ translateOpenClawLog(log).stage }}</div>
+                          <div v-if="translateOpenClawLog(log).toolDisplayName" class="friendly-log-tool">
+                            工具：{{ translateOpenClawLog(log).toolDisplayName }}
+                          </div>
                           <div class="friendly-log-title">{{ translateOpenClawLog(log).title }}</div>
                         </div>
                         <span class="friendly-log-status">{{ friendlyLogStatusLabel(translateOpenClawLog(log).status) }}</span>

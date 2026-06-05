@@ -311,6 +311,25 @@ body {
   letter-spacing: 0.16em;
 }
 
+.friendly-log-tool {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin: 0 0 5px;
+  padding: 2px 7px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 999px;
+  background: rgba(239, 246, 255, 0.82);
+  color: #2563eb;
+  font-family: 'Fira Code', 'Microsoft YaHei', monospace;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .friendly-log-title {
   color: #0f172a;
   font-size: 13px;
@@ -2671,7 +2690,7 @@ canvas {
 
 .task-stage-flow {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.24);
@@ -2694,6 +2713,14 @@ canvas {
   border-left: 1px solid rgba(148, 163, 184, 0.18);
 }
 
+.task-stage-card:nth-child(3n + 1) {
+  border-left: 0;
+}
+
+.task-stage-card:nth-child(n + 4) {
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
 .task-stage-card + .task-stage-card::before {
   content: "";
   position: absolute;
@@ -2705,6 +2732,10 @@ canvas {
   border-right: 1px solid rgba(148, 163, 184, 0.24);
   background: inherit;
   transform: translateY(-50%) rotate(45deg);
+}
+
+.task-stage-card:nth-child(3n + 1)::before {
+  display: none;
 }
 
 .task-stage-badge {
@@ -2828,7 +2859,7 @@ canvas {
 
 .ai-process-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -5730,12 +5761,15 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .task-stage-card:nth-child(3) {
-    border-left: 0;
-    border-top: 1px solid rgba(148, 163, 184, 0.18);
+  .task-stage-card:nth-child(3n + 1) {
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
   }
 
-  .task-stage-card:nth-child(4) {
+  .task-stage-card:nth-child(2n + 1) {
+    border-left: 0;
+  }
+
+  .task-stage-card:nth-child(n + 3) {
     border-top: 1px solid rgba(148, 163, 184, 0.18);
   }
 
@@ -5764,6 +5798,11 @@ body {
   .task-stage-flow,
   .ai-process-grid {
     grid-template-columns: 1fr;
+  }
+
+  .task-stage-card:nth-child(3n + 1),
+  .task-stage-card:nth-child(2n + 1) {
+    border-left: 0;
   }
 
   .task-stage-card + .task-stage-card {

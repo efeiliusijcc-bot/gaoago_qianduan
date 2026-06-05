@@ -456,6 +456,10 @@ export function useReportJobs() {
         phase: item.phase || '',
         actor: item.actor || '',
         detail: item.detail || '',
+        toolName: item.toolName || '',
+        toolDisplayName: item.toolDisplayName || item.toolName || '',
+        toolId: item.toolId || '',
+        toolEngine: item.toolEngine || '',
       }))
       executionLogsByJobId.set(jobId, normalized)
       seenExecutionEventsByJobId.set(jobId, new Set(normalized.map((item) => executionLogKey(item))))
@@ -471,7 +475,7 @@ export function useReportJobs() {
   }
 
   function executionLogKey(entry) {
-    return `${entry.type}:${entry.status || ''}:${entry.summary || ''}:${entry.command || ''}`
+    return `${entry.type}:${entry.status || ''}:${entry.toolName || ''}:${entry.summary || ''}:${entry.command || ''}`
   }
 
   function appendExecutionLog(entry, jobId = activeExecutionLogJobId) {
@@ -561,14 +565,61 @@ export function useReportJobs() {
     }
   }
 
+  function firstLogString(value, keys) {
+    if (!value || typeof value !== 'object') return ''
+    for (const key of keys) {
+      const candidate = value[key]
+      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    }
+    return ''
+  }
+
+  function inferToolEngine(value) {
+    const lower = String(value || '').toLowerCase()
+    if (!lower) return ''
+    if (lower.includes('pg-sources') || lower.includes('pg_vector')) return 'pg_vector'
+    if (lower.includes('mysql')) return 'mysql'
+    if (lower.includes('firecrawl')) return 'firecrawl'
+    if (lower.includes('tavily_extract')) return 'tavily_extract'
+    if (lower.includes('tavily')) return 'tavily'
+    if (/\bexa\b/.test(lower)) return 'exa'
+    if (lower.includes('harness_cli')) return 'harness'
+    if (lower.includes('research_cli')) return 'research'
+    if (lower.includes('sessions_')) return 'session'
+    return ''
+  }
+
+  function extractToolNameFromEvent(event, raw) {
+    const direct = typeof event?.name === 'string' ? event.name.trim() : ''
+    if (direct) return direct
+    const rawDirect = firstLogString(raw, ['toolName', 'tool_name', 'name', 'tool', 'server', 'mcpServer', 'mcp_server'])
+    if (rawDirect) return rawDirect
+    const functionName = raw?.function && typeof raw.function === 'object'
+      ? firstLogString(raw.function, ['name'])
+      : ''
+    if (functionName) return functionName
+    const command = firstLogString(raw, ['command'])
+    if (/pg-sources__query/i.test(command)) return 'pg-sources__query'
+    if (/mysql-test__mysql_query/i.test(command)) return 'mysql-test__mysql_query'
+    if (/harness_cli\.py\s+plan/i.test(command)) return 'harness_cli.py plan'
+    if (/harness_cli\.py\s+run/i.test(command)) return 'harness_cli.py run'
+    if (/research_cli\.py/i.test(command)) return 'research_cli.py'
+    if (/firecrawl/i.test(command)) return 'firecrawl'
+    if (/tavily/i.test(command)) return 'tavily'
+    if (/\bexa\b/i.test(command)) return 'exa'
+    return ''
+  }
+
   function normalizeEventLog(event) {
     const raw = event?.raw && typeof event.raw === 'object' ? event.raw : {}
     const label = raw.label || event.name || event.stage || event.type
-    const status = raw.status || (event.type === 'tool_start' ? 'started' : event.type === 'tool_end' ? 'completed' : event.type)
+    const status = raw.status || (event.type === 'tool_start' ? 'started' : event.type === 'tool_end' ? 'completed' : event.type === 'tool_error' ? 'failed' : event.type === 'tool_delta' ? 'running' : event.type)
     const summary = raw.summary || event.message || event.content || ''
     const phase = raw.phase || event.stage || ''
     const actor = raw.actor || ''
     const detail = raw.detail || ''
+    const toolName = extractToolNameFromEvent(event, raw)
+    const toolEngine = inferToolEngine(`${toolName} ${label} ${raw.command || ''}`)
 
     if (event.type === 'stage') {
       return {
@@ -582,7 +633,7 @@ export function useReportJobs() {
       }
     }
 
-    if (event.type === 'tool_start' || event.type === 'tool_end' || event.type === 'tool_error') {
+    if (event.type === 'tool_start' || event.type === 'tool_delta' || event.type === 'tool_end' || event.type === 'tool_error') {
       return {
         type: event.type,
         label,
@@ -592,6 +643,10 @@ export function useReportJobs() {
         phase,
         actor,
         detail,
+        toolName,
+        toolDisplayName: toolName,
+        toolId: event.id || '',
+        toolEngine,
         eventId: event.id,
       }
     }
