@@ -1050,6 +1050,11 @@ canvas {
   width: 100%;
 }
 
+.archive-search-only {
+  display: flex;
+  width: 100%;
+}
+
 .archive-row > div {
   min-width: 0;
 }
@@ -5377,18 +5382,17 @@ canvas {
 
   .archive-row > div:nth-child(1)::before { content: "任务"; }
   .archive-row > div:nth-child(2)::before { content: "主题"; }
-  .archive-row > div:nth-child(3)::before { content: "类型"; }
-  .archive-row > div:nth-child(4)::before { content: "状态"; }
-  .archive-row > div:nth-child(5)::before { content: "时间"; }
-  .archive-row > div:nth-child(6)::before { content: "文件"; }
-  .archive-row > div:nth-child(7)::before { content: "操作"; }
+  .archive-row > div:nth-child(3)::before { content: "状态"; }
+  .archive-row > div:nth-child(4)::before { content: "时间"; }
+  .archive-row > div:nth-child(5)::before { content: "文件"; }
+  .archive-row > div:nth-child(6)::before { content: "操作"; }
 
   .archive-row > div:nth-child(2) {
     align-items: flex-start;
   }
 
   .archive-row > div:nth-child(2),
-  .archive-row > div:nth-child(6) {
+  .archive-row > div:nth-child(5) {
     overflow: visible;
     text-overflow: initial;
   }

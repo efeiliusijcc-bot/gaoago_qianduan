@@ -46,13 +46,10 @@ const {
   filteredJobs,
   openedHistoryJobId,
   listSearch,
-  listTypeFilter,
   listPage,
   listPageSize,
   listTotal,
   listTotalPages,
-  succeededCount,
-  runningCount,
   isHistoryMode,
   hasActiveWorkspace,
   activeWorkspaceJobId,
@@ -76,7 +73,6 @@ const {
   loadMoreRecentReports,
   loadJobList,
   updateListSearch,
-  updateListTypeFilter,
   updateListPage,
   updateListPageSize,
   monitorJobFromList,
@@ -87,14 +83,6 @@ const {
   saveCurrentReportDraft,
   toggleLogDrawer,
 } = useReportJobs()
-
-const reportTypeOptions = [
-  { value: 'all', label: '全部' },
-  { value: 'write-hb-k', label: 'K报' },
-  { value: 'write-hb-hb', label: 'HB报' },
-  { value: 'person-intelligence-report', label: '人物报' },
-  { value: 'risk-assessment-reports', label: '风险报' },
-]
 
 const QA_HISTORY_KEY = 'nexus-qa-history'
 const homeMode = ref('report')
@@ -209,13 +197,6 @@ function returnHome() {
 }
 
 watch(qaSessions, persistQaSessions, { deep: true })
-
-function skillLabel(item) {
-  if (item.skill === 'write-hb' && item.payload?.report_type) return item.payload.report_type
-  if (item.skill === 'person-intelligence-report') return '人物情报'
-  if (item.skill === 'risk-assessment-reports') return '风险评估'
-  return item.skill || '报告'
-}
 
 function jobStatusType(status) {
   if (status === 'succeeded') return 'success'
@@ -353,7 +334,7 @@ function jobActionLabel(status) {
       </div>
 
       <div class="panel p-4 mb-6 archive-filter-panel">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div class="archive-search-only">
           <div class="relative flex-1">
             <input
               :value="listSearch"
@@ -363,40 +344,13 @@ function jobActionLabel(status) {
             />
             <span class="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px] text-slate-400">SEARCH</span>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="option in reportTypeOptions"
-              :key="option.value"
-              class="sci-btn text-[10px] px-3 py-2"
-              :class="listTypeFilter === option.value ? 'border-neon-green bg-neon-green/10 text-neon-green' : ''"
-              @click="updateListTypeFilter(option.value)"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="archive-stats grid grid-cols-3 gap-4 mb-6">
-        <div class="panel p-4">
-          <div class="font-mono text-[10px] text-[#374151] tracking-widest mb-2">任务总数</div>
-          <div class="font-mono text-3xl neon-text">{{ listTotal }}</div>
-        </div>
-        <div class="panel p-4">
-          <div class="font-mono text-[10px] text-[#374151] tracking-widest mb-2">已完成</div>
-          <div class="font-mono text-3xl text-neon-green">{{ succeededCount }}</div>
-        </div>
-        <div class="panel p-4">
-          <div class="font-mono text-[10px] text-[#374151] tracking-widest mb-2">运行中</div>
-          <div class="font-mono text-3xl text-cyber-yellow">{{ runningCount }}</div>
         </div>
       </div>
 
       <div class="panel overflow-hidden archive-table-panel">
         <div class="archive-table-head grid grid-cols-12 gap-4 px-4 py-3 border-b border-border-glow bg-neon-cyan/5">
           <div class="col-span-2 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">任务编号</div>
-          <div class="col-span-3 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">主题</div>
-          <div class="col-span-1 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">类型</div>
+          <div class="col-span-4 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">主题</div>
           <div class="col-span-2 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">状态</div>
           <div class="col-span-2 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">更新时间</div>
           <div class="col-span-1 font-mono text-[10px] text-[#374151] font-bold tracking-widest" style="font-size: 13px">文件</div>
@@ -410,8 +364,7 @@ function jobActionLabel(status) {
             class="archive-row grid grid-cols-12 gap-4 px-4 py-4 border-b border-neon-cyan/10 hover:bg-neon-cyan/5 transition-colors"
           >
             <div class="col-span-2 font-mono text-xs text-[#1f2937]" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ item.jobId.slice(0, 8) }}</div>
-            <div class="col-span-3 font-mono text-xs text-[#111827] font-semibold truncate" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ getJobTitle(item) }}</div>
-            <div class="col-span-1 font-mono text-xs text-[#1f2937]" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ skillLabel(item) }}</div>
+            <div class="col-span-4 font-mono text-xs text-[#111827] font-semibold truncate" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ getJobTitle(item) }}</div>
             <div class="col-span-2 font-mono text-xs" :class="jobStatusClass(item.status)">
               {{ jobStatusLabel(item.status) }}
             </div>
@@ -430,9 +383,9 @@ function jobActionLabel(status) {
         </div>
 
         <div v-else class="py-16 text-center">
-          <div class="font-mono text-4xl mb-4" style="color: #94a3b8">{{ listSearch || listTypeFilter !== 'all' ? 'NO MATCH' : 'NO DATA' }}</div>
+          <div class="font-mono text-4xl mb-4" style="color: #94a3b8">{{ listSearch ? 'NO MATCH' : 'NO DATA' }}</div>
           <div class="font-mono text-sm text-slate-400">
-            {{ listSearch || listTypeFilter !== 'all' ? '未找到匹配编报' : '暂无报告任务' }}
+            {{ listSearch ? '未找到匹配编报' : '暂无报告任务' }}
           </div>
         </div>
       </div>

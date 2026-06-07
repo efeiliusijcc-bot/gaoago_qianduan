@@ -127,7 +127,6 @@ export function useReportJobs() {
   const job = ref(null)
   const jobList = ref([])
   const listSearch = ref('')
-  const listTypeFilter = ref('all')
   const listPage = ref(1)
   const listPageSize = ref(20)
   const listTotal = ref(0)
@@ -1350,14 +1349,12 @@ export function useReportJobs() {
     try {
       if (overrides.page !== undefined) listPage.value = overrides.page
       if (overrides.pageSize !== undefined) listPageSize.value = overrides.pageSize
-      if (overrides.type !== undefined) listTypeFilter.value = overrides.type
       if (overrides.q !== undefined) listSearch.value = overrides.q
 
       const drafts = readDrafts()
       const response = await fetchReportJobs({
         page: listPage.value,
         pageSize: listPageSize.value,
-        type: listTypeFilter.value,
         q: listSearch.value.trim(),
       })
       const items = Array.isArray(response) ? response : response.items || []
@@ -1393,12 +1390,6 @@ export function useReportJobs() {
       listSearchTimer = null
       void loadJobList(false)
     }, 300)
-  }
-
-  function updateListTypeFilter(value) {
-    listTypeFilter.value = value
-    listPage.value = 1
-    return loadJobList(false)
   }
 
   function updateListPage(page) {
@@ -1608,7 +1599,6 @@ export function useReportJobs() {
     recentHasMore,
     recentLoadError,
     listSearch,
-    listTypeFilter,
     listPage,
     listPageSize,
     listTotal,
@@ -1647,7 +1637,6 @@ export function useReportJobs() {
     loadMoreRecentReports,
     loadJobList,
     updateListSearch,
-    updateListTypeFilter,
     updateListPage,
     updateListPageSize,
     openReportFromList,
