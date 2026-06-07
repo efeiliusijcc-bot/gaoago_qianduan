@@ -82,6 +82,7 @@ const {
   monitorJobFromList,
   retryOpenCurrentHistoryReport,
   showGenerator,
+  backgroundActiveWorkspace,
   resetForNewReport,
   saveCurrentReportDraft,
   toggleLogDrawer,
@@ -140,6 +141,7 @@ function persistQaSessions() {
 }
 
 function setHomeMode(mode) {
+  if (mode === 'qa') backgroundActiveWorkspace()
   homeMode.value = mode === 'qa' ? 'qa' : 'report'
   if (homeMode.value === 'report') selectedQaSessionId.value = ''
 }
@@ -162,6 +164,7 @@ function upsertQaSession(session) {
 
 function openQaSession(session) {
   if (!session?.id) return
+  backgroundActiveWorkspace()
   homeMode.value = 'qa'
   selectedQaSessionId.value = session.id
 }
@@ -173,6 +176,7 @@ function openReportJob(item) {
 }
 
 function startQaFromSidebar() {
+  backgroundActiveWorkspace()
   homeMode.value = 'qa'
   selectedQaSessionId.value = ''
 }

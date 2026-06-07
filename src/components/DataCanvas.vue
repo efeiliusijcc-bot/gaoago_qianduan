@@ -3192,7 +3192,6 @@ onMounted(() => {
 
 watch(() => props.phase, (phase) => {
   if (phase === 'idle') {
-    homeMode.value = 'report'
     titleValidationError.value = ''
     ensureReportDefaults()
   }
@@ -3442,6 +3441,14 @@ function exportPdf() {
           </button>
         </template>
         <template v-else-if="phase !== 'done' && !isHistoryDetailLoading && !isHistoryDetailError">
+          <button
+            v-if="phase === 'loading'"
+            class="sci-btn text-[10px] px-3 py-2 border-neon-green text-neon-green"
+            type="button"
+            @click="selectHomeMode('qa')"
+          >
+            热点事件动态感知
+          </button>
           <button
             @click="toggleLogDrawer"
             :disabled="!canOpenLogDrawer"

@@ -293,6 +293,31 @@ export function useReportJobs() {
     return true
   }
 
+  function backgroundActiveWorkspace() {
+    const unfinishedWorkspace = getUnfinishedWorkspaceSnapshot()
+    if (!unfinishedWorkspace?.job?.jobId) return false
+
+    activeWorkspaceSnapshot.value = unfinishedWorkspace
+    openedHistoryJobId.value = null
+    detailLoading.value = false
+    detailLoadError.value = ''
+    selectedReport.value = null
+    generatedHtml.value = ''
+    errorMessage.value = ''
+    processLogs.value = []
+    job.value = null
+    progressState.value = null
+    databaseSources.value = null
+    databaseSourcesLoading.value = false
+    unreadLogCount.value = 0
+    isLogDrawerOpen.value = false
+    isGenerating.value = false
+    phase.value = 'idle'
+    loadingStep.value = '绛夊緟杈撳叆浠诲姟'
+    currentView.value = 'generator'
+    return true
+  }
+
   function getUnfinishedWorkspaceSnapshot(exceptJobId = '') {
     if (
       activeWorkspaceSnapshot.value?.job?.jobId &&
@@ -1629,6 +1654,7 @@ export function useReportJobs() {
     monitorJobFromList,
     retryOpenCurrentHistoryReport,
     showGenerator,
+    backgroundActiveWorkspace,
     resetForNewReport: resetAndShowGenerator,
     saveCurrentReportDraft,
     toggleLogDrawer,
