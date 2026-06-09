@@ -132,7 +132,7 @@ const contextTextRef = ref(null)
 const titleInputRef = ref(null)
 const qaInputRef = ref(null)
 const qaThreadRef = ref(null)
-const technicalLogOpenIds = ref(new Set())
+const technicalLogCollapsedIds = ref(new Set())
 const dbSourcesExpanded = ref(false)
 const expandedSourceId = ref('')
 const sourceListRef = ref(null)
@@ -168,6 +168,7 @@ const qaMessages = ref([])
 const activeQaTurnId = ref('')
 const qaStatus = ref('idle')
 const qaError = ref('')
+const qaGuideOpen = ref(false)
 const qaReferencePayloads = ref([])
 const qaSourceSearch = ref('')
 const qaSourceTypeFilter = ref('all')
@@ -1727,6 +1728,18 @@ function toggleLogDrawer() {
   if (canOpenLogDrawer.value) emit('toggle-log-drawer')
 }
 
+function openQaGuide() {
+  qaGuideOpen.value = true
+}
+
+function closeQaGuide() {
+  qaGuideOpen.value = false
+}
+
+function handleQaGuideKeydown(event) {
+  if (event.key === 'Escape' && qaGuideOpen.value) closeQaGuide()
+}
+
 function logTypeLabel(type) {
   if (type === 'tool_start') return '工具开始'
   if (type === 'tool_end') return '工具完成'
@@ -1749,19 +1762,32 @@ function buildRawLogText(log) {
     .join('\n')
 }
 
+function classifyToolDisplayName(rawValue) {
+  const raw = String(rawValue || '').toLowerCase()
+  if (!raw.trim()) return ''
+
+  if (
+    /pg-sources__query|mysql-test__mysql_query|database_sources\.json|database_query_plan\.json|vector_sources\.json/.test(raw) ||
+    /\b(pg|postgres|postgresql|mysql|sql|vector|embedding|database|db)\b/.test(raw) ||
+    /数据库|向量|召回/.test(raw)
+  ) {
+    return '数据库检索工具'
+  }
+
+  if (
+    /\b(exa|firecrawl|tavily|web|internet|search|crawl|scrape|browser)\b/.test(raw) ||
+    /互联网|联网|搜索|抓取/.test(raw)
+  ) {
+    return '互联网搜索工具'
+  }
+
+  return '本地脚本工具'
+}
+
 function logToolDisplayName(log) {
   const explicit = log?.toolDisplayName || log?.toolName
-  if (explicit) return String(explicit).trim()
   const raw = [log?.label, log?.summary, log?.command, log?.detail].filter(Boolean).join('\n')
-  if (/pg-sources__query/i.test(raw)) return 'pg-sources__query'
-  if (/mysql-test__mysql_query/i.test(raw)) return 'mysql-test__mysql_query'
-  if (/harness_cli\.py\s+plan/i.test(raw)) return 'harness_cli.py plan'
-  if (/harness_cli\.py\s+run/i.test(raw)) return 'harness_cli.py run'
-  if (/research_cli\.py/i.test(raw)) return 'research_cli.py'
-  if (/firecrawl/i.test(raw)) return 'firecrawl'
-  if (/tavily/i.test(raw)) return 'tavily'
-  if (/\bexa\b/i.test(raw)) return 'exa'
-  return ''
+  return classifyToolDisplayName(explicit) || classifyToolDisplayName(raw)
 }
 
 function sanitizeReportLogText(value) {
@@ -2049,14 +2075,14 @@ function friendlyLogStatusLabel(status) {
 }
 
 function isTechnicalLogOpen(id) {
-  return technicalLogOpenIds.value.has(id)
+  return !technicalLogCollapsedIds.value.has(id)
 }
 
 function toggleTechnicalLog(id) {
-  const next = new Set(technicalLogOpenIds.value)
+  const next = new Set(technicalLogCollapsedIds.value)
   if (next.has(id)) next.delete(id)
   else next.add(id)
-  technicalLogOpenIds.value = next
+  technicalLogCollapsedIds.value = next
 }
 
 const dbSourcesState = computed(() => {
@@ -2348,11 +2374,11 @@ const sourceOverviewStats = computed(() => {
 
 const sourceTypeOptions = [
   { key: 'all', label: '全部' },
-  { key: 'database_recall', label: '数据库召回' },
-  { key: 'tool_search', label: '工具调用搜索' },
+  { key: 'database_recall', label: '数据库检索工具' },
+  { key: 'tool_search', label: '互联网搜索工具' },
 ]
 
-const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', 'PG向量召回', '工具联网搜索', 'Exa搜索', 'Tavily搜索', 'Tavily抽取', 'Firecrawl抽取', '其他']
+const sourceKindOptions = ['全部', '官方文件', '媒体报道', '研究报告', '数据库记录', '数据库检索工具', '互联网搜索工具', '其他']
 const sourceTimeOptions = [
   { key: 'all', label: '全部时间' },
   { key: '7d', label: '近 7 天', days: 7 },
@@ -2369,17 +2395,17 @@ const sourceSortOptions = [
 const sourceCardConfigs = computed(() => [
   {
     key: 'database_recall',
-    title: '数据库召回',
+    title: '数据库检索工具',
     value: sourceOverviewStats.value.databaseRecall ?? '--',
-    desc: '来自 PG 向量库 / 数据库召回',
+    desc: '来自 PG 向量库 / 数据库检索',
     icon: '◎',
     tone: 'blue',
   },
   {
     key: 'tool_search',
-    title: '工具调用搜索',
+    title: '互联网搜索工具',
     value: sourceOverviewStats.value.toolSearch ?? '--',
-    desc: '来自 Exa / Firecrawl / Tavily',
+    desc: '来自联网检索和网页抽取',
     icon: '▤',
     tone: 'cyan',
   },
@@ -2397,8 +2423,8 @@ const activeSourceConfig = computed(() => {
   }
   const base = sourceCardConfigs.value.find((item) => item.key === activeSourceType.value) || sourceCardConfigs.value[0]
   const descriptions = {
-    database_recall: ['数据库召回信源', '以下信源来自 PG 向量库或数据库召回，并已保留引用编号和结构化整理状态。', '暂无数据库召回信源', '当前报告没有数据库召回类信源记录，您可以切换工具调用搜索查看。'],
-    tool_search: ['工具调用搜索信源', '以下信源来自 Exa、Firecrawl、Tavily 的公开搜索或正文抽取结果。', '暂无工具调用搜索信源', '当前报告没有工具调用搜索类信源记录，您可以切换数据库召回查看。'],
+    database_recall: ['数据库检索工具信源', '以下信源来自 PG 向量库或数据库检索，并已保留引用编号和结构化整理状态。', '暂无数据库检索工具信源', '当前报告没有数据库检索工具信源记录，您可以切换互联网搜索工具查看。'],
+    tool_search: ['互联网搜索工具信源', '以下信源来自联网检索或正文抽取结果。', '暂无互联网搜索工具信源', '当前报告没有互联网搜索工具信源记录，您可以切换数据库检索工具查看。'],
     report_refs: ['报告引用信源', '以下信源来自报告正文中的参考编号和引用依据。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
     structured_sources: ['结构化信源', '以下信源来自数据库或向量召回结果，已完成结构化整理。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
     candidate_hits: ['候选命中信源', '以下内容为检索阶段命中的候选信源，尚未全部进入正文引用。', '暂无对应信源', '当前报告没有该类型的信源记录，您可以切换其他类型查看。'],
@@ -2648,7 +2674,7 @@ function normalizeSourceListItem(source, index, fallbackGroup = activeSourceType
   const publishRaw = firstText(source, ['published_at', 'publish_time', 'pub_time', 'source_time', 'publishTime', 'publishedAt', 'time'], '')
   const sourceGroup = inferSourceGroup(source, fallbackGroup)
   const sourceType = sourceGroup === 'tool_search'
-    ? '工具联网搜索'
+    ? '互联网搜索工具'
     : normalizeSourceKind(firstText(source, ['source_type', 'type', 'tag', 'designated_tag', 'sourceType'], '其他'), source)
   const status = scrubSourceDisplayText(firstText(source, ['status', 'extract_status', 'source_status'], ''))
   const method = scrubSourceDisplayText(firstText(source, ['method', 'retrievalMode', 'collection_method'], ''))
@@ -2681,18 +2707,15 @@ function normalizeSourceListItem(source, index, fallbackGroup = activeSourceType
 function normalizeSourceKind(value, source = null) {
   const engine = String(source?.engine || source?.search_engine || source?.provider || '').trim().toLowerCase()
   const origin = String(source?.sourceOrigin || source?.source_origin || source?.sourceGroup || '').trim().toLowerCase()
-  if (engine === 'exa') return 'Exa搜索'
-  if (engine === 'firecrawl') return 'Firecrawl抽取'
-  if (engine === 'tavily_extract') return 'Tavily抽取'
-  if (engine === 'tavily') return 'Tavily搜索'
-  if (engine === 'pg_vector' || /database_recall|pg_vector|vector/.test(origin)) return 'PG向量召回'
+  if (engine === 'exa') return '互联网搜索工具'
+  if (engine === 'firecrawl') return '互联网搜索工具'
+  if (engine === 'tavily_extract') return '互联网搜索工具'
+  if (engine === 'tavily') return '互联网搜索工具'
+  if (engine === 'pg_vector' || /database_recall|pg_vector|vector/.test(origin)) return '数据库检索工具'
   const text = String(value || '').trim()
   if (!text) return '其他'
-  if (/exa/i.test(text)) return 'Exa搜索'
-  if (/firecrawl/i.test(text)) return 'Firecrawl抽取'
-  if (/tavily.*extract|tavily抽取/i.test(text)) return 'Tavily抽取'
-  if (/tavily/i.test(text)) return 'Tavily搜索'
-  if (/pg|向量|vector/i.test(text)) return 'PG向量召回'
+  if (/exa|firecrawl|tavily/i.test(text)) return '互联网搜索工具'
+  if (/pg|向量|vector/i.test(text)) return '数据库检索工具'
   if (/官方|政府|公告|声明|文件|policy|gov/i.test(text)) return '官方文件'
   if (/媒体|新闻|报道|news|media/i.test(text)) return '媒体报道'
   if (/研究|报告|智库|analysis|report|think/i.test(text)) return '研究报告'
@@ -3185,6 +3208,7 @@ watch(() => props.homeMode, (mode) => {
 onMounted(() => {
   ensureReportDefaults()
   window.addEventListener('scroll', handleQaPageScroll, { passive: true })
+  window.addEventListener('keydown', handleQaGuideKeydown)
   nextTick(() => {
     reportRef.value?.addEventListener('scroll', handleQaPageScroll, { passive: true })
   })
@@ -3199,6 +3223,7 @@ watch(() => props.phase, (phase) => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleQaPageScroll)
+  window.removeEventListener('keydown', handleQaGuideKeydown)
   reportRef.value?.removeEventListener('scroll', handleQaPageScroll)
   closeAllQaStreams()
 })
@@ -3424,7 +3449,7 @@ function exportPdf() {
           返回生成编报
         </button>
         <template v-if="phase === 'idle' && homeMode === 'qa'">
-          <button class="sci-btn text-[10px] px-3 py-2" type="button" title="在输入框中输入问题后发送">
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" title="查看热点事件动态感知使用指南" @click="openQaGuide">
             使用指南
           </button>
           <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="clearQaWorkspace">
@@ -3546,6 +3571,82 @@ function exportPdf() {
         </div>
 
       </aside>
+
+    <div
+      v-if="qaGuideOpen"
+      class="qa-guide-backdrop absolute inset-0 z-30 flex items-center justify-center px-6"
+      @click.self="closeQaGuide"
+    >
+      <section class="qa-guide-modal" role="dialog" aria-modal="true" aria-labelledby="qa-guide-title">
+        <header class="qa-guide-header">
+          <div>
+            <div class="qa-guide-kicker">HOT EVENT SENSE GUIDE</div>
+            <h2 id="qa-guide-title">热点事件动态感知使用指南</h2>
+            <p>把问题问清楚，系统会优先从数据库信源中召回材料，整合为可追溯的中文回答。</p>
+          </div>
+          <button class="sci-btn text-[10px] px-3 py-2" type="button" @click="closeQaGuide">关闭</button>
+        </header>
+
+        <div class="qa-guide-body">
+          <section class="qa-guide-section">
+            <h3>能做什么</h3>
+            <ul>
+              <li>围绕热点事件、政策变化、产业链风险、国际舆情进行快速研判。</li>
+              <li>优先召回 PG 向量库和数据库信源，结合语义检索与关键词补充。</li>
+              <li>输出结论、关键依据和影响判断，并展示可追溯信源。</li>
+            </ul>
+          </section>
+
+          <section class="qa-guide-section">
+            <h3>怎么提问</h3>
+            <p>建议一次问题里写清楚对象、时间范围、地区或行业、关注角度。</p>
+            <div class="qa-guide-example-grid">
+              <button type="button" @click="fillRecommendedQuestion('美国301调查和港口服务费对中国造船业有什么影响？请按成本、订单、供应链三个角度分析。'); closeQaGuide()">
+                美国301调查和港口服务费对中国造船业有什么影响？请按成本、订单、供应链三个角度分析。
+              </button>
+              <button type="button" @click="fillRecommendedQuestion('近七天欧盟对华贸易限制有哪些新变化？请列出主要事件、涉及行业和风险判断。'); closeQaGuide()">
+                近七天欧盟对华贸易限制有哪些新变化？请列出主要事件、涉及行业和风险判断。
+              </button>
+              <button type="button" @click="fillRecommendedQuestion('某一热点事件后续可能如何演变？请给出时间线、相关方和下一步观察点。'); closeQaGuide()">
+                某一热点事件后续可能如何演变？请给出时间线、相关方和下一步观察点。
+              </button>
+            </div>
+          </section>
+
+          <section class="qa-guide-section">
+            <h3>怎么追问</h3>
+            <ul>
+              <li>要求补充时间线：例如“按时间顺序列出关键节点”。</li>
+              <li>要求深化研判：例如“重点分析风险传导路径和我方应对”。</li>
+              <li>要求缩小范围：例如“只看近七天”“只看东南亚”“只看半导体产业链”。</li>
+            </ul>
+          </section>
+
+          <section class="qa-guide-section">
+            <h3>怎么看信源</h3>
+            <ul>
+              <li>右侧信源栏展示召回来源、摘要、来源类型和原始链接。</li>
+              <li>数据库检索工具来自 PG 向量库/数据库；互联网搜索工具来自联网检索服务。</li>
+              <li>信源越多，覆盖面越广，但回答生成会更慢。</li>
+            </ul>
+          </section>
+
+          <section class="qa-guide-section">
+            <h3>怎么用于编报</h3>
+            <ul>
+              <li>回答完成后，可把当前问答加入“编报背景选择”。</li>
+              <li>也可以使用“一键导入当前回答”，将问答结论和信源作为编报背景。</li>
+              <li>导入后仍建议在编报规划阶段确认材料范围和研判方向。</li>
+            </ul>
+          </section>
+
+          <section class="qa-guide-section muted">
+            <h3>注意事项</h3>
+            <p>材料不足时，系统会提示“现有材料不足以确认”。问答结果用于辅助研判，不替代人工复核；对关键事实、时间和数字仍建议结合原始信源确认。</p>
+          </section>
+        </div>
+      </section>
+    </div>
 
     <div
       v-if="reportPlan || isPlanning || planError"
@@ -4496,7 +4597,7 @@ function exportPdf() {
             </button>
           </div>
 
-          <details class="source-technical-details">
+          <details class="source-technical-details" open>
             <summary>查看技术详情</summary>
             <div ref="liveLogListRef" class="source-technical-log" @scroll="handleLogScroll('live', $event)">
               <div v-if="technicalLogs.length" class="space-y-3">
@@ -4625,7 +4726,7 @@ function exportPdf() {
             </div>
 
             <div class="source-count-note">
-              口径说明：数据库召回来自 PG 向量库/数据库；工具调用搜索来自 Exa、Firecrawl、Tavily。报告引用编号和结构化整理状态作为信源属性展示，不作为主分类混算。
+              口径说明：数据库检索工具来自 PG 向量库/数据库；互联网搜索工具来自联网检索服务。报告引用编号和结构化整理状态作为信源属性展示，不作为主分类混算。
             </div>
 
             <div class="source-sub-filter" aria-label="信源类型筛选">
@@ -4963,7 +5064,7 @@ function exportPdf() {
             </div>
           </div>
 
-          <details class="source-technical-details result-technical-details">
+          <details class="source-technical-details result-technical-details" open>
             <summary>查看技术详情</summary>
             <div ref="liveLogListRef" class="source-technical-log" @scroll="handleLogScroll('live', $event)">
               <div v-if="technicalLogs.length" class="space-y-3">

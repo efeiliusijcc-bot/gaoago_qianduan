@@ -2881,6 +2881,137 @@ canvas {
   background: rgba(226, 242, 249, 0.62) !important;
 }
 
+.qa-guide-backdrop {
+  background: rgba(15, 23, 42, 0.34);
+  backdrop-filter: blur(12px);
+}
+
+.qa-guide-modal {
+  display: flex;
+  width: min(920px, 100%);
+  max-height: min(760px, calc(100vh - 52px));
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(37, 99, 235, 0.20);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.98) 42%, rgba(240, 253, 250, 0.96)),
+    #ffffff;
+  color: #0f172a;
+  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.22), 0 0 32px rgba(37, 99, 235, 0.12);
+}
+
+.qa-guide-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.qa-guide-kicker {
+  margin-bottom: 8px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.qa-guide-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.qa-guide-header p {
+  margin: 10px 0 0;
+  max-width: 620px;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.qa-guide-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 24px;
+  overscroll-behavior: contain;
+}
+
+.qa-guide-section {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.045);
+}
+
+.qa-guide-section h3 {
+  margin: 0 0 10px;
+  color: #1d4ed8;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.qa-guide-section p,
+.qa-guide-section li {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.qa-guide-section p {
+  margin: 0;
+}
+
+.qa-guide-section ul {
+  margin: 0;
+  padding-left: 1.15em;
+}
+
+.qa-guide-section li + li {
+  margin-top: 6px;
+}
+
+.qa-guide-section.muted {
+  grid-column: 1 / -1;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.qa-guide-example-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.qa-guide-example-grid button {
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.72);
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 750;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.qa-guide-example-grid button:hover {
+  border-color: rgba(37, 99, 235, 0.38);
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .plan-modal-panel,
 .log-drawer-panel,
 .live-log-panel,
@@ -5514,6 +5645,40 @@ canvas {
 
   .plan-modal-backdrop {
     padding-inline: 12px !important;
+  }
+
+  .qa-guide-backdrop {
+    padding-inline: 10px !important;
+  }
+
+  .qa-guide-modal {
+    max-height: calc(100vh - 22px);
+    border-radius: 18px;
+  }
+
+  .qa-guide-header {
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .qa-guide-header h2 {
+    font-size: 20px;
+  }
+
+  .qa-guide-header .sci-btn {
+    align-self: flex-end;
+  }
+
+  .qa-guide-body {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .qa-guide-section {
+    padding: 14px;
+    border-radius: 14px;
   }
 
   .plan-modal-panel {
