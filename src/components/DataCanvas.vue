@@ -445,6 +445,15 @@ const planningSelectionView = computed(() => {
       totalDirections: 0,
     }
   }
+  const databaseEnabled = Boolean(context.databaseSourceOptions?.enabled)
+  const databaseSourceEntry = {
+    id: 'database-source',
+    label: '数据库信源',
+    detail: databaseEnabled
+      ? '已启用 PG 向量库 / 数据库召回，作为本次编报的优先信源范围。'
+      : '未启用数据库召回，本次主要使用公开检索、用户指定信源和工具搜索结果。',
+    status: databaseEnabled ? 'enabled' : 'disabled',
+  }
   const modules = Array.isArray(context.selectedModules)
     ? context.selectedModules.map((module, index) => {
       const directions = normalizePlanningItems(module.selectedDirections || module.options)
@@ -462,11 +471,11 @@ const planningSelectionView = computed(() => {
   return {
     available: true,
     searchQueries: Array.isArray(context.selectedSearchQueries) ? context.selectedSearchQueries.filter(Boolean) : [],
-    sourceScopes: normalizePlanningItems(context.selectedSources),
+    sourceScopes: [databaseSourceEntry, ...normalizePlanningItems(context.selectedSources)],
     modules,
     manualSources: Array.isArray(context.userProvidedSources) ? context.userProvidedSources.filter(Boolean) : [],
     parameterEntries,
-    databaseEnabled: Boolean(context.databaseSourceOptions?.enabled),
+    databaseEnabled,
     supplement: String(context.supplement || '').trim(),
     freeTextContext: String(context.freeTextContext || '').trim(),
     totalDirections: modules.reduce((sum, module) => sum + module.directions.length, 0),
@@ -1726,6 +1735,11 @@ function planStepTypeLabel(type) {
 
 function toggleLogDrawer() {
   if (canOpenLogDrawer.value) emit('toggle-log-drawer')
+}
+
+function scrollPlanningSection(id) {
+  const target = document.getElementById(id)
+  target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function openQaGuide() {
@@ -4901,25 +4915,25 @@ function exportPdf() {
             </header>
 
             <div class="planning-summary-grid">
-              <article>
+              <button type="button" @click="scrollPlanningSection('planning-search-queries')">
                 <span>检索词</span>
-                <strong>{{ planningSelectionView.searchQueries.length }}</strong>
-              </article>
-              <article>
+                <strong>查看选择</strong>
+              </button>
+              <button type="button" @click="scrollPlanningSection('planning-source-scope')">
                 <span>信源范围</span>
-                <strong>{{ planningSelectionView.sourceScopes.length }}</strong>
-              </article>
-              <article>
+                <strong>查看范围</strong>
+              </button>
+              <button type="button" @click="scrollPlanningSection('planning-modules')">
                 <span>编报模块</span>
-                <strong>{{ planningSelectionView.modules.length }}</strong>
-              </article>
-              <article>
+                <strong>查看章节</strong>
+              </button>
+              <button type="button" @click="scrollPlanningSection('planning-modules')">
                 <span>选择方向</span>
-                <strong>{{ planningSelectionView.totalDirections }}</strong>
-              </article>
+                <strong>查看方向</strong>
+              </button>
             </div>
 
-            <section class="planning-selection-section">
+            <section id="planning-search-queries" class="planning-selection-section">
               <div class="planning-section-heading">
                 <h3>检索词选择</h3>
                 <p>用于触发资料检索和信源召回的主题关键词。</p>
@@ -4930,13 +4944,17 @@ function exportPdf() {
               <div v-else class="planning-muted-box">未保存检索词选择。</div>
             </section>
 
-            <section class="planning-selection-section">
+            <section id="planning-source-scope" class="planning-selection-section">
               <div class="planning-section-heading">
                 <h3>信源范围</h3>
-                <p>规划阶段选择纳入检索的材料类型和来源范围。</p>
+                <p>规划阶段选择纳入检索的材料类型、来源范围和数据库信源设置。</p>
               </div>
               <div v-if="planningSelectionView.sourceScopes.length" class="planning-source-grid">
-                <article v-for="source in planningSelectionView.sourceScopes" :key="source.id || source.label">
+                <article
+                  v-for="source in planningSelectionView.sourceScopes"
+                  :key="source.id || source.label"
+                  :class="{ 'planning-database-source': source.id === 'database-source', disabled: source.status === 'disabled' }"
+                >
                   <strong>{{ source.label }}</strong>
                   <p>{{ source.detail || '已纳入本次编报信源范围。' }}</p>
                 </article>
@@ -4944,7 +4962,7 @@ function exportPdf() {
               <div v-else class="planning-muted-box">未保存信源范围选择。</div>
             </section>
 
-            <section class="planning-selection-section">
+            <section id="planning-modules" class="planning-selection-section">
               <div class="planning-section-heading">
                 <h3>章节与方向选择</h3>
                 <p>正式编报时采用的章节模块和每个模块下的重点方向。</p>

@@ -1063,6 +1063,30 @@ export function useReportJobs() {
     return JSON.stringify(context, null, 2)
   }
 
+  function buildPlanningFocusAreas(extraContext = '') {
+    const fallback = ['国家', '地方', '政策', '社会', '传播']
+    try {
+      const parsed = JSON.parse(String(extraContext || '{}'))
+      const modules = Array.isArray(parsed?.selectedModules) ? parsed.selectedModules : []
+      const focusAreas = []
+      for (const module of modules) {
+        const sectionTitle = String(module?.sectionTitle || module?.title || '').trim()
+        const directions = Array.isArray(module?.selectedDirections || module?.options)
+          ? (module.selectedDirections || module.options)
+          : []
+        if (sectionTitle) focusAreas.push(sectionTitle)
+        for (const direction of directions) {
+          const label = String(direction?.label || direction || '').trim()
+          if (label) focusAreas.push(sectionTitle ? `${sectionTitle}：${label}` : label)
+        }
+      }
+      const uniqueFocusAreas = Array.from(new Set(focusAreas)).slice(0, 24)
+      return uniqueFocusAreas.length ? uniqueFocusAreas : fallback
+    } catch {
+      return fallback
+    }
+  }
+
   function buildPayload(extraContext = '') {
     const subject = title.value.trim()
     const isStructuredContext = String(extraContext || '').trim().startsWith('{')
@@ -1091,7 +1115,7 @@ export function useReportJobs() {
           topic: subject,
           report_type: reportType.value === 'write-hb-hb' ? 'HB报' : 'K报',
           known_context: context,
-          focus_areas: ['国家', '地方', '政策', '社会', '传播'],
+          focus_areas: isStructuredContext ? buildPlanningFocusAreas(extraContext) : ['国家', '地方', '政策', '社会', '传播'],
           language: 'zh-CN',
         },
       }
