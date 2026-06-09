@@ -1844,9 +1844,9 @@ function workflowLogView(phase, rawLog, status) {
     research_waiting: ['WAITING_RESEARCH', '资料采集', '系统正在采集公开资料并提取关键事实。'],
     research_collecting: ['RESEARCHING', '资料采集', '系统正在采集公开资料并提取关键事实。'],
     research_complete: ['RESEARCH_DONE', '调研结果已返回', '调研已完成，系统正在收集结果。'],
-    synthesis_dispatch: ['SYNTHESIS_TASK', '报告生成', '系统正在生成报告正文并完成校验。'],
-    synthesis_waiting: ['WAITING_SYNTHESIS', '报告生成', '系统正在生成报告正文并完成校验。'],
-    synthesis_writing: ['WRITING', '报告生成', '系统正在生成报告正文并完成校验。'],
+    synthesis_dispatch: ['SYNTHESIS_TASK', '素材整合', '系统正在汇总信源、证据和分析要点，并准备进入撰稿。'],
+    synthesis_waiting: ['WAITING_SYNTHESIS', '素材整合', '系统正在等待素材整合任务完成。'],
+    synthesis_writing: ['WRITING', '素材整合', '系统正在整合分析材料并准备报告正文。'],
     report_verifying: ['VERIFYING', '报告生成', '系统正在生成报告正文并完成校验。'],
     report_saving: ['SAVING', '报告生成', '系统正在生成报告正文并完成校验。'],
     technical_detail: ['DETAIL', '处理技术细节', '系统正在读取配置或中间文件；可展开查看原始记录。'],
@@ -2006,12 +2006,21 @@ function translateOpenClawLog(log) {
     }
   }
 
-  if (lower.includes('synthesis') || lower.includes('final/report.md')) {
+  if (lower.includes('final/report.md')) {
     return {
       ...base,
       stage: 'SYNTHESIS',
       title: '报告生成',
       description: '系统正在生成报告正文并完成校验。',
+    }
+  }
+
+  if (lower.includes('synthesis')) {
+    return {
+      ...base,
+      stage: 'SYNTHESIS',
+      title: '素材整合',
+      description: '系统正在整合分析材料并准备报告正文。',
     }
   }
 
@@ -2525,10 +2534,10 @@ const progressStageOrder = {
   EXTRACTING: 3,
   CONSOLIDATE: 4,
   ANALYZING: 4,
-  SYNTHESIS_TASK: 5,
-  WAITING_SYNTHESIS: 5,
-  SYNTHESIS: 5,
-  WRITING: 5,
+  SYNTHESIS_TASK: 4,
+  WAITING_SYNTHESIS: 4,
+  SYNTHESIS: 4,
+  WRITING: 4,
   VERIFYING: 5,
   VALIDATE_SAVE: 5,
   SAVING: 5,
@@ -2539,7 +2548,8 @@ const progressStageOrder = {
 function rawProgressStageIndex(rawLog) {
   const lower = String(rawLog || '').toLowerCase()
   if (!lower) return -1
-  if (lower.includes('synthesis') || lower.includes('final/report.md') || lower.includes('validate_report.py') || lower.includes('report_file')) return 5
+  if (lower.includes('final/report.md') || lower.includes('validate_report.py') || lower.includes('report_file')) return 5
+  if (lower.includes('synthesis')) return 4
   if (lower.includes('consolidated.json')) return 4
   if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research') || lower.includes('sessions_yield')) return 3
   if (lower.includes('harness_cli.py plan') || lower.includes('plan.json') || lower.includes('group_')) return 2
