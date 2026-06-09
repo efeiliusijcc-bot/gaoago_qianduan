@@ -93,6 +93,10 @@ const selectedQaSession = computed(() => {
   return qaSessions.value.find((session) => session.id === selectedQaSessionId.value) || null
 })
 
+const qaTotal = computed(() => {
+  return qaSessions.value.reduce((total, session) => total + countQaSessionTurns(session), 0)
+})
+
 const hasGeneratingWorkspace = computed(() => {
   return Boolean(activeWorkspaceJobId.value) && (
     phase.value === 'loading' ||
@@ -126,6 +130,15 @@ function persistQaSessions() {
   } catch {
     // Local storage is best-effort; the current in-memory session still works.
   }
+}
+
+function countQaSessionTurns(session) {
+  if (Array.isArray(session?.turns) && session.turns.length) {
+    return session.turns.filter((turn) => {
+      return String(turn?.question || turn?.answer || '').trim()
+    }).length
+  }
+  return String(session?.question || session?.answer || '').trim() ? 1 : 0
 }
 
 function setHomeMode(mode) {
@@ -241,7 +254,7 @@ function jobActionLabel(status) {
         :recentJobs="recentJobs"
         :qaSessions="qaSessions"
         :reportTotal="listTotal"
-        :qaTotal="qaSessions.length"
+        :qaTotal="qaTotal"
         :recentLoadingMore="recentLoadingMore"
         :recentHasMore="recentHasMore"
         :recentLoadError="recentLoadError"
