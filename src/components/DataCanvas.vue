@@ -1789,7 +1789,7 @@ function classifyToolDisplayName(rawValue) {
   }
 
   if (
-    /\b(exa|firecrawl|tavily|web|internet|search|crawl|scrape|browser)\b/.test(raw) ||
+    /\b(exa|firecrawl|tavily|internet|search|crawl|scrape|browser)\b|exa[_\s-]?search|firecrawl[_\s-]?(mcp|search|extract|crawl|scrape)|web[_\s-]?(search|serch|fetch|crawl|scrape)|search\.mjs|extract\.mjs/.test(raw) ||
     /互联网|联网|搜索|抓取/.test(raw)
   ) {
     return '互联网搜索工具'
@@ -1810,6 +1810,7 @@ function sanitizeReportLogText(value) {
     return '本次主题触发模型安全策略，生成内容被拦截，未形成有效报告。请调整表述或降低敏感措辞后重试。'
   }
   return text
+    .replace(/\b(?:exa|firecrawl|tavily|tavily[_\s-]?(?:search|extract)|exa[_\s-]?search|firecrawl[_\s-]?(?:mcp|search|extract|crawl|scrape)|web[_\s-]?(?:search|serch|fetch|crawl|scrape)|search\.mjs|extract\.mjs)\b/gi, '互联网搜索工具')
     .replace(/OpenClaw\s+Gateway/gi, '任务通道')
     .replace(/OpenClaw\s+report-agent/gi, '编报智能体')
     .replace(/OpenClaw/gi, '自主智能体')
@@ -4505,7 +4506,7 @@ function exportPdf() {
               </article>
             </div>
 
-            <div class="ai-process-panel">
+            <div v-if="false" class="ai-process-panel">
               <header class="ai-process-header">
                 <div>
                   <strong>AI执行过程</strong>
@@ -5066,7 +5067,7 @@ function exportPdf() {
               </article>
             </div>
 
-            <div class="ai-process-panel">
+            <div v-if="false" class="ai-process-panel">
               <header class="ai-process-header">
                 <div>
                   <strong>AI执行过程</strong>
