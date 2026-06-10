@@ -3796,6 +3796,19 @@ canvas {
   margin: 0 auto;
 }
 
+.result-sticky-panel {
+  position: sticky;
+  top: -28px;
+  z-index: 30;
+  margin: -8px -18px 18px;
+  padding: 16px 18px 14px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(248, 250, 252, 0.92));
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.10);
+  backdrop-filter: blur(14px);
+}
+
 .planning-selection-page {
   display: grid;
   gap: 18px;
@@ -4189,6 +4202,15 @@ canvas {
   flex-wrap: wrap;
   gap: 18px;
   margin-bottom: 18px;
+}
+
+.result-sticky-panel .result-toolbar {
+  margin-bottom: 14px;
+}
+
+.result-sticky-panel .result-toolbar:last-child,
+.result-sticky-panel .result-info-bar:last-child {
+  margin-bottom: 0;
 }
 
 .result-tabs {
@@ -5050,6 +5072,11 @@ canvas {
 }
 
 @media (max-width: 1100px) {
+  .result-sticky-panel {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+
   .result-toolbar {
     align-items: flex-start;
     flex-direction: column;
@@ -5093,6 +5120,13 @@ canvas {
 }
 
 @media (max-width: 720px) {
+  .result-sticky-panel {
+    top: -20px;
+    margin: -6px -10px 14px;
+    padding: 12px 10px;
+    border-radius: 14px;
+  }
+
   .result-toolbar {
     gap: 12px;
   }

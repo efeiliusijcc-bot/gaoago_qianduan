@@ -194,6 +194,7 @@ const drawerLogHasNewItems = ref(false)
 let qaEventSource = null
 let qaStreamRecoveryTimer = null
 let sourceListRequestId = 0
+let resultTabWheelLockedUntil = 0
 const qaStreamStates = new Map()
 
 const canExport = computed(() => props.phase === 'done' && Boolean(props.generatedHtml))
@@ -3112,6 +3113,29 @@ function scrollToTop() {
   })
 }
 
+function setActiveResultTab(tabKey) {
+  activeResultTab.value = tabKey
+}
+
+function handleResultTabWheel(event) {
+  if (!resultTabs.length) return
+  if (Math.abs(event.deltaY) < 12) return
+
+  const now = Date.now()
+  if (now < resultTabWheelLockedUntil) {
+    event.preventDefault()
+    return
+  }
+
+  const currentIndex = Math.max(0, resultTabs.findIndex((tab) => tab.key === activeResultTab.value))
+  const nextIndex = Math.min(resultTabs.length - 1, Math.max(0, currentIndex + (event.deltaY > 0 ? 1 : -1)))
+  if (nextIndex === currentIndex) return
+
+  event.preventDefault()
+  resultTabWheelLockedUntil = now + 420
+  activeResultTab.value = resultTabs[nextIndex].key
+}
+
 function getLogTarget(kind) {
   return kind === 'drawer' ? drawerLogListRef.value : liveLogListRef.value
 }
@@ -4675,40 +4699,42 @@ function exportPdf() {
       </div>
 
       <div v-else class="result-shell">
-        <div class="result-toolbar">
-          <nav class="result-tabs" aria-label="报告结果切换">
-            <button
-              v-for="tab in resultTabs"
-              :key="tab.key"
-              class="result-tab"
-              :class="{ active: activeResultTab === tab.key }"
-              type="button"
-              @click="activeResultTab = tab.key"
-            >
-              {{ tab.label }}
-            </button>
-          </nav>
+        <div class="result-sticky-panel" @wheel="handleResultTabWheel">
+          <div class="result-toolbar">
+            <nav class="result-tabs" aria-label="报告结果切换">
+              <button
+                v-for="tab in resultTabs"
+                :key="tab.key"
+                class="result-tab"
+                :class="{ active: activeResultTab === tab.key }"
+                type="button"
+                @click="setActiveResultTab(tab.key)"
+              >
+                {{ tab.label }}
+              </button>
+            </nav>
 
-          <div class="result-actions">
-            <button @click="exportWord" :disabled="!canExport" class="result-action-btn" type="button">
-              <span>▣</span> 导出 Word
-            </button>
-            <button @click="exportPdf" :disabled="!canExport" class="result-action-btn" type="button">
-              <span>◧</span> 导出 PDF
-            </button>
-            <button @click="emit('list')" class="result-action-btn" type="button">
-              <span>☷</span> 报告列表
-            </button>
-            <button @click="emit('new-report')" class="result-action-btn result-action-primary" type="button">
-              <span>＋</span> 新开一篇
-            </button>
+            <div class="result-actions">
+              <button @click="exportWord" :disabled="!canExport" class="result-action-btn" type="button">
+                <span>▣</span> 导出 Word
+              </button>
+              <button @click="exportPdf" :disabled="!canExport" class="result-action-btn" type="button">
+                <span>◧</span> 导出 PDF
+              </button>
+              <button @click="emit('list')" class="result-action-btn" type="button">
+                <span>☷</span> 报告列表
+              </button>
+              <button @click="emit('new-report')" class="result-action-btn result-action-primary" type="button">
+                <span>＋</span> 新开一篇
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div v-if="activeResultTab !== 'sources'" class="result-info-bar">
-          <div v-for="item in resultInfoItems" :key="item[0]" class="result-info-item">
-            <span>{{ item[0] }}</span>
-            <strong>{{ item[1] }}</strong>
+          <div v-if="activeResultTab !== 'sources'" class="result-info-bar">
+            <div v-for="item in resultInfoItems" :key="item[0]" class="result-info-item">
+              <span>{{ item[0] }}</span>
+              <strong>{{ item[1] }}</strong>
+            </div>
           </div>
         </div>
 
