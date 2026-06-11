@@ -56,7 +56,7 @@ const SUPPLEMENT_PLAN_STEP = {
   type: 'supplement',
   title: '补充方向',
   sectionTitle: '补充方向',
-  description: '补充需要纳入编报的特殊关注点、限制条件、指定信源或额外说明。',
+  description: '补充需要纳入编报的特殊关注点、限制条件或额外说明。',
   allowMultiple: false,
   options: [],
 }
@@ -912,6 +912,29 @@ export function useReportJobs() {
     return Boolean(status?.enabled && status?.available && Number(status?.indexedRows || 0) > 0)
   }
 
+  function databaseSourceOption(status = vectorSourceStatus.value) {
+    const usable = isVectorSourceUsable(status)
+    const indexedRows = Number(status?.indexedRows || 0)
+    const parts = []
+    if (status?.embeddingModel) parts.push(`模型：${status.embeddingModel}`)
+    if (status?.sourceTable) parts.push(`表：${status.sourceTable}`)
+    if (indexedRows > 0) parts.push(`已索引：${indexedRows.toLocaleString('zh-CN')} 条`)
+    if (status?.lastIndexedAt) parts.push(`最近更新：${status.lastIndexedAt}`)
+    const fallbackReason = status?.fallbackReason ? `；原因：${status.fallbackReason}` : ''
+    return {
+      id: 'database-source',
+      label: 'PG 数据库信源',
+      detail: usable
+        ? `确定可采集的 PG 向量数据库信源，提交后优先召回。${parts.join('；')}`
+        : `PG 数据库信源暂不可用或暂无索引数据，不能作为本次确定采集来源${fallbackReason}`,
+      selected: usable,
+      disabled: !usable,
+      sourceGroup: 'verified',
+      statusLabel: usable ? '可采集' : '不可用',
+      status: usable ? 'available' : 'unavailable',
+    }
+  }
+
   async function loadVectorSourceStatus() {
     vectorSourceStatusLoading.value = true
     try {
@@ -959,8 +982,8 @@ export function useReportJobs() {
     })
     return {
       ...K_SOURCE_SCOPE_STEP,
-      description: '选择需要指导联网检索的方向；采集结果以实际命中为准。',
-      options: networkOptions,
+      description: '先确认确定可采集的 PG 数据库信源，再选择需要指导联网检索的方向；联网方向不承诺每类都一定命中。',
+      options: [databaseSourceOption(), ...networkOptions],
     }
   }
 

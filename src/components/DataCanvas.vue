@@ -221,6 +221,7 @@ const titleLength = computed(() => props.title?.length || 0)
 const currentPlanStep = computed(() => props.reportPlan?.steps?.[props.planStepIndex] || null)
 const isLastPlanStep = computed(() => props.planStepIndex >= ((props.reportPlan?.steps?.length || 1) - 1))
 const isSourcePlanStep = computed(() => currentPlanStep.value?.type === 'source_scope')
+const verifiedPlanSourceOptions = computed(() => (currentPlanStep.value?.options || []).filter((option) => option.sourceGroup === 'verified' || option.id === 'database-source'))
 const networkPlanSourceOptions = computed(() => (currentPlanStep.value?.options || []).filter((option) => option.sourceGroup !== 'verified' && option.id !== 'database-source'))
 const isSupplementPlanStep = computed(() => currentPlanStep.value?.type === 'supplement')
 const manualPlanSources = computed(() => parseManualPlanSources(props.planSourceInput))
@@ -3818,6 +3819,31 @@ function exportPdf() {
             <div v-if="isSourcePlanStep" class="plan-source-sections">
               <section class="plan-source-section">
                 <div class="plan-source-section-head">
+                  <strong>PG 数据库信源</strong>
+                  <span v-if="vectorSourceStatusLoading">检测中...</span>
+                  <span v-else>{{ vectorSourceStatus?.indexedRows ? `已索引 ${Number(vectorSourceStatus.indexedRows).toLocaleString('zh-CN')} 条` : '以当前状态为准' }}</span>
+                </div>
+                <button
+                  v-for="option in verifiedPlanSourceOptions"
+                  :key="option.id"
+                  class="plan-source-option text-left"
+                  :class="[
+                    planOptionStatusClass(option),
+                    { selected: isPlanOptionSelected(currentPlanStep.id, option.id), disabled: option.disabled },
+                  ]"
+                  type="button"
+                  :disabled="option.disabled"
+                  @click="emit('toggle-plan-option', currentPlanStep.id, option.id)"
+                >
+                  <div class="plan-source-option-title">
+                    <span>{{ option.label }}</span>
+                    <i>{{ planOptionStatusLabel(option) }}</i>
+                  </div>
+                  <p>{{ option.detail }}</p>
+                </button>
+              </section>
+              <section class="plan-source-section">
+                <div class="plan-source-section-head">
                   <strong>联网检索方向</strong>
                   <span>采集结果以实际命中为准</span>
                 </div>
@@ -3840,6 +3866,29 @@ function exportPdf() {
                     </div>
                     <p>{{ option.detail }}</p>
                   </button>
+                </div>
+              </section>
+              <section class="plan-source-section">
+                <div class="plan-source-section-head">
+                  <strong>补充信源</strong>
+                  <span>URL / 机构 / 媒体 / 数据库说明</span>
+                </div>
+                <p class="manual-source-hint">可在信源确认环节补充需要优先尝试检索的来源，最终以实际采集结果为准。</p>
+                <div class="manual-source-entry">
+                  <textarea
+                    class="sci-textarea text-sm bg-black/15"
+                    rows="2"
+                    v-model="manualSourceDraft"
+                    placeholder="可填写 URL、机构名、媒体名或信源说明；支持一次粘贴多行。"
+                    @keydown.ctrl.enter.prevent="addManualPlanSources"
+                  ></textarea>
+                  <button class="sci-btn text-[10px] px-3 py-2 border-neon-cyan" type="button" @click="addManualPlanSources">添加信源</button>
+                </div>
+                <div v-if="manualPlanSources.length" class="manual-source-list">
+                  <div v-for="(source, index) in manualPlanSources" :key="`${source}-${index}`" class="manual-source-item">
+                    <span>{{ source }}</span>
+                    <button type="button" @click="removeManualPlanSource(index)">删除</button>
+                  </div>
                 </div>
               </section>
             </div>
@@ -3898,26 +3947,6 @@ function exportPdf() {
               ></textarea>
             </div>
 
-            <div v-if="isSupplementPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
-              <label class="block font-mono text-[10px] tracking-widest text-[#374151] mb-2">指定信源 / URL / 机构</label>
-              <p class="manual-source-hint">用户指定信源会优先尝试检索和使用，是否成功以实际采集结果为准。</p>
-              <div class="manual-source-entry">
-                <textarea
-                  class="sci-textarea text-sm bg-black/15"
-                  rows="2"
-                  v-model="manualSourceDraft"
-                  placeholder="可填写 URL、机构名、媒体名或信源说明；支持一次粘贴多行。"
-                  @keydown.ctrl.enter.prevent="addManualPlanSources"
-                ></textarea>
-                <button class="sci-btn text-[10px] px-3 py-2 border-neon-cyan" type="button" @click="addManualPlanSources">添加信源</button>
-              </div>
-              <div v-if="manualPlanSources.length" class="manual-source-list">
-                <div v-for="(source, index) in manualPlanSources" :key="`${source}-${index}`" class="manual-source-item">
-                  <span>{{ source }}</span>
-                  <button type="button" @click="removeManualPlanSource(index)">删除</button>
-                </div>
-              </div>
-            </div>
           </div>
 
           <div class="plan-modal-actions flex items-center justify-between gap-3">
@@ -5116,7 +5145,7 @@ function exportPdf() {
             >
               <div class="planning-section-heading">
                 <h3>补充要求</h3>
-                <p>用户在规划确认前额外填写的限定条件、指定信源和背景说明。</p>
+                <p>用户在规划确认前额外填写的限定条件、补充信源和背景说明。</p>
               </div>
               <div class="planning-extra-grid">
                 <article v-if="planningSelectionView.parameterEntries.length">
@@ -5126,7 +5155,7 @@ function exportPdf() {
                   </p>
                 </article>
                 <article v-if="planningSelectionView.manualSources.length">
-                  <h4>指定信源</h4>
+                  <h4>补充信源</h4>
                   <p v-for="source in planningSelectionView.manualSources" :key="source">{{ source }}</p>
                 </article>
                 <article v-if="planningSelectionView.supplement">
