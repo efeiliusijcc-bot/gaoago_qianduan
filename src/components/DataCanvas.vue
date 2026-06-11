@@ -80,6 +80,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  vectorSourceStatus: {
+    type: Object,
+    default: null,
+  },
+  vectorSourceStatusLoading: {
+    type: Boolean,
+    default: false,
+  },
   unreadLogCount: {
     type: Number,
     default: 0,
@@ -121,6 +129,7 @@ const emit = defineEmits([
   'confirm-plan',
   'cancel-plan',
   'toggle-plan-option',
+  'add-plan-option',
   'toggle-plan-search-query',
   'next-plan-step',
   'prev-plan-step',
@@ -191,6 +200,8 @@ const liveLogShouldStick = ref(true)
 const drawerLogShouldStick = ref(true)
 const liveLogHasNewItems = ref(false)
 const drawerLogHasNewItems = ref(false)
+const manualSourceDraft = ref('')
+const manualDirectionDraft = ref('')
 let qaEventSource = null
 let qaStreamRecoveryTimer = null
 let sourceListRequestId = 0
@@ -209,6 +220,10 @@ const canSubmitPlanning = computed(() => Boolean(props.title?.trim()) && Boolean
 const titleLength = computed(() => props.title?.length || 0)
 const currentPlanStep = computed(() => props.reportPlan?.steps?.[props.planStepIndex] || null)
 const isLastPlanStep = computed(() => props.planStepIndex >= ((props.reportPlan?.steps?.length || 1) - 1))
+const isSourcePlanStep = computed(() => currentPlanStep.value?.type === 'source_scope')
+const networkPlanSourceOptions = computed(() => (currentPlanStep.value?.options || []).filter((option) => option.sourceGroup !== 'verified' && option.id !== 'database-source'))
+const isSupplementPlanStep = computed(() => currentPlanStep.value?.type === 'supplement')
+const manualPlanSources = computed(() => parseManualPlanSources(props.planSourceInput))
 const reportTypeLabel = computed(() => {
   if (effectiveReportType.value === 'person-intelligence-report') return '人物报'
   if (effectiveReportType.value === 'risk-assessment-reports') return '风险报'
@@ -440,20 +455,10 @@ const planningSelectionView = computed(() => {
       modules: [],
       manualSources: [],
       parameterEntries: [],
-      databaseEnabled: false,
       supplement: '',
       freeTextContext: '',
       totalDirections: 0,
     }
-  }
-  const databaseEnabled = Boolean(context.databaseSourceOptions?.enabled)
-  const databaseSourceEntry = {
-    id: 'database-source',
-    label: '数据库信源',
-    detail: databaseEnabled
-      ? '已启用 PG 向量库 / 数据库召回，作为本次编报的优先信源范围。'
-      : '未启用数据库召回，本次主要使用公开检索、用户指定信源和工具搜索结果。',
-    status: databaseEnabled ? 'enabled' : 'disabled',
   }
   const modules = Array.isArray(context.selectedModules)
     ? context.selectedModules.map((module, index) => {
@@ -472,11 +477,10 @@ const planningSelectionView = computed(() => {
   return {
     available: true,
     searchQueries: Array.isArray(context.selectedSearchQueries) ? context.selectedSearchQueries.filter(Boolean) : [],
-    sourceScopes: [databaseSourceEntry, ...normalizePlanningItems(context.selectedSources)],
+    sourceScopes: normalizePlanningItems(context.selectedSources).filter((source) => source.id !== 'database-source'),
     modules,
     manualSources: Array.isArray(context.userProvidedSources) ? context.userProvidedSources.filter(Boolean) : [],
     parameterEntries,
-    databaseEnabled,
     supplement: String(context.supplement || '').trim(),
     freeTextContext: String(context.freeTextContext || '').trim(),
     totalDirections: modules.reduce((sum, module) => sum + module.directions.length, 0),
@@ -1722,10 +1726,76 @@ function isPlanSearchQuerySelected(query) {
   return (props.planSearchSelections || []).includes(query)
 }
 
+function manualSourceKey(value) {
+  const text = String(value || '').trim()
+  try {
+    const parsed = new URL(text)
+    parsed.hash = ''
+    parsed.searchParams.sort()
+    return parsed.toString().replace(/\/$/, '').toLowerCase()
+  } catch {
+    return text.replace(/\s+/g, ' ').toLowerCase()
+  }
+}
+
+function parseManualPlanSources(value) {
+  const seen = new Set()
+  return String(value || '')
+    .split(/\r?\n|[；;]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => {
+      const key = manualSourceKey(item)
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+function commitManualPlanSources(items) {
+  emit('update:planSourceInput', parseManualPlanSources(items.join('\n')).join('\n'))
+}
+
+function addManualPlanSources() {
+  const incoming = parseManualPlanSources(manualSourceDraft.value)
+  if (!incoming.length) return
+  commitManualPlanSources([...manualPlanSources.value, ...incoming])
+  manualSourceDraft.value = ''
+}
+
+function removeManualPlanSource(index) {
+  commitManualPlanSources(manualPlanSources.value.filter((_, itemIndex) => itemIndex !== index))
+}
+
+function addManualPlanDirection() {
+  const label = manualDirectionDraft.value.trim()
+  if (!label || !currentPlanStep.value?.id) return
+  emit('add-plan-option', currentPlanStep.value.id, {
+    label,
+    detail: `用户手动新增方向：${label}`,
+  })
+  manualDirectionDraft.value = ''
+}
+
+function planOptionStatusLabel(option) {
+  if (option?.statusLabel) return option.statusLabel
+  if (option?.disabled) return '不可用'
+  if (option?.sourceGroup === 'verified') return '可采集'
+  return option?.selected ? '主题推荐' : '检索方向'
+}
+
+function planOptionStatusClass(option) {
+  if (option?.disabled || option?.status === 'unavailable') return 'unavailable'
+  if (option?.sourceGroup === 'verified' || option?.status === 'available') return 'available'
+  if (option?.selected) return 'recommended'
+  return 'direction'
+}
+
 function planStepTypeLabel(type) {
   const labels = {
     search_queries: '检索词',
     source_scope: '信源范围',
+    supplement: '补充方向',
     basic_info_module: '基本信息模块',
     analysis_module: '研判模块',
     output_module: '输出模块',
@@ -1835,22 +1905,22 @@ function workflowLogView(phase, rawLog, status) {
   const lowerPhase = String(phase || '').toLowerCase()
   const lower = String(rawLog || '').toLowerCase()
   const views = {
-    start: ['CONNECTING', '任务准备', '系统正在整理编报要求并建立任务空间。'],
-    running: ['TASK_START', '任务准备', '系统正在整理编报要求并建立任务空间。'],
-    'openclaw:start': ['TASK_START', '任务准备', '系统正在整理编报要求并建立任务空间。'],
+    start: ['CONNECTING', '任务规划', '系统正在整理编报要求、确定信源范围并拆解调研任务。'],
+    running: ['TASK_START', '任务规划', '系统正在整理编报要求、确定信源范围并拆解调研任务。'],
+    'openclaw:start': ['TASK_START', '任务规划', '系统正在整理编报要求、确定信源范围并拆解调研任务。'],
     'openclaw:complete': ['COMPLETED', '编报任务已完成', '系统已完成执行。'],
-    waiting_final_report: ['WAITING_REPORT', '报告生成', '系统正在生成报告正文并完成校验。'],
-    context_preparing: ['PREPARING', '任务准备', '系统正在整理编报要求并建立任务空间。'],
-    research_planning: ['PLANNING', '调研规划', '系统正在拆解调研方向并安排采集任务。'],
+    waiting_final_report: ['WAITING_CONFIRM', '等待报告文件确认', '系统正在等待最终报告文件确认。'],
+    context_preparing: ['PREPARING', '任务规划', '系统正在整理编报要求、确定信源范围并拆解调研任务。'],
+    research_planning: ['PLANNING', '任务规划', '系统正在整理编报要求、确定信源范围并拆解调研任务。'],
     research_dispatch: ['RESEARCH_TASK', '资料采集', '系统正在采集公开资料并提取关键事实。'],
     research_waiting: ['WAITING_RESEARCH', '资料采集', '系统正在采集公开资料并提取关键事实。'],
     research_collecting: ['RESEARCHING', '资料采集', '系统正在采集公开资料并提取关键事实。'],
     research_complete: ['RESEARCH_DONE', '调研结果已返回', '调研已完成，系统正在收集结果。'],
     synthesis_dispatch: ['SYNTHESIS_TASK', '素材整合', '系统正在汇总信源、证据和分析要点，并准备进入撰稿。'],
     synthesis_waiting: ['WAITING_SYNTHESIS', '素材整合', '系统正在等待素材整合任务完成。'],
-    synthesis_writing: ['WRITING', '素材整合', '系统正在整合分析材料并准备报告正文。'],
-    report_verifying: ['VERIFYING', '报告生成', '系统正在生成报告正文并完成校验。'],
-    report_saving: ['SAVING', '报告生成', '系统正在生成报告正文并完成校验。'],
+    synthesis_writing: ['WRITING', '报告撰写', '系统正在撰写报告正文并完成校验。'],
+    report_verifying: ['VERIFYING', '报告撰写', '系统正在撰写报告正文并完成校验。'],
+    report_saving: ['SAVING', '报告撰写', '系统正在撰写报告正文并完成校验。'],
     technical_detail: ['DETAIL', '处理技术细节', '系统正在读取配置或中间文件；可展开查看原始记录。'],
     done: ['COMPLETED', '编报任务已完成', '报告已生成，可以查看或导出。'],
     error: ['ERROR', '任务执行出现异常', '系统执行过程中出现异常，请查看技术详情或重试。'],
@@ -1859,19 +1929,19 @@ function workflowLogView(phase, rawLog, status) {
   if (match) return { stage: match[0], title: match[1], description: match[2], status }
   if (lower.includes('preparing openclaw gateway')) return { stage: 'CONNECTING', title: views.start[1], description: views.start[2], status }
   if (lower.includes('running openclaw report-agent')) return { stage: 'AGENT_START', title: views.running[1], description: views.running[2], status }
-  if (lower.includes('waiting_final_report') || lower.includes('waiting for the final report')) return { stage: 'WAITING_REPORT', title: views.waiting_final_report[1], description: views.waiting_final_report[2], status }
+  if (lower.includes('waiting_final_report') || lower.includes('waiting for the final report')) return { stage: 'WAITING_CONFIRM', title: views.waiting_final_report[1], description: views.waiting_final_report[2], status }
   if (lower.includes('sessions_spawn') && lower.includes('research-group')) return { stage: 'RESEARCH_TASK', title: views.research_dispatch[1], description: views.research_dispatch[2], status }
   if (lower.includes('sessions_spawn') && lower.includes('synthesis')) return { stage: 'SYNTHESIS_TASK', title: views.synthesis_dispatch[1], description: views.synthesis_dispatch[2], status }
   if (lower.includes('sessions_yield') && lower.includes('synthesis')) return { stage: 'WAITING_SYNTHESIS', title: views.synthesis_waiting[1], description: views.synthesis_waiting[2], status }
   if (lower.includes('sessions_yield')) return { stage: 'WAITING_RESEARCH', title: views.research_waiting[1], description: views.research_waiting[2], status }
-  if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) return { stage: 'PG_RECALL', title: '信源筛选', description: '系统正在检索并筛选与主题相关的可信信源。', status }
-  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) return { stage: 'HARNESS_PLAN', title: '调研规划', description: '系统正在拆解调研方向并安排采集任务。', status }
+  if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) return { stage: 'PG_RECALL', title: '资料采集', description: '系统正在采集公开资料并提取关键事实。', status }
+  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json')) return { stage: 'HARNESS_PLAN', title: '任务规划', description: '系统正在整理编报要求、确定信源范围并拆解调研任务。', status }
   if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research')) return { stage: 'RESEARCH_RUN', title: '资料采集', description: '系统正在采集公开资料并提取关键事实。', status }
   if (lower.includes('consolidated.json')) return { stage: 'CONSOLIDATE', title: '素材整合', description: '系统正在汇总信源、证据和分析要点。', status }
-  if (lower.includes('validate_report.py') || lower.includes('validate report')) return { stage: 'VALIDATE_SAVE', title: '报告生成', description: '系统正在生成报告正文并完成校验。', status }
+  if (lower.includes('validate_report.py') || lower.includes('validate report')) return { stage: 'VALIDATE_SAVE', title: '报告撰写', description: '系统正在撰写报告正文并完成校验。', status }
   if (lower.includes('group_') && lower.includes('.json')) return { stage: 'RESEARCH_TASK', title: views.research_dispatch[1], description: views.research_dispatch[2], status }
   if (lower.includes('context.json')) return { stage: 'PREPARING', title: views.context_preparing[1], description: views.context_preparing[2], status }
-  if ((lower.includes('report_file') || lower.includes('final/report.md')) && !lower.includes('error')) return { stage: 'SAVING', title: views.report_saving[1], description: views.report_saving[2], status }
+  if (lower.includes('report_file: /') && !lower.includes('error')) return { stage: 'SAVING', title: views.report_saving[1], description: views.report_saving[2], status }
   return null
 }
 
@@ -1949,8 +2019,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'CONNECTING',
-      title: '任务准备',
-      description: '系统正在整理编报要求并建立任务空间。',
+      title: '任务规划',
+      description: '系统正在整理编报要求、确定信源范围并拆解调研任务。',
     }
   }
 
@@ -1958,8 +2028,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'TASK_START',
-      title: '任务准备',
-      description: '系统正在整理编报要求并建立任务空间。',
+      title: '任务规划',
+      description: '系统正在整理编报要求、确定信源范围并拆解调研任务。',
     }
   }
 
@@ -1967,8 +2037,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'PG_RECALL',
-      title: '信源筛选',
-      description: '系统正在检索并筛选与主题相关的可信信源。',
+      title: '资料采集',
+      description: '系统正在采集公开资料并提取关键事实。',
     }
   }
 
@@ -1976,8 +2046,8 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'HARNESS_PLAN',
-      title: '调研规划',
-      description: '系统正在拆解调研方向并安排采集任务。',
+      title: '任务规划',
+      description: '系统正在整理编报要求、确定信源范围并拆解调研任务。',
     }
   }
 
@@ -2003,17 +2073,17 @@ function translateOpenClawLog(log) {
     return {
       ...base,
       stage: 'VALIDATE_SAVE',
-      title: '报告生成',
-      description: '系统正在生成报告正文并完成校验。',
+      title: '报告撰写',
+      description: '系统正在撰写报告正文并完成校验。',
     }
   }
 
-  if (lower.includes('final/report.md')) {
+  if (lower.includes('report_file: /')) {
     return {
       ...base,
       stage: 'SYNTHESIS',
-      title: '报告生成',
-      description: '系统正在生成报告正文并完成校验。',
+      title: '报告撰写',
+      description: '系统正在撰写报告正文并完成校验。',
     }
   }
 
@@ -2075,12 +2145,12 @@ function translateOpenClawLog(log) {
     }
   }
 
-  if (lower.includes('write') || lower.includes('report_file')) {
+  if (lower.includes('report_file: /')) {
     return {
       ...base,
       stage: 'SAVING',
-      title: '报告生成',
-      description: '系统正在生成报告正文并完成校验。',
+      title: '报告撰写',
+      description: '系统正在撰写报告正文并完成校验。',
     }
   }
 
@@ -2486,12 +2556,10 @@ const technicalLogs = computed(() => {
 })
 
 const userProgressStages = [
-  { key: 'prepare', number: '1', icon: '01', title: '任务准备', desc: '整理编报要求并建立任务空间' },
-  { key: 'source', number: '2', icon: '02', title: '信源筛选', desc: '检索并筛选与主题相关的可信信源' },
-  { key: 'plan', number: '3', icon: '03', title: '调研规划', desc: '拆解调研方向并安排采集任务' },
-  { key: 'research', number: '4', icon: '04', title: '资料采集', desc: '采集公开资料并提取关键事实' },
-  { key: 'consolidate', number: '5', icon: '05', title: '素材整合', desc: '汇总信源、证据和分析要点' },
-  { key: 'report', number: '6', icon: '06', title: '报告生成', desc: '生成报告正文并完成校验' },
+  { key: 'plan', number: '1', icon: '01', title: '任务规划', desc: '整理编报要求、确定信源范围并拆解调研任务' },
+  { key: 'research', number: '2', icon: '02', title: '资料采集', desc: '采集公开资料并提取关键事实' },
+  { key: 'consolidate', number: '3', icon: '03', title: '素材整合', desc: '汇总信源、证据和分析要点' },
+  { key: 'report', number: '4', icon: '04', title: '报告撰写', desc: '撰写报告正文并完成校验' },
 ]
 
 function displayProgressStatus(status) {
@@ -2525,36 +2593,36 @@ const progressStageOrder = {
   AGENT_START: 0,
   PREPARING: 0,
   PG_RECALL: 1,
-  PLANNING: 2,
-  HARNESS_PLAN: 2,
-  RESEARCH_TASK: 3,
-  WAITING_RESEARCH: 3,
-  RESEARCHING: 3,
-  RESEARCH_RUN: 3,
-  RESEARCH_DONE: 3,
-  SEARCHING: 3,
-  EXTRACTING: 3,
-  CONSOLIDATE: 4,
-  ANALYZING: 4,
-  SYNTHESIS_TASK: 4,
-  WAITING_SYNTHESIS: 4,
-  SYNTHESIS: 4,
-  WRITING: 4,
-  VERIFYING: 5,
-  VALIDATE_SAVE: 5,
-  SAVING: 5,
-  WAITING_REPORT: 5,
-  COMPLETED: 5,
+  PLANNING: 0,
+  HARNESS_PLAN: 0,
+  RESEARCH_TASK: 1,
+  WAITING_RESEARCH: 1,
+  RESEARCHING: 1,
+  RESEARCH_RUN: 1,
+  RESEARCH_DONE: 1,
+  SEARCHING: 1,
+  EXTRACTING: 1,
+  CONSOLIDATE: 2,
+  ANALYZING: 2,
+  SYNTHESIS_TASK: 2,
+  WAITING_SYNTHESIS: 2,
+  SYNTHESIS: 2,
+  WRITING: 3,
+  VERIFYING: 3,
+  VALIDATE_SAVE: 3,
+  SAVING: 3,
+  COMPLETED: 3,
 }
 
 function rawProgressStageIndex(rawLog) {
   const lower = String(rawLog || '').toLowerCase()
   if (!lower) return -1
-  if (lower.includes('final/report.md') || lower.includes('validate_report.py') || lower.includes('report_file')) return 5
-  if (lower.includes('synthesis')) return 4
-  if (lower.includes('consolidated.json')) return 4
-  if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research') || lower.includes('sessions_yield')) return 3
-  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json') || lower.includes('group_')) return 2
+  if (lower.includes('report_file: /') || lower.includes('validate_report.py') || lower.includes('report_file_recovered')) return 3
+  if (lower.includes('synthesis_writing')) return 3
+  if (lower.includes('synthesis')) return 2
+  if (lower.includes('consolidated.json')) return 2
+  if (lower.includes('harness_cli.py run') || lower.includes('research_') || lower.includes('research/research') || lower.includes('sessions_yield')) return 1
+  if (lower.includes('harness_cli.py plan') || lower.includes('plan.json') || lower.includes('group_')) return 0
   if (lower.includes('pg-sources__query') || lower.includes('vector_sources.json') || lower.includes('database_sources.json') || lower.includes('database_query_plan.json')) return 1
   if (lower.includes('context.json') || lower.includes('preparing openclaw gateway') || lower.includes('running openclaw report-agent')) return 0
   return -1
@@ -3523,20 +3591,6 @@ function exportPdf() {
           >
             热点事件动态感知
           </button>
-          <button
-            @click="toggleLogDrawer"
-            :disabled="!canOpenLogDrawer"
-            class="sci-btn text-[10px] px-3 py-2 relative"
-            :title="isLiveLogVisible ? '任务进度已在中间展示' : '打开任务进度'"
-          >
-            任务进度
-            <span
-              v-if="unreadLogCount"
-              class="absolute -right-2 -top-2 min-w-5 h-5 px-1 rounded-full bg-cyber-yellow text-black text-[10px] leading-5 text-center"
-            >
-              {{ unreadLogCount > 99 ? '99+' : unreadLogCount }}
-            </span>
-          </button>
           <button v-if="showNewReportButton" @click="emit('new-report')" class="sci-btn text-[10px] px-3 py-2">
             清屏并开启下一个编报
           </button>
@@ -3761,7 +3815,36 @@ function exportPdf() {
               <p class="text-sm text-[#374151] mt-1">{{ currentPlanStep.description }}</p>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div v-if="isSourcePlanStep" class="plan-source-sections">
+              <section class="plan-source-section">
+                <div class="plan-source-section-head">
+                  <strong>联网检索方向</strong>
+                  <span>采集结果以实际命中为准</span>
+                </div>
+                <div class="plan-source-option-grid">
+                  <button
+                    v-for="option in networkPlanSourceOptions"
+                    :key="option.id"
+                    class="plan-source-option text-left"
+                    :class="[
+                      planOptionStatusClass(option),
+                      { selected: isPlanOptionSelected(currentPlanStep.id, option.id), disabled: option.disabled },
+                    ]"
+                    type="button"
+                    :disabled="option.disabled"
+                    @click="emit('toggle-plan-option', currentPlanStep.id, option.id)"
+                  >
+                    <div class="plan-source-option-title">
+                      <span>{{ option.label }}</span>
+                      <i>{{ planOptionStatusLabel(option) }}</i>
+                    </div>
+                    <p>{{ option.detail }}</p>
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <div v-else-if="!isSupplementPlanStep" class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
                 v-for="option in currentPlanStep.options"
                 :key="option.id"
@@ -3788,24 +3871,23 @@ function exportPdf() {
               </button>
             </div>
 
-            <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
-              <label class="flex items-start gap-3 cursor-pointer">
+            <div v-if="!isSourcePlanStep && !isSupplementPlanStep" class="manual-direction-box">
+              <div>
+                <strong>手动新增检索写报方向</strong>
+                <p>新增后会自动勾选，并随本步骤一起提交给后端用于检索和写报。</p>
+              </div>
+              <div class="manual-source-entry">
                 <input
-                  class="mt-1 h-4 w-4 accent-cyan-500"
-                  type="checkbox"
-                  :checked="databaseSourceEnabled"
-                  @change="emit('update:databaseSourceEnabled', $event.target.checked)"
+                  class="sci-input text-sm bg-black/15"
+                  v-model="manualDirectionDraft"
+                  placeholder="例如：补充政策依据、梳理时间线、研判产业链影响"
+                  @keydown.enter.prevent="addManualPlanDirection"
                 />
-                <span>
-                  <span class="block font-mono text-[10px] tracking-widest text-[#374151] mb-1">数据库信源</span>
-                  <span class="block text-xs leading-relaxed text-[#374151]">
-                    使用近30天历史爬取网页摘要扩展信源；关闭后仅使用公开检索与手动指定信源。
-                  </span>
-                </span>
-              </label>
+                <button class="sci-btn text-[10px] px-3 py-2 border-neon-cyan" type="button" @click="addManualPlanDirection">添加方向</button>
+              </div>
             </div>
 
-            <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
+            <div v-if="isSupplementPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
               <label class="block font-mono text-[10px] tracking-widest text-[#374151] mb-2">补充方向</label>
               <textarea
                 class="sci-textarea text-sm bg-black/15"
@@ -3816,15 +3898,25 @@ function exportPdf() {
               ></textarea>
             </div>
 
-            <div v-if="isLastPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
+            <div v-if="isSupplementPlanStep" class="mt-5 rounded-2xl border border-neon-cyan/12 bg-black/14 p-3">
               <label class="block font-mono text-[10px] tracking-widest text-[#374151] mb-2">指定信源 / URL / 机构</label>
-              <textarea
-                class="sci-textarea text-sm bg-black/15"
-                rows="3"
-                :value="planSourceInput"
-                placeholder="可逐行填写必须检索的网页、机构、媒体、数据库或信源说明；未填写则按系统规划自动检索。"
-                @input="emit('update:planSourceInput', $event.target.value)"
-              ></textarea>
+              <p class="manual-source-hint">用户指定信源会优先尝试检索和使用，是否成功以实际采集结果为准。</p>
+              <div class="manual-source-entry">
+                <textarea
+                  class="sci-textarea text-sm bg-black/15"
+                  rows="2"
+                  v-model="manualSourceDraft"
+                  placeholder="可填写 URL、机构名、媒体名或信源说明；支持一次粘贴多行。"
+                  @keydown.ctrl.enter.prevent="addManualPlanSources"
+                ></textarea>
+                <button class="sci-btn text-[10px] px-3 py-2 border-neon-cyan" type="button" @click="addManualPlanSources">添加信源</button>
+              </div>
+              <div v-if="manualPlanSources.length" class="manual-source-list">
+                <div v-for="(source, index) in manualPlanSources" :key="`${source}-${index}`" class="manual-source-item">
+                  <span>{{ source }}</span>
+                  <button type="button" @click="removeManualPlanSource(index)">删除</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -4945,10 +5037,6 @@ function exportPdf() {
                 <h2>本次编报采用的规划勾选结果</h2>
                 <p>展示正式提交编报前，用户在规划阶段确认的检索词、信源范围、章节方向和补充要求。</p>
               </div>
-              <div class="planning-selection-status">
-                <strong>{{ planningSelectionView.databaseEnabled ? '已启用' : '未启用' }}</strong>
-                <span>数据库信源</span>
-              </div>
             </header>
 
             <div class="planning-summary-grid">
@@ -4984,13 +5072,13 @@ function exportPdf() {
             <section id="planning-source-scope" class="planning-selection-section">
               <div class="planning-section-heading">
                 <h3>信源范围</h3>
-                <p>规划阶段选择纳入检索的材料类型、来源范围和数据库信源设置。</p>
+                <p>规划阶段选择纳入检索的材料类型和来源范围。</p>
               </div>
               <div v-if="planningSelectionView.sourceScopes.length" class="planning-source-grid">
                 <article
                   v-for="source in planningSelectionView.sourceScopes"
                   :key="source.id || source.label"
-                  :class="{ 'planning-database-source': source.id === 'database-source', disabled: source.status === 'disabled' }"
+                  :class="{ disabled: source.status === 'disabled' }"
                 >
                   <strong>{{ source.label }}</strong>
                   <p>{{ source.detail || '已纳入本次编报信源范围。' }}</p>

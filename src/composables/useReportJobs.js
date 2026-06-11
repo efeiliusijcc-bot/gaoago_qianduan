@@ -9,6 +9,7 @@ import {
   fetchReportJobs,
   fetchReportProgress,
   fetchReportResult,
+  fetchVectorSourceStatus,
   getJobEventsUrl,
 } from '../lib/api.js'
 
@@ -48,6 +49,16 @@ const K_SOURCE_SCOPE_STEP = {
     { id: 'public_opinion', label: '舆情与公众反应', detail: '覆盖公开舆论、社交传播和公众反馈。', selected: true },
     { id: 'trade_supply_data', label: '供应链与贸易数据', detail: '覆盖贸易、供应链、产业链和关键数据线索。', selected: true },
   ],
+}
+
+const SUPPLEMENT_PLAN_STEP = {
+  id: 'supplement-directions',
+  type: 'supplement',
+  title: '补充方向',
+  sectionTitle: '补充方向',
+  description: '补充需要纳入编报的特殊关注点、限制条件、指定信源或额外说明。',
+  allowMultiple: false,
+  options: [],
 }
 
 const K_SECTION_DEFS = [
@@ -94,6 +105,14 @@ const K_SECTION_DEFS = [
 
 const SOURCE_SCOPE_OPTION_IDS = new Set(K_SOURCE_SCOPE_STEP.options.map((option) => option.id))
 const SOURCE_SCOPE_OPTION_LABELS = new Set(K_SOURCE_SCOPE_STEP.options.map((option) => option.label))
+const NETWORK_SOURCE_RULES = [
+  { ids: ['government_notice'], pattern: /政策|政府|监管|公告|法案|法规|制裁|关税|USTR|法院|议会|部门|机构/i },
+  { ids: ['think_tank_report'], pattern: /报告|研究|智库|分析|研判|趋势|评估|行业|产业/i },
+  { ids: ['enterprise_activity'], pattern: /企业|公司|集团|主体|厂商|航运|造船|能源|银行|供应商/i },
+  { ids: ['public_opinion'], pattern: /舆情|公众|社交|传播|反应|抗议|评论|争议|民意/i },
+  { ids: ['trade_supply_data'], pattern: /供应链|产业链|贸易|出口|进口|物流|港口|数据|市场|价格|能源/i },
+  { ids: ['public_news'], pattern: /新闻|报道|事件|危机|冲突|动态|最新|袭|下调|上调/i },
+]
 
 export function useReportJobs() {
   const currentView = ref('generator')
@@ -150,6 +169,8 @@ export function useReportJobs() {
   const progressState = ref(null)
   const databaseSources = ref(null)
   const databaseSourcesLoading = ref(false)
+  const vectorSourceStatus = ref(null)
+  const vectorSourceStatusLoading = ref(false)
   const unreadLogCount = ref(0)
   const isLogDrawerOpen = ref(false)
   let listRefreshTimer = null
@@ -887,14 +908,67 @@ export function useReportJobs() {
     planError.value = ''
   }
 
+  function isVectorSourceUsable(status = vectorSourceStatus.value) {
+    return Boolean(status?.enabled && status?.available && Number(status?.indexedRows || 0) > 0)
+  }
+
+  async function loadVectorSourceStatus() {
+    vectorSourceStatusLoading.value = true
+    try {
+      vectorSourceStatus.value = await fetchVectorSourceStatus()
+    } catch (error) {
+      vectorSourceStatus.value = {
+        enabled: false,
+        available: false,
+        indexedRows: 0,
+        fallbackReason: error instanceof Error ? error.message : String(error),
+      }
+    } finally {
+      vectorSourceStatusLoading.value = false
+    }
+    databaseSourceEnabled.value = isVectorSourceUsable(vectorSourceStatus.value)
+    return vectorSourceStatus.value
+  }
+
+  function selectedNetworkSourceIds() {
+    const haystack = [
+      title.value,
+      contextText.value,
+      Object.values(parameterValues.value || {}).join(' '),
+    ].join(' ')
+    const selected = new Set()
+    for (const rule of NETWORK_SOURCE_RULES) {
+      if (rule.pattern.test(haystack)) rule.ids.forEach((id) => selected.add(id))
+    }
+    if (!selected.size) ['public_news', 'government_notice', 'think_tank_report'].forEach((id) => selected.add(id))
+    return selected
+  }
+
+  function buildSourceScopeStep() {
+    const recommendedIds = selectedNetworkSourceIds()
+    const networkOptions = K_SOURCE_SCOPE_STEP.options.map((option) => {
+      const recommended = recommendedIds.has(option.id)
+      return {
+        ...option,
+        detail: `${option.detail} 这是联网检索方向，采集结果以实际命中为准。`,
+        selected: recommended,
+        sourceGroup: 'network',
+        statusLabel: recommended ? '主题推荐' : '检索方向',
+        status: 'search_direction',
+      }
+    })
+    return {
+      ...K_SOURCE_SCOPE_STEP,
+      description: '选择需要指导联网检索的方向；采集结果以实际命中为准。',
+      options: networkOptions,
+    }
+  }
+
   function normalizeKReportPlan(plan) {
     if (reportType.value !== 'write-hb-k' || !plan) return plan
     const originalSteps = Array.isArray(plan.steps) ? plan.steps : []
     const reportSectionSteps = originalSteps.filter((step) => step?.type === 'report_section')
-    const sourceStep = {
-      ...K_SOURCE_SCOPE_STEP,
-      options: K_SOURCE_SCOPE_STEP.options.map((option) => ({ ...option })),
-    }
+    const sourceStep = buildSourceScopeStep()
     const usedStepIds = new Set()
     const sectionSteps = K_SECTION_DEFS.map((sectionDef) => {
       const matchedStep = findKSectionStep(reportSectionSteps, sectionDef, usedStepIds)
@@ -923,7 +997,7 @@ export function useReportJobs() {
     })
     return {
       ...plan,
-      steps: [sourceStep, ...sectionSteps],
+      steps: [sourceStep, ...sectionSteps, SUPPLEMENT_PLAN_STEP],
     }
   }
 
@@ -997,9 +1071,11 @@ export function useReportJobs() {
         id: option.id,
         label: option.label,
         detail: option.detail || '',
+        sourceGroup: option.sourceGroup || '',
+        status: option.status || '',
       }))
       if (step.type === 'source_scope') {
-        selectedSources.push(...selectedOptions)
+        selectedSources.push(...selectedOptions.filter((option) => option.id !== 'database-source'))
         continue
       }
       if (step.type === 'report_section') {
@@ -1040,14 +1116,14 @@ export function useReportJobs() {
       selectedSources,
       userProvidedSources,
       databaseSourceOptions: {
-        enabled: Boolean(databaseSourceEnabled.value),
+        enabled: Boolean(databaseSourceEnabled.value && isVectorSourceUsable()),
         mode: 'summary_first',
         lookbackDays: 30,
         maxMetadataRows: 50,
         maxContentRows: 8,
         mcpServer: 'pg-sources',
         storageMode: 'pgvector_single_table',
-        sourceTable: 'vector_materials_qwen3',
+        sourceTable: vectorSourceStatus.value?.sourceTable || 'vector_materials_qwen3',
       },
       selectedModules,
       parameterValues: selectedParameterValues,
@@ -1235,7 +1311,7 @@ export function useReportJobs() {
     planSearchSelections.value = [...(plan?.searchQueries || [])]
     for (const step of plan?.steps || []) {
       selections[step.id] = (step.options || [])
-        .filter((option) => option.selected)
+        .filter((option) => option.selected && !option.disabled)
         .map((option) => option.id)
     }
     planSelections.value = selections
@@ -1243,6 +1319,8 @@ export function useReportJobs() {
 
   function togglePlanOption(stepId, optionId) {
     const step = reportPlan.value?.steps?.find((item) => item.id === stepId)
+    const option = step?.options?.find((item) => item.id === optionId)
+    if (option?.disabled) return
     const current = new Set(planSelections.value[stepId] || [])
     if (current.has(optionId)) {
       current.delete(optionId)
@@ -1250,6 +1328,45 @@ export function useReportJobs() {
       if (step && step.allowMultiple === false) current.clear()
       current.add(optionId)
     }
+    planSelections.value = {
+      ...planSelections.value,
+      [stepId]: Array.from(current),
+    }
+  }
+
+  function addPlanOption(stepId, payload = {}) {
+    const label = String(payload.label || '').trim()
+    if (!label || !reportPlan.value?.steps?.length) return
+    let addedId = ''
+    const nextSteps = reportPlan.value.steps.map((step) => {
+      if (step.id !== stepId) return step
+      const existing = new Set((step.options || []).map((option) => String(option.label || '').trim().toLowerCase()))
+      if (existing.has(label.toLowerCase())) return step
+      const baseId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      addedId = baseId
+      return {
+        ...step,
+        options: [
+          ...(step.options || []),
+          {
+            id: baseId,
+            label,
+            detail: String(payload.detail || '用户手动新增方向，提交后纳入检索和写报要求。').trim(),
+            selected: true,
+            sourceGroup: step.type === 'source_scope' ? 'network' : 'manual',
+            status: 'manual',
+            statusLabel: '用户新增',
+          },
+        ],
+      }
+    })
+    if (!addedId) return
+    reportPlan.value = {
+      ...reportPlan.value,
+      steps: nextSteps,
+    }
+    const current = new Set(planSelections.value[stepId] || [])
+    current.add(addedId)
     planSelections.value = {
       ...planSelections.value,
       [stepId]: Array.from(current),
@@ -1289,6 +1406,7 @@ export function useReportJobs() {
     planStepIndex.value = 0
 
     try {
+      await loadVectorSourceStatus()
       const allowedParams = new Set(REPORT_PARAMETERS[reportType.value] || [])
       const parameters = {}
       for (const [key, value] of Object.entries(parameterValues.value)) {
@@ -1646,6 +1764,8 @@ export function useReportJobs() {
     progressState,
     databaseSources,
     databaseSourcesLoading,
+    vectorSourceStatus,
+    vectorSourceStatusLoading,
     unreadLogCount,
     isLogDrawerOpen,
     getJobTitle,
@@ -1653,6 +1773,7 @@ export function useReportJobs() {
     confirmReportPlan,
     cancelReportPlan,
     togglePlanOption,
+    addPlanOption,
     togglePlanSearchQuery,
     nextPlanStep,
     prevPlanStep,

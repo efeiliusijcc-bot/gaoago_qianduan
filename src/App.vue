@@ -60,11 +60,14 @@ const {
   progressState,
   unreadLogCount,
   isLogDrawerOpen,
+  vectorSourceStatus,
+  vectorSourceStatusLoading,
   getJobTitle,
   handleGenerate,
   confirmReportPlan,
   cancelReportPlan,
   togglePlanOption,
+  addPlanOption,
   togglePlanSearchQuery,
   nextPlanStep,
   prevPlanStep,
@@ -304,6 +307,8 @@ function jobActionLabel(status) {
         :progress-state="progressState"
         :databaseSources="databaseSources"
         :databaseSourcesLoading="databaseSourcesLoading"
+        :vectorSourceStatus="vectorSourceStatus"
+        :vectorSourceStatusLoading="vectorSourceStatusLoading"
         :unreadLogCount="unreadLogCount"
         :isLogDrawerOpen="isLogDrawerOpen"
         :hasReturnableWorkspace="hasReturnableWorkspace"
@@ -311,6 +316,7 @@ function jobActionLabel(status) {
         @confirm-plan="confirmReportPlan"
         @cancel-plan="cancelReportPlan"
         @toggle-plan-option="togglePlanOption"
+        @add-plan-option="addPlanOption"
         @toggle-plan-search-query="togglePlanSearchQuery"
         @next-plan-step="nextPlanStep"
         @prev-plan-step="prevPlanStep"

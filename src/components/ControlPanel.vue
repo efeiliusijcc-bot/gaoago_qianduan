@@ -101,12 +101,12 @@ function statusText(status, item = null) {
   if (status === 'waiting_approval') return '等待报告'
   if (status === 'queued') return '处理中'
   const stageLabels = {
-    prepare: '任务准备中',
-    source: '信源筛选中',
-    plan: '调研规划中',
+    prepare: '任务规划中',
+    source: '任务规划中',
+    plan: '任务规划中',
     research: '资料采集中',
     consolidate: '素材整合中',
-    report: '报告生成中',
+    report: '报告撰写中',
   }
   return stageLabels[progressStageKey(item)] || '处理中'
 }
