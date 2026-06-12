@@ -4050,64 +4050,6 @@ function exportPdf() {
             </div>
 
             <div class="mt-5">
-              <div class="flex items-center justify-between mb-3 px-1">
-                <div class="font-mono text-[11px] tracking-widest text-[#111827]" style="font-size: 14px; font-weight: 700">深度编报参数</div>
-                <span class="font-mono text-[10px] text-neon-green/80">规划前可调整</span>
-              </div>
-
-              <div class="flex flex-wrap gap-2.5 mb-4">
-                <button
-                  v-for="param in selectedReportType.params"
-                  :key="param"
-                  class="param-chip px-3.5 py-2 font-mono text-[11px] transition-all"
-                  :class="{ active: isParameterActive(param) }"
-                  type="button"
-                  @click="toggleParameter(param)"
-                >
-                  <span class="mr-1">{{ isParameterActive(param) ? '✓' : '+' }}</span>{{ param }}
-                </button>
-              </div>
-
-              <div
-                v-if="activeSelectedParameters.length"
-                class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4 rounded-2xl border border-neon-cyan/10 p-3"
-              >
-                <label
-                  v-for="param in activeSelectedParameters"
-                  :key="param"
-                  class="soft-field p-3"
-                >
-                  <span class="block font-mono text-[10px] tracking-widest text-[#111827] mb-2" style="font-size: 14px; font-weight: 700">{{ param }}</span>
-                  <div v-if="param === '关注方向'" class="focus-direction-grid">
-                    <button
-                      v-for="direction in focusDirectionOptions"
-                      :key="direction"
-                      class="focus-direction-chip"
-                      :class="{ active: isFocusDirectionSelected(direction) }"
-                      type="button"
-                      @click="toggleFocusDirection(direction)"
-                    >
-                      {{ direction }}
-                    </button>
-                  </div>
-                  <input
-                    v-else-if="parameterInputType(param) === 'input'"
-                    class="sci-input text-sm"
-                    :value="parameterValues[param] || ''"
-                    :placeholder="parameterPlaceholder(param)"
-                    @input="updateParameterValue(param, $event.target.value)"
-                  />
-                  <textarea
-                    v-else
-                    class="sci-textarea text-sm"
-                    rows="3"
-                    :value="parameterValues[param] || ''"
-                    :placeholder="parameterPlaceholder(param)"
-                    @input="updateParameterValue(param, $event.target.value)"
-                  ></textarea>
-                </label>
-              </div>
-
               <div class="soft-field p-3">
                 <label class="block font-mono text-[10px] tracking-widest text-[#111827] mb-2" style="font-size: 14px; font-weight: 700">补充背景</label>
                 <textarea

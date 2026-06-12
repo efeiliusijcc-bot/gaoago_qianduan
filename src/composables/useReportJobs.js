@@ -982,7 +982,7 @@ export function useReportJobs() {
     })
     return {
       ...K_SOURCE_SCOPE_STEP,
-      description: '先确认确定可采集的 PG 数据库信源，再选择需要指导联网检索的方向；联网方向不承诺每类都一定命中。',
+      description: '优先使用已入库信源；下方联网方向用于补充检索，实际采用以命中结果为准。',
       options: [databaseSourceOption(), ...networkOptions],
     }
   }
