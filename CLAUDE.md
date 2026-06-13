@@ -39,7 +39,7 @@ App.vue — orchestrates two views: generator (sidebar + main) and archive (full
 4. On success → `GET /report-jobs/{id}/result` → DOMPurify sanitize → render HTML
 
 **Workspace snapshot:** The composable saves/restores full workspace state when switching between viewing a history report and returning to an in-progress generation.
-
+xxx
 ## Styling
 
 Dual-theme CSS in `src/styles/main.css` (~1350 lines): a dark cyberpunk theme (deep-void/neon-cyan CRT aesthetic) defined first, then overridden by a light "AI Workbench" theme scoped under `.app-shell`. Tailwind config in `tailwind.config.js` defines custom colors (deep-void, neon-cyan, neon-green, cyber-yellow), fonts (Fira Code, Inter), and animations (pulse-glow, scan-line, flicker, data-stream).
