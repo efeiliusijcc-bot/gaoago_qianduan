@@ -336,7 +336,7 @@ function jobActionLabel(status) {
       <div class="archive-header flex items-center justify-between mb-6">
         <div>
           <div class="neon-text font-mono text-xl font-bold tracking-widest">报告档案库</div>
-          <div class="font-mono text-[10px] text-[#374151] mt-1">真实后端任务列表 / 点击查看已生成报告</div>
+          <!-- <div class="font-mono text-[10px] text-[#374151] mt-1">真实后端任务列表 / 点击查看已生成报告</div> -->
         </div>
         <div class="archive-actions flex gap-2">
           <button
@@ -361,7 +361,7 @@ function jobActionLabel(status) {
               placeholder="搜索标题 / 任务编号 / 上下文关键词"
               @input="updateListSearch($event.target.value)"
             />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px] text-slate-400">SEARCH</span>
+            <span class="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px] text-slate-400">搜索</span>
           </div>
         </div>
       </div>

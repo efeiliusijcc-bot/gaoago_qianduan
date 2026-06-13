@@ -490,7 +490,7 @@ const planningSelectionView = computed(() => {
 const featureCards = [
   {
     key: 'report',
-    title: 'AI智能体深度编报',
+    title: '智能体深度编报',
     icon: '▤',
     desc: '围绕专题任务完成信源检索、研判分析和正式编报。',
     tags: ['深度调研', '多维分析', '智能编报'],
@@ -3555,9 +3555,9 @@ function exportPdf() {
   <main class="data-canvas flex-1 flex flex-col overflow-hidden relative">
     <div class="workspace-subbar h-14 flex items-center justify-between px-5">
       <div class="workspace-meta flex items-center gap-3">
-        <span class="font-mono text-[10px] tracking-widest text-[#374151]">
+        <!-- <span class="font-mono text-[10px] tracking-widest text-[#374151]">
           [ {{ isHistoryMode ? '历史报告查看' : '数据输出终端' }} ]
-        </span>
+        </span> -->
         <span v-if="phase !== 'idle'" class="font-mono text-[10px] text-neon-green">
           {{ reportTypeLabel }} / {{ isHistoryDetailLoading ? '加载中' : isHistoryDetailError ? '加载失败' : phase === 'done' ? '已完成' : phase === 'error' ? '失败' : '处理中' }}
         </span>
@@ -4024,7 +4024,7 @@ function exportPdf() {
                 :aria-selected="homeMode === 'report'"
                 @click="selectHomeMode('report')"
               >
-                AI智能体深度编报
+                智能体深度编报
               </button>
               <button
                 class="workspace-mode-tab"
@@ -4098,7 +4098,6 @@ function exportPdf() {
               <div class="qa-main-pane">
                 <section ref="qaThreadRef" class="qa-thread" @scroll="handleQaThreadScroll">
               <div v-if="qaStatus === 'idle' && !qaTurns.length" class="qa-empty-card">
-                <div class="qa-empty-icon">⌕</div>
                 <h3>热点事件动态感知</h3>
                 <p>基于热点事件检索与信源整合，快速获取专业、可追溯的动态判断。</p>
 
@@ -4872,7 +4871,6 @@ function exportPdf() {
 
               <div class="source-toolbar">
                 <label class="source-search-box">
-                  <span>⌕</span>
                   <input
                     v-model="sourceSearchQuery"
                     type="search"

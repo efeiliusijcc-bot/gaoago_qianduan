@@ -46,7 +46,7 @@ const engineStatus = computed(() => {
 })
 const engineText = computed(() => {
   if (!hasHealth.value) return '正在连接 AI 引擎'
-  return healthOk.value ? '系统运行良好' : props.health?.details?.[0] || '服务连接异常'
+  return healthOk.value ? '系统正常运行' : props.health?.details?.[0] || '服务连接异常'
 })
 const reportTotalText = computed(() => Number(props.reportTotal || 0).toLocaleString('zh-CN'))
 const qaTotalText = computed(() => Number(props.qaTotal || 0).toLocaleString('zh-CN'))
@@ -150,23 +150,35 @@ function handleHistoryAction() {
     <section class="panel status-card compact-status-card p-4">
       <div class="flex items-center justify-between mb-3">
         <div>
-          <h2 class="font-mono text-sm neon-text tracking-widest">AI引擎状态</h2>
-          <div class="mt-1 font-mono text-[10px] text-[#374151]">ENGINE STATUS</div>
+          <h1 class="font-mono text-sm neon-text tracking-widest">AI引擎状态</h1>
         </div>
-        <button type="button" class="sci-btn text-[10px] px-3 py-1.5" @click.stop="emit('refresh-health')">检测</button>
-      </div>
-
-      <div class="flex items-center gap-3 mb-3">
-        <div
+         <!-- <div
           class="status-orb w-10 h-10 rounded-xl border flex items-center justify-center text-lg"
           :class="healthOk ? 'border-neon-green/45 text-neon-green shadow-[0_0_22px_rgba(0,255,136,0.16)]' : !hasHealth ? 'border-cyber-yellow/35 text-cyber-yellow shadow-[0_0_18px_rgba(252,238,10,0.12)]' : 'border-red-300/45 text-red-300 shadow-[0_0_18px_rgba(252,90,122,0.14)]'"
         >
           ✓
+        </div> -->
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="w-2 h-2 rounded-full shrink-0" :class="!hasHealth ? 'bg-cyber-yellow shadow-[0_0_6px_rgba(252,238,10,0.5)]' : healthOk ? 'bg-neon-green shadow-[0_0_6px_rgba(0,255,136,0.5)]' : 'bg-red-300 shadow-[0_0_6px_rgba(252,90,122,0.5)]'"></span>
+          <!-- <div class="min-w-0"> 
+            <div class="font-mono text-[15px] leading-none font-bold" :class="healthOk ? 'text-neon-green' : !hasHealth ? 'text-cyber-yellow' : 'text-red-300'">{{ engineStatus }}</div>
+            <div class="font-mono text-[10px] text-slate-300/70 mt-1 truncate">{{ engineText }}</div>
+          </div> -->
         </div>
-        <div class="min-w-0">
+        <!-- <button type="button" class="sci-btn text-[10px] px-3 py-1.5" @click.stop="emit('refresh-health')">检测</button> -->
+      </div>
+
+      <div class="flex items-center gap-3 mb-3">
+        <!-- <div
+          class="status-orb w-10 h-10 rounded-xl border flex items-center justify-center text-lg"
+          :class="healthOk ? 'border-neon-green/45 text-neon-green shadow-[0_0_22px_rgba(0,255,136,0.16)]' : !hasHealth ? 'border-cyber-yellow/35 text-cyber-yellow shadow-[0_0_18px_rgba(252,238,10,0.12)]' : 'border-red-300/45 text-red-300 shadow-[0_0_18px_rgba(252,90,122,0.14)]'"
+        >
+          ✓
+        </div> -->
+        <!-- <div class="min-w-0">
           <div class="font-mono text-[22px] leading-none font-bold" :class="healthOk ? 'text-neon-green' : !hasHealth ? 'text-cyber-yellow' : 'text-red-300'">{{ engineStatus }}</div>
           <div class="font-mono text-[10px] text-slate-300/70 mt-1 truncate">{{ engineText }}</div>
-        </div>
+        </div> -->
       </div>
 
       <div class="space-y-1.5 border-t border-neon-cyan/10 pt-3">
@@ -185,7 +197,7 @@ function handleHistoryAction() {
       <div class="panel-header recent-header justify-between px-4 py-4">
         <div>
           <span class="font-mono text-sm neon-text tracking-widest">{{ historyTitle }}</span>
-          <div class="mt-1 font-mono text-[10px] text-[#374151]">{{ historySubtitle }}</div>
+          <!-- <div class="mt-1 font-mono text-[10px] text-[#374151]">{{ historySubtitle }}</div> -->
         </div>
         <button class="sci-btn text-[10px] px-2.5 py-1.5" @click="handleHistoryAction">{{ historyActionLabel }}</button>
       </div>

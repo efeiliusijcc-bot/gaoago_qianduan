@@ -308,7 +308,7 @@ onUnmounted(() => {
         ‹
       </button>
       <span class="font-mono tracking-wide" style="font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: 0.02em; line-height: 1.2;">
-        AI深度编报
+        意图理解智能体
       </span>
     </div>
 
