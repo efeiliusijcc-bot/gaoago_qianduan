@@ -390,7 +390,7 @@ const resultTabs = [
   { key: 'report', label: '报告正文' },
   { key: 'sources', label: '信源概览' },
   { key: 'planning', label: '规划选择' },
-  { key: 'citations', label: '引用依据' },
+  //{ key: 'citations', label: '引用依据' },
   { key: 'progress', label: '任务进度' },
 ]
 
@@ -1128,7 +1128,8 @@ function clearQaWorkspace() {
   qaReferencePayloads.value = []
   qaSourceSidebarOpen.value = false
   qaSourceSidebarDismissed.value = false
-  resetQaSourceView()  qaCopyNotice.value = ''
+  resetQaSourceView()
+  qaCopyNotice.value = ''
   qaValidationError.value = ''
   qaThreadHasNewContent.value = false
   emit('qa-session-clear-selection')
@@ -1258,7 +1259,8 @@ function scheduleQaStreamRecoveryFailure() {
       return
     }
     qaStatus.value = 'failed'
-    qaError.value = '连接中断，可重新提问。'    updateActiveQaTurn({ status: 'failed' })
+    qaError.value = '连接中断，可重新提问。'
+    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     closeQaStream()
   }, 90000)
@@ -1368,7 +1370,8 @@ function handleQaEvent(event) {
   }
   if (event.type === 'token') return
   if (event.type === 'tool_start' || event.type === 'tool_delta' || event.type === 'tool_end' || event.type === 'stage' || event.type === 'status') {
-    if (qaStatus.value === 'searching') qaStatus.value = 'integrating'    emitQaSession(qaStatus.value)
+    if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
+    emitQaSession(qaStatus.value)
     return
   }
   if (event.type === 'done') {
@@ -1382,7 +1385,8 @@ function handleQaEvent(event) {
   }
   if (event.type === 'error') {
     qaStatus.value = 'failed'
-    qaError.value = '回答生成失败，请稍后重试。'    updateActiveQaTurn({ status: 'failed' })
+    qaError.value = '回答生成失败，请稍后重试。'
+    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     closeQaStream()
   }
@@ -1473,7 +1477,8 @@ async function startQa(questionOverride = '') {
   qaError.value = ''
   qaImportNotice.value = ''
   qaValidationError.value = ''
-  qaCopyNotice.value = ''  const isContinuingSession = Boolean(currentQaSessionId.value && qaTurns.value.length)
+  qaCopyNotice.value = ''
+  const isContinuingSession = Boolean(currentQaSessionId.value && qaTurns.value.length)
   if (!currentQaSessionId.value) currentQaSessionId.value = `qa_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   if (!qaSessionCreatedAt.value) qaSessionCreatedAt.value = new Date().toISOString()
   if (!isContinuingSession) qaReferencePayloads.value = []
@@ -1543,7 +1548,8 @@ async function startQa(questionOverride = '') {
         return
       }
       if (qaStatus.value !== 'done' && !(qaStatus.value === 'streaming' && qaAnswer.value.trim())) {
-        if (qaStatus.value === 'searching') qaStatus.value = 'integrating'        emitQaSession(qaStatus.value)
+        if (qaStatus.value === 'searching') qaStatus.value = 'integrating'
+        emitQaSession(qaStatus.value)
         rememberCurrentQaStreamSession(qaStatus.value)
         scheduleQaStreamRecoveryFailureForSession(sessionId)
         return
@@ -1560,7 +1566,8 @@ async function startQa(questionOverride = '') {
       }
       if (qaStatus.value !== 'done') {
         qaStatus.value = 'failed'
-        qaError.value = '连接中断，可重新提问。'        updateActiveQaTurn({ status: 'failed' })
+        qaError.value = '连接中断，可重新提问。'
+        updateActiveQaTurn({ status: 'failed' })
         emitQaSession('failed')
         rememberCurrentQaStreamSession('failed')
       }
@@ -1568,7 +1575,8 @@ async function startQa(questionOverride = '') {
     }
   } catch (error) {
     qaStatus.value = 'failed'
-    qaError.value = '回答生成失败，请稍后重试。'    updateActiveQaTurn({ status: 'failed' })
+    qaError.value = '回答生成失败，请稍后重试。'
+    updateActiveQaTurn({ status: 'failed' })
     emitQaSession('failed')
     rememberCurrentQaStreamSession('failed')
     closeQaStream(sessionId)
@@ -2493,7 +2501,7 @@ const sourceCardConfigs = computed(() => [
     key: 'database_recall',
     title: '数据库检索工具',
     value: sourceOverviewStats.value.databaseRecall ?? '--',
-    desc: '来自 PG 向量库 / 数据库检索',
+    desc: '',
     icon: '◎',
     tone: 'blue',
   },
@@ -2501,7 +2509,7 @@ const sourceCardConfigs = computed(() => [
     key: 'tool_search',
     title: '互联网搜索工具',
     value: sourceOverviewStats.value.toolSearch ?? '--',
-    desc: '来自联网检索和网页抽取',
+    desc: '',
     icon: '▤',
     tone: 'cyan',
   },
@@ -4839,10 +4847,6 @@ function exportPdf() {
               </button>
             </div>
 
-            <div class="source-count-note">
-              口径说明：数据库检索工具来自 PG 向量库/数据库；互联网搜索工具来自联网检索服务。报告引用编号和结构化整理状态作为信源属性展示，不作为主分类混算。
-            </div>
-
             <div class="source-sub-filter" aria-label="信源类型筛选">
               <button
                 v-for="item in sourceTypeOptions"
@@ -5006,7 +5010,7 @@ function exportPdf() {
               <div>
                 <span>规划选择</span>
                 <h2>本次编报采用的规划勾选结果</h2>
-                <p>展示正式提交编报前，用户在规划阶段确认的检索词、信源范围、章节方向和补充要求。</p>
+                
               </div>
             </header>
 
