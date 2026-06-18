@@ -847,8 +847,9 @@ export function useReportJobs() {
   }
 
   function clearScreenForNextReport() {
-    activeWorkspaceSnapshot.value = null
+    const preservedWorkspace = getUnfinishedWorkspaceSnapshot()
     resetExecutionLogs()
+    activeWorkspaceSnapshot.value = preservedWorkspace
     openedHistoryJobId.value = null
     detailLoading.value = false
     detailLoadError.value = ''
@@ -1301,14 +1302,16 @@ export function useReportJobs() {
             openedHistoryJobId.value = null
             pushLog('已读取后端返回的 HTML 报告。')
           }
-          activeWorkspaceSnapshot.value = {
-            ...(activeWorkspaceSnapshot.value || makeWorkspaceSnapshot()),
-            job: completedJob,
-            generatedHtml: result.html || '',
-            selectedReport: { ...completedJob, html: result.html || '' },
-            phase: 'done',
-            loadingStep: '已完成',
-            isGenerating: false,
+          if (!activeWorkspaceSnapshot.value || activeWorkspaceSnapshot.value.job?.jobId === jobId) {
+            activeWorkspaceSnapshot.value = {
+              ...(activeWorkspaceSnapshot.value || makeWorkspaceSnapshot()),
+              job: completedJob,
+              generatedHtml: result.html || '',
+              selectedReport: { ...completedJob, html: result.html || '' },
+              phase: 'done',
+              loadingStep: '已完成',
+              isGenerating: false,
+            }
           }
           upsertJobInList(completedJob)
           upsertJobInRecent(completedJob)
@@ -1633,12 +1636,13 @@ export function useReportJobs() {
 
     const unfinishedWorkspace = getUnfinishedWorkspaceSnapshot(item.jobId)
     currentView.value = 'generator'
-    if (activePollJobId.value === item.jobId) {
+    if (activePollJobId.value === item.jobId && activeWorkspaceSnapshot.value?.job?.jobId === item.jobId) {
       restoreWorkspaceSnapshot()
       return
     }
 
-    if (!unfinishedWorkspace) closeJobEvents()
+    closeJobEvents()
+    stopProgressPolling()
     openedHistoryJobId.value = null
     detailLoading.value = false
     detailLoadError.value = ''
@@ -1659,7 +1663,7 @@ export function useReportJobs() {
     applyJobFormData(item)
     activeWorkspaceSnapshot.value = unfinishedWorkspace || makeWorkspaceSnapshot({ job: item })
     upsertJobInList(item)
-    if (!unfinishedWorkspace) subscribeJobEvents(item.jobId)
+    subscribeJobEvents(item.jobId)
     const isCurrentRunning = () => historyOpenRequestId === requestId && openedHistoryJobId.value === null && job.value?.jobId === item.jobId
     void loadExecutionLog(item.jobId, isCurrentRunning)
     void loadProgressState(item.jobId, isCurrentRunning)
@@ -1674,7 +1678,9 @@ export function useReportJobs() {
     }
 
     isGenerating.value = true
-    activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: item, phase: 'loading', loadingStep: loadingStep.value, isGenerating: true })
+    if (!unfinishedWorkspace) {
+      activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: item, phase: 'loading', loadingStep: loadingStep.value, isGenerating: true })
+    }
     pushLog(`继续查看任务：${item.jobId}`)
 
     try {
@@ -1686,7 +1692,9 @@ export function useReportJobs() {
       pushLog(`错误：${errorMessage.value}`)
     } finally {
       isGenerating.value = false
-      if (activeWorkspaceSnapshot.value?.job?.jobId) patchActiveWorkspaceSnapshot({ isGenerating: false, __force: true })
+      if (activeWorkspaceSnapshot.value?.job?.jobId === item.jobId) {
+        patchActiveWorkspaceSnapshot({ isGenerating: false, __force: true })
+      }
     }
   }
 
@@ -1714,6 +1722,13 @@ export function useReportJobs() {
     listRefreshTimer = window.setInterval(() => {
       if (currentView.value === 'list' && runningCount.value > 0) {
         loadJobList(false)
+      }
+      if (
+        runningCount.value > 0 ||
+        recentJobs.value.some((item) => isUnfinishedJob(item)) ||
+        activeWorkspaceSnapshot.value?.job?.jobId
+      ) {
+        refreshRecentReports()
       }
     }, 5000)
   })
