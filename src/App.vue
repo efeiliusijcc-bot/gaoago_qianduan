@@ -200,6 +200,12 @@ function openReportHistoryList() {
   loadJobList(true)
 }
 
+function showReportWorkspace() {
+  homeMode.value = 'report'
+  selectedQaSessionId.value = ''
+  showGenerator()
+}
+
 function resetForNewReportFromCanvas() {
   homeMode.value = 'report'
   selectedQaSessionId.value = ''
@@ -326,7 +332,7 @@ function jobActionLabel(status) {
         @list="loadJobList"
         @new-report="resetForNewReportFromCanvas"
         @retry-history-report="retryOpenCurrentHistoryReport"
-        @show-active-workspace="showGenerator"
+        @show-active-workspace="showReportWorkspace"
         @toggle-log-drawer="toggleLogDrawer"
       />
     </div>
@@ -343,7 +349,7 @@ function jobActionLabel(status) {
             v-if="hasActiveWorkspace"
             class="sci-btn text-[10px] px-3 py-2"
             :class="hasGeneratingWorkspace ? 'border-neon-green text-neon-green shadow-[0_0_18px_rgba(0,255,159,0.18)]' : ''"
-            @click="showGenerator"
+            @click="showReportWorkspace"
           >
             {{ hasGeneratingWorkspace ? '返回生成编报' : '返回当前编报' }}
           </button>
