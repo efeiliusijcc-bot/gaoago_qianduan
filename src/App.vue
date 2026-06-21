@@ -63,6 +63,7 @@ const {
   vectorSourceStatus,
   vectorSourceStatusLoading,
   getJobTitle,
+  getReportHistoryTime,
   handleGenerate,
   confirmReportPlan,
   cancelReportPlan,
@@ -395,7 +396,7 @@ function jobActionLabel(status) {
             <div class="col-span-2 font-mono text-xs" :class="jobStatusClass(item.status)">
               {{ jobStatusLabel(item.status) }}
             </div>
-            <div class="col-span-2 font-mono text-xs text-[#374151]" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ item.updatedAt || item.createdAt }}</div>
+            <div class="col-span-2 font-mono text-xs text-[#374151]" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ getReportHistoryTime(item) }}</div>
             <div class="col-span-1 font-mono text-xs text-[#374151] truncate" style="font-size: 14px; font-weight: 500; line-height: 1.7">{{ item.resultPath ? '已生成' : '未生成' }}</div>
             <div class="col-span-1">
               <button

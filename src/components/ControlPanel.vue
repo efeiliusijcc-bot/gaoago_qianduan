@@ -76,6 +76,13 @@ function formatTime(value) {
   })
 }
 
+function reportHistoryTime(item) {
+  if (!item) return ''
+  return item.status === 'succeeded'
+    ? item.completedAt || item.createdAt || item.updatedAt || ''
+    : item.updatedAt || item.createdAt || ''
+}
+
 function statusClass(status) {
   if (status === 'succeeded') return 'bg-neon-green shadow-[0_0_8px_rgba(0,255,136,0.38)]'
   if (status === 'failed' || status === 'cancelled') return 'bg-red-300 shadow-[0_0_8px_rgba(252,90,122,0.35)]'
@@ -224,7 +231,7 @@ function handleHistoryAction() {
               <span v-else class="w-1.5 h-1.5 rounded-full shrink-0" :class="statusClass(item.status)"></span>
               <span class="recent-status-text">{{ statusText(item.status, item) }}</span>
               <span class="recent-time-divider">·</span>
-              <span>{{ formatTime(item.updatedAt || item.createdAt) }}</span>
+              <span>{{ formatTime(reportHistoryTime(item)) }}</span>
             </div>
           </button>
 

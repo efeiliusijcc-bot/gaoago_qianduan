@@ -2593,7 +2593,9 @@ const sourceListCountText = computed(() => {
 })
 
 const resultInfoItems = computed(() => {
-  const generatedAt = props.job?.completedAt || props.job?.updatedAt || props.job?.createdAt || ''
+  const generatedAt = props.job?.status === 'succeeded'
+    ? props.job?.completedAt || props.job?.createdAt || props.job?.updatedAt || ''
+    : props.job?.updatedAt || props.job?.createdAt || ''
   const generatedText = generatedAt ? new Date(generatedAt).toLocaleString('zh-CN', { hour12: false }) : '--'
   return [
     ['报告标题', props.title || props.job?.payload?.topic || '--'],

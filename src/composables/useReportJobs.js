@@ -210,7 +210,7 @@ export function useReportJobs() {
   })
 
   const filteredJobs = computed(() => {
-    return [...jobList.value].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+    return [...jobList.value].sort((a, b) => reportHistoryTimeMs(b) - reportHistoryTimeMs(a))
   })
 
   const succeededCount = computed(() => listStatusCounts.value.succeeded)
@@ -362,8 +362,21 @@ export function useReportJobs() {
     return null
   }
 
-  function upsertJobInList(item) {
+  function getReportHistoryTime(item) {
+    if (!item) return ''
+    return item.status === 'succeeded'
+      ? item.completedAt || item.createdAt || item.updatedAt || ''
+      : item.updatedAt || item.createdAt || ''
+  }
+
+  function reportHistoryTimeMs(item) {
+    const parsed = new Date(getReportHistoryTime(item)).getTime()
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  function upsertJobInList(item, options = {}) {
     if (!item?.jobId) return
+    const promote = options.promote ?? isUnfinishedJob(item)
     const drafts = readDrafts()
     const nextItem = {
       ...item,
@@ -371,18 +384,27 @@ export function useReportJobs() {
     }
     const index = jobList.value.findIndex((existing) => existing.jobId === item.jobId)
     if (index >= 0) {
-      jobList.value = [
-        nextItem,
-        ...jobList.value.slice(0, index),
-        ...jobList.value.slice(index + 1),
-      ]
+      if (promote) {
+        jobList.value = [
+          nextItem,
+          ...jobList.value.slice(0, index),
+          ...jobList.value.slice(index + 1),
+        ]
+      } else {
+        jobList.value = [
+          ...jobList.value.slice(0, index),
+          nextItem,
+          ...jobList.value.slice(index + 1),
+        ]
+      }
     } else {
       jobList.value = [nextItem, ...jobList.value]
     }
   }
 
-  function upsertJobInRecent(item) {
+  function upsertJobInRecent(item, options = {}) {
     if (!item?.jobId) return
+    const promote = options.promote ?? isUnfinishedJob(item)
     const drafts = readDrafts()
     const nextItem = {
       ...item,
@@ -390,11 +412,19 @@ export function useReportJobs() {
     }
     const index = recentJobs.value.findIndex((existing) => existing.jobId === item.jobId)
     if (index >= 0) {
-      recentJobs.value = [
-        nextItem,
-        ...recentJobs.value.slice(0, index),
-        ...recentJobs.value.slice(index + 1),
-      ]
+      if (promote) {
+        recentJobs.value = [
+          nextItem,
+          ...recentJobs.value.slice(0, index),
+          ...recentJobs.value.slice(index + 1),
+        ]
+      } else {
+        recentJobs.value = [
+          ...recentJobs.value.slice(0, index),
+          nextItem,
+          ...recentJobs.value.slice(index + 1),
+        ]
+      }
     } else {
       recentJobs.value = [nextItem, ...recentJobs.value]
     }
@@ -1683,7 +1713,7 @@ export function useReportJobs() {
     loadingStep.value = '正在跟踪后端任务状态'
     applyJobFormData(item)
     if (unfinishedWorkspace) activeWorkspaceSnapshot.value = unfinishedWorkspace
-    upsertJobInList(item)
+    upsertJobInList(item, { promote: false })
     subscribeJobEvents(item.jobId)
     const isCurrentRunning = () => historyOpenRequestId === requestId && openedHistoryJobId.value === item.jobId && job.value?.jobId === item.jobId
     void loadExecutionLog(item.jobId, isCurrentRunning)
@@ -1825,6 +1855,7 @@ export function useReportJobs() {
     unreadLogCount,
     isLogDrawerOpen,
     getJobTitle,
+    getReportHistoryTime,
     handleGenerate,
     confirmReportPlan,
     cancelReportPlan,
