@@ -169,6 +169,7 @@ const homeMode = computed({
 const qaQuestion = ref('')
 const currentQaSessionId = ref('')
 const qaSessionCreatedAt = ref('')
+const qaSessionUpdatedAt = ref('')
 const qaCurrentQuestion = ref('')
 const qaQuestionTime = ref('')
 const qaAnswer = ref('')
@@ -820,9 +821,12 @@ function selectHomeMode(mode) {
   })
 }
 
-function qaSessionSnapshot(status = qaStatus.value) {
+function qaSessionSnapshot(status = qaStatus.value, options = {}) {
   const id = currentQaSessionId.value
   if (!id || !qaCurrentQuestion.value) return null
+  const updatedAt = options.preserveUpdatedAt && qaSessionUpdatedAt.value
+    ? qaSessionUpdatedAt.value
+    : new Date().toISOString()
   return {
     id,
     sessionId: id,
@@ -834,22 +838,25 @@ function qaSessionSnapshot(status = qaStatus.value) {
     sourcesCount: qaReferenceItems.value.length,
     status,
     createdAt: qaSessionCreatedAt.value || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    updatedAt,
+    preserveUpdatedAt: Boolean(options.preserveUpdatedAt),
     referencePayloads: qaReferencePayloads.value,
   }
 }
 
-function emitQaSession(status = qaStatus.value) {
-  const session = qaSessionSnapshot(status)
+function emitQaSession(status = qaStatus.value, options = {}) {
+  const session = qaSessionSnapshot(status, options)
+  if (session && !options.preserveUpdatedAt) qaSessionUpdatedAt.value = session.updatedAt
   if (session) emit('qa-session-upsert', session)
 }
 
-function emitStoredQaSession(session, select = false) {
+function emitStoredQaSession(session, select = false, options = {}) {
   if (!session?.id) return
   emit('qa-session-upsert', {
     ...session,
     select,
-    updatedAt: new Date().toISOString(),
+    preserveUpdatedAt: Boolean(options.preserveUpdatedAt),
+    updatedAt: options.preserveUpdatedAt ? session.updatedAt : new Date().toISOString(),
   })
 }
 
@@ -1080,6 +1087,7 @@ function restoreQaSession(session) {
   const restored = liveSession || session
   currentQaSessionId.value = sessionId
   qaSessionCreatedAt.value = restored.createdAt || new Date().toISOString()
+  qaSessionUpdatedAt.value = restored.updatedAt || restored.createdAt || ''
   qaMessages.value = normalizeQaMessages(restored)
   qaTurns.value = normalizeQaTurns(restored)
   syncCurrentQaFromTurns()
@@ -1111,7 +1119,7 @@ async function loadQaSessionSources(sessionId) {
     qaSourceSidebarDismissed.value = true
     qaSourceSidebarOpen.value = false
     resetQaSourceView()
-    emitQaSession(qaStatus.value)
+    emitQaSession(qaStatus.value, { preserveUpdatedAt: true })
   } catch {
     // Backend source persistence is best-effort; local QA history remains usable.
   }
@@ -1145,7 +1153,7 @@ function refreshStoredQaSessionSourcesIfEmpty(sessionId, fallbackSession = null)
         sourcesCount: sources.length,
       }
       if (state) state.session = nextSession
-      emitStoredQaSession(nextSession, false)
+      emitStoredQaSession(nextSession, false, { preserveUpdatedAt: true })
     } catch {
       // Source persistence is best-effort; keep the completed answer available.
     }
@@ -1156,6 +1164,7 @@ function clearQaWorkspace() {
   closeQaStream()
   currentQaSessionId.value = ''
   qaSessionCreatedAt.value = ''
+  qaSessionUpdatedAt.value = ''
   qaQuestion.value = ''
   qaCurrentQuestion.value = ''
   qaQuestionTime.value = ''

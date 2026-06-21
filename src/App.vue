@@ -152,12 +152,14 @@ function setHomeMode(mode) {
 
 function upsertQaSession(session) {
   if (!session?.id) return
-  const { select, ...sessionData } = session
+  const { select, preserveUpdatedAt, ...sessionData } = session
   const current = qaSessions.value.find((item) => item.id === session.id)
   const next = {
     ...current,
     ...sessionData,
-    updatedAt: sessionData.updatedAt || new Date().toISOString(),
+    updatedAt: preserveUpdatedAt
+      ? (sessionData.updatedAt || current?.updatedAt || current?.createdAt || new Date().toISOString())
+      : (sessionData.updatedAt || new Date().toISOString()),
   }
   qaSessions.value = [
     next,

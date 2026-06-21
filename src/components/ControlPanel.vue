@@ -244,16 +244,16 @@ function handleHistoryAction() {
           <button
             v-for="session in sortedQaSessions"
             :key="session.id"
-            class="history-item recent-item w-full text-left rounded-xl px-3.5 py-3.5 transition-all"
+            class="history-item recent-item qa-history-item w-full text-left rounded-xl px-3.5 py-3.5 transition-all"
             :class="{ active: session.id === currentQaSessionId }"
             @click="emit('open-qa-session', session)"
           >
-            <div class="flex items-center gap-2 min-w-0">
+            <div class="qa-history-title-row flex items-center gap-2 min-w-0">
               <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="qaStatusClass(session.status)"></span>
               <span class="recent-title font-mono text-xs truncate">{{ session.question || '未命名问答' }}</span>
               <span class="ml-auto text-[#64748b] shrink-0">›</span>
             </div>
-            <div class="recent-time font-mono text-[10px] mt-2 pl-3.5">{{ qaMeta(session) }}</div>
+            <div class="recent-time qa-history-meta font-mono text-[10px] mt-2 pl-3.5">{{ qaMeta(session) }}</div>
             <div v-if="session.answer" class="qa-history-summary pl-3.5 mt-1">{{ session.answer }}</div>
           </button>
         </div>
