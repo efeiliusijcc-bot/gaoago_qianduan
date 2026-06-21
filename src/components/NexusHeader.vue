@@ -33,10 +33,10 @@ const vectorRefreshing = ref(false)
 const vectorSwitching = ref(false)
 
 const keyFields = [
-  { key: 'tavilyApiKey', label: 'Tavily', placeholder: 'tvly-...' },
-  { key: 'exaApiKey', label: 'Exa', placeholder: 'Exa API Key' },
-  { key: 'firecrawlApiKey', label: 'Firecrawl', placeholder: 'fc-...' },
-  { key: 'openaiEmbeddingApiKey', label: 'OpenAI Embedding', placeholder: 'sk-...' },
+  { key: 'tavilyApiKey', label: 'Tavily', placeholder: 'tvly-...，每行一个，可配置多个' },
+  { key: 'exaApiKey', label: 'Exa', placeholder: 'Exa API Key，每行一个，可配置多个' },
+  { key: 'firecrawlApiKey', label: 'Firecrawl', placeholder: 'fc-...，每行一个，可配置多个' },
+  { key: 'openaiEmbeddingApiKey', label: '阿里百炼向量模型', placeholder: '输入阿里百炼 API Key，每行一个，可配置多个' },
 ]
 
 const emptyKeyForm = () => ({
@@ -165,7 +165,10 @@ function handleWindowResize() {
 }
 
 function configuredLabel(name) {
-  return keyStatus.value?.[name]?.configured ? '已配置' : '未配置'
+  const item = keyStatus.value?.[name]
+  const count = Number(item?.configuredCount || 0)
+  if (count > 0) return `已配置 ${count} 个`
+  return item?.configured ? '已配置' : '未配置'
 }
 
 function configuredClass(name) {
@@ -197,7 +200,7 @@ async function saveResearchKeys() {
   try {
     keyStatus.value = await updateResearchKeys(body)
     await refreshVectorStatus()
-    keyNotice.value = '配置已保存，下一次编报和向量同步立即生效。'
+    keyNotice.value = '配置已保存，下一次编报和向量检索会按顺序自动切换可用 Key。'
     keyForm.value = emptyKeyForm()
     keyClears.value = emptyKeyClears()
   } catch (error) {
@@ -388,15 +391,14 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="flex flex-col gap-2 sm:flex-row">
-              <input
-                class="sci-input flex-1 text-sm"
-                type="password"
+              <textarea
+                class="sci-input min-h-24 flex-1 resize-y text-sm"
                 autocomplete="off"
                 :disabled="keyClears[field.key]"
-                :placeholder="keyClears[field.key] ? '保存后清除该 Key' : `输入新的 ${field.label} Key 后保存覆盖`"
+                :placeholder="keyClears[field.key] ? '保存后清除该 Key' : field.placeholder"
                 :value="keyForm[field.key]"
                 @input="keyForm = { ...keyForm, [field.key]: $event.target.value }"
-              />
+              ></textarea>
               <button
                 class="sci-btn shrink-0 px-3 py-2 text-[10px]"
                 type="button"
