@@ -188,12 +188,20 @@ export function useReportJobs() {
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-  const isHistoryMode = computed(() => Boolean(openedHistoryJobId.value) && phase.value === 'done')
+  const isHistoryMode = computed(() => Boolean(openedHistoryJobId.value) && (phase.value === 'done' || phase.value === 'loading' || phase.value === 'history-loading' || phase.value === 'history-error' || phase.value === 'error'))
   const hasActiveWorkspace = computed(() => {
     return Boolean(activeWorkspaceSnapshot.value) || phase.value !== 'idle' || Boolean(job.value) || Boolean(title.value.trim()) || Boolean(generatedHtml.value)
   })
-  const activeWorkspaceJobId = computed(() => activeWorkspaceSnapshot.value?.job?.jobId || job.value?.jobId || '')
-  const activeWorkspaceStatus = computed(() => activeWorkspaceSnapshot.value?.job?.status || job.value?.status || '')
+  const activeWorkspaceJobId = computed(() => {
+    if (activeWorkspaceSnapshot.value?.job?.jobId) return activeWorkspaceSnapshot.value.job.jobId
+    if (openedHistoryJobId.value) return ''
+    return isUnfinishedJob(job.value) ? job.value.jobId : ''
+  })
+  const activeWorkspaceStatus = computed(() => {
+    if (activeWorkspaceSnapshot.value?.job?.status) return activeWorkspaceSnapshot.value.job.status
+    if (openedHistoryJobId.value) return ''
+    return isUnfinishedJob(job.value) ? job.value.status : ''
+  })
   const returnableWorkspaceJobId = computed(() => {
     const snapshotJob = activeWorkspaceSnapshot.value?.job
     if (!snapshotJob?.jobId || !isUnfinishedJob(snapshotJob)) return ''
@@ -347,7 +355,7 @@ export function useReportJobs() {
       return activeWorkspaceSnapshot.value
     }
 
-    if (job.value?.jobId && job.value.jobId !== exceptJobId && isUnfinishedJob(job.value)) {
+    if (!openedHistoryJobId.value && job.value?.jobId && job.value.jobId !== exceptJobId && isUnfinishedJob(job.value)) {
       return makeWorkspaceSnapshot()
     }
 
@@ -456,6 +464,18 @@ export function useReportJobs() {
     progressPollJobId = null
   }
 
+  function isVisibleJob(jobId) {
+    return Boolean(jobId) && job.value?.jobId === jobId
+  }
+
+  function isVisibleHistoryJob(jobId) {
+    return Boolean(jobId) && openedHistoryJobId.value === jobId && job.value?.jobId === jobId
+  }
+
+  function shouldApplyVisibleJobData(jobId) {
+    return isVisibleJob(jobId)
+  }
+
   function startProgressPolling(jobId) {
     if (!jobId) return
     if (progressPollJobId === jobId && progressPollTimer) return
@@ -463,7 +483,7 @@ export function useReportJobs() {
     progressPollJobId = jobId
     const refresh = () => {
       void loadProgressState(jobId, () => {
-        const visibleJob = job.value?.jobId === jobId && openedHistoryJobId.value !== jobId
+        const visibleJob = isVisibleJob(jobId)
         const activeWorkspaceJob = activeWorkspaceSnapshot.value?.job?.jobId === jobId
         return progressPollJobId === jobId && (visibleJob || activeWorkspaceJob)
       })
@@ -543,13 +563,14 @@ export function useReportJobs() {
     }
   }
 
-  async function fetchDatabaseSourcesData(jobId, shouldApply = () => true) {
-    const requestId = ++databaseSourcesRequestId
+  async function fetchDatabaseSourcesData(jobId, shouldApply = () => shouldApplyVisibleJobData(jobId)) {
     if (!jobId) {
       databaseSources.value = null
       databaseSourcesLoading.value = false
       return
     }
+    if (!shouldApply()) return
+    const requestId = ++databaseSourcesRequestId
     databaseSourcesLoading.value = true
     try {
       const result = await fetchReportDatabaseSources(jobId)
@@ -559,7 +580,7 @@ export function useReportJobs() {
       if (requestId !== databaseSourcesRequestId || !shouldApply()) return
       databaseSources.value = null
     } finally {
-      if (requestId === databaseSourcesRequestId && shouldApply()) databaseSourcesLoading.value = false
+      if (requestId === databaseSourcesRequestId) databaseSourcesLoading.value = false
     }
   }
 
@@ -582,8 +603,8 @@ export function useReportJobs() {
 
   function applyProgressState(next, jobId = activeExecutionLogJobId) {
     if (!next?.stages?.length) return
-    progressState.value = next
-    if (job.value?.jobId === jobId && !openedHistoryJobId.value) {
+    if (isVisibleJob(jobId)) {
+      progressState.value = next
       job.value = { ...job.value, progressState: next }
     }
     if (activeWorkspaceSnapshot.value?.job?.jobId === jobId) {
@@ -599,7 +620,7 @@ export function useReportJobs() {
 
   async function loadProgressState(jobId, shouldApply = () => true) {
     if (!jobId) {
-      progressState.value = null
+      if (!openedHistoryJobId.value) progressState.value = null
       return
     }
     try {
@@ -715,7 +736,7 @@ export function useReportJobs() {
 
     const log = normalizeEventLog(event)
     if (log) appendExecutionLog(log, eventJobId)
-    const visibleForEvent = job.value?.jobId === eventJobId && openedHistoryJobId.value !== job.value?.jobId
+    const visibleForEvent = isVisibleJob(eventJobId)
 
     if (event.type === 'stage' && event.message) {
       if (visibleForEvent) {
@@ -786,7 +807,7 @@ export function useReportJobs() {
     source.onerror = async () => {
       try {
         const latest = await fetchReportJob(jobId)
-        if (job.value?.jobId === jobId && !openedHistoryJobId.value) job.value = latest
+        if (isVisibleJob(jobId)) job.value = latest
         if (activeWorkspaceSnapshot.value?.job?.jobId === jobId) patchActiveWorkspaceSnapshot({ job: latest, __force: true })
         await loadProgressState(jobId)
         if (latest.status === 'succeeded' || latest.status === 'failed' || latest.status === 'cancelled') {
@@ -1270,7 +1291,7 @@ export function useReportJobs() {
         const next = await fetchReportJob(jobId)
         if (next?.progressState) applyProgressState(next.progressState, jobId)
         else void loadProgressState(jobId, () => activePollJobId.value === jobId)
-        const visibleForPoll = job.value?.jobId === jobId && openedHistoryJobId.value !== jobId
+        const visibleForPoll = isVisibleJob(jobId)
         const nextLoadingStep = stepMessages[tick % stepMessages.length]
         if (visibleForPoll) {
           job.value = next
@@ -1299,7 +1320,7 @@ export function useReportJobs() {
               html: generatedHtml.value,
             }
             phase.value = 'done'
-            openedHistoryJobId.value = null
+            if (!isVisibleHistoryJob(jobId)) openedHistoryJobId.value = null
             pushLog('已读取后端返回的 HTML 报告。')
           }
           if (!activeWorkspaceSnapshot.value || activeWorkspaceSnapshot.value.job?.jobId === jobId) {
@@ -1643,7 +1664,7 @@ export function useReportJobs() {
 
     closeJobEvents()
     stopProgressPolling()
-    openedHistoryJobId.value = null
+    openedHistoryJobId.value = item.jobId
     detailLoading.value = false
     detailLoadError.value = ''
     selectedReport.value = null
@@ -1661,10 +1682,10 @@ export function useReportJobs() {
     phase.value = 'loading'
     loadingStep.value = '正在跟踪后端任务状态'
     applyJobFormData(item)
-    activeWorkspaceSnapshot.value = unfinishedWorkspace || makeWorkspaceSnapshot({ job: item })
+    if (unfinishedWorkspace) activeWorkspaceSnapshot.value = unfinishedWorkspace
     upsertJobInList(item)
     subscribeJobEvents(item.jobId)
-    const isCurrentRunning = () => historyOpenRequestId === requestId && openedHistoryJobId.value === null && job.value?.jobId === item.jobId
+    const isCurrentRunning = () => historyOpenRequestId === requestId && openedHistoryJobId.value === item.jobId && job.value?.jobId === item.jobId
     void loadExecutionLog(item.jobId, isCurrentRunning)
     void loadProgressState(item.jobId, isCurrentRunning)
     void fetchDatabaseSourcesData(item.jobId, isCurrentRunning)
@@ -1678,9 +1699,6 @@ export function useReportJobs() {
     }
 
     isGenerating.value = true
-    if (!unfinishedWorkspace) {
-      activeWorkspaceSnapshot.value = makeWorkspaceSnapshot({ job: item, phase: 'loading', loadingStep: loadingStep.value, isGenerating: true })
-    }
     pushLog(`继续查看任务：${item.jobId}`)
 
     try {
