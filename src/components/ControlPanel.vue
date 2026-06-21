@@ -50,7 +50,10 @@ const engineText = computed(() => {
 })
 const reportTotalText = computed(() => Number(props.reportTotal || 0).toLocaleString('zh-CN'))
 const qaTotalText = computed(() => Number(props.qaTotal || 0).toLocaleString('zh-CN'))
-const recentJobs = computed(() => props.recentJobs.length ? props.recentJobs : props.jobs)
+const recentJobs = computed(() => {
+  const items = props.recentJobs.length ? props.recentJobs : props.jobs
+  return [...items].sort((a, b) => reportHistoryTimeMs(b) - reportHistoryTimeMs(a))
+})
 const isQaMode = computed(() => props.mode === 'qa')
 const historyTitle = computed(() => isQaMode.value ? '问答历史' : '编报历史')
 const historySubtitle = computed(() => isQaMode.value ? 'QA HISTORY' : 'REPORT HISTORY')
@@ -81,6 +84,11 @@ function reportHistoryTime(item) {
   return item.status === 'succeeded'
     ? item.completedAt || item.createdAt || item.updatedAt || ''
     : item.updatedAt || item.createdAt || ''
+}
+
+function reportHistoryTimeMs(item) {
+  const parsed = new Date(reportHistoryTime(item)).getTime()
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 function statusClass(status) {
