@@ -189,6 +189,7 @@ export function useReportJobs() {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
   const isHistoryMode = computed(() => Boolean(openedHistoryJobId.value) && (phase.value === 'done' || phase.value === 'loading' || phase.value === 'history-loading' || phase.value === 'history-error' || phase.value === 'error'))
+  const isViewingHistoryJob = computed(() => Boolean(openedHistoryJobId.value))
   const hasActiveWorkspace = computed(() => {
     return Boolean(activeWorkspaceSnapshot.value) || phase.value !== 'idle' || Boolean(job.value) || Boolean(title.value.trim()) || Boolean(generatedHtml.value)
   })
@@ -1772,9 +1773,12 @@ export function useReportJobs() {
         loadJobList(false)
       }
       if (
-        runningCount.value > 0 ||
-        recentJobs.value.some((item) => isUnfinishedJob(item)) ||
-        activeWorkspaceSnapshot.value?.job?.jobId
+        !isViewingHistoryJob.value &&
+        (
+          runningCount.value > 0 ||
+          recentJobs.value.some((item) => isUnfinishedJob(item)) ||
+          activeWorkspaceSnapshot.value?.job?.jobId
+        )
       ) {
         refreshRecentReports()
       }
