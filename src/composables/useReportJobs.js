@@ -209,6 +209,14 @@ export function useReportJobs() {
     if (!job.value?.jobId) return snapshotJob.jobId
     return snapshotJob.jobId !== job.value.jobId ? snapshotJob.jobId : ''
   })
+  const displayRecentJobs = computed(() => {
+    const currentHistoryJob = openedHistoryJobId.value && job.value?.jobId === openedHistoryJobId.value
+      ? job.value
+      : null
+    if (!currentHistoryJob?.jobId) return recentJobs.value
+    if (recentJobs.value.some((item) => item.jobId === currentHistoryJob.jobId)) return recentJobs.value
+    return [currentHistoryJob, ...recentJobs.value]
+  })
 
   const filteredJobs = computed(() => {
     return [...jobList.value].sort((a, b) => reportHistoryTimeMs(b) - reportHistoryTimeMs(a))
@@ -1826,7 +1834,7 @@ export function useReportJobs() {
     loadingStep,
     job,
     jobList,
-    recentJobs,
+    recentJobs: displayRecentJobs,
     recentLoadingMore,
     recentHasMore,
     recentLoadError,
