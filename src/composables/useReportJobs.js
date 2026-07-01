@@ -918,6 +918,8 @@ export function useReportJobs() {
     errorMessage.value = ''
     processLogs.value = []
     job.value = null
+    isGenerating.value = false
+    isPlanning.value = false
     phase.value = 'idle'
     loadingStep.value = '等待输入任务'
     savedNotice.value = ''

@@ -195,6 +195,7 @@ function clearSelectedQaSession() {
 function startReportFromSidebar() {
   homeMode.value = 'report'
   selectedQaSessionId.value = ''
+  resetForNewReport()
 }
 
 function openReportHistoryList() {
